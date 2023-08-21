@@ -1,1 +1,1 @@
-# assortedFunctionsV2
+This repository is a collection of various scripts and functions I wrote in my eternal quest for automation and efficiency, if they can help you, feel free to use them. If you have questions, you can find me on www.lieben.nu

@@ -1,0 +1,57 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2014-04-01-preview/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workspaceName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the Workspace."
+            },
+            "defaultValue": "NLD-WVD-WS01"
+        },
+        "workspaceResourceGroup": {
+            "type": "string",
+            "metadata": {
+                "description": "The workspace resource group Name."
+            },
+            "defaultValue": "WE-WVD-RG"
+        },
+        "appGroupName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the Application Group to be linked."
+            },
+            "defaultValue": "testag2"
+        }
+    },
+    "variables": {
+        "appGroupResourceId": "[resourceId('Microsoft.DesktopVirtualization/applicationgroups/', parameters('appGroupName'))]"
+    },
+    "resources": [
+        {
+            "apiVersion": "2018-05-01",
+            "name": "AddAppGroupToWorkspaceIncrementally",
+            "type": "Microsoft.Resources/deployments",
+            "resourceGroup": "[parameters('workspaceResourceGroup')]",
+            "properties": {
+                "mode": "Incremental",
+                "template": {
+                    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+                    "contentVersion": "1.0.0.0",
+                    "resources": [
+                        {
+                            "name": "[parameters('workspaceName')]",
+                            "apiVersion": "2019-12-10-preview",
+                            "condition": "[not(greater(indexOf(string(reference(concat('/subscriptions/',subscription().subscriptionId,'/resourceGroups/',parameters('workspaceResourceGroup'),'/providers/Microsoft.DesktopVirtualization/workspaces/',parameters('workspaceName')),'2019-12-10-preview','Full').properties.applicationGroupReferences),variables('appGroupResourceId')),0))]",
+                            "type": "Microsoft.DesktopVirtualization/workspaces",
+                            "location": "eastus",
+                            "properties": {
+                                "applicationGroupReferences": "[union(reference(concat('/subscriptions/',subscription().subscriptionId,'/resourceGroups/',parameters('workspaceResourceGroup'),'/providers/Microsoft.DesktopVirtualization/workspaces/',parameters('workspaceName')),'2019-12-10-preview','Full').properties.applicationGroupReferences,array(variables('appGroupResourceId')))]"
+                            }
+                        }
+                    ]
+                }
+            }
+        }        
+    ]
+}

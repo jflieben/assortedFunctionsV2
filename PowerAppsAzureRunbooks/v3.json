@@ -1,0 +1,161 @@
+openapi: 3.0.0
+info:
+  title: AutomationManagement
+  version: 2017-05-15-preview
+  x-ms-code-generation-settings: {useDateTimeOffset: true}
+securityDefinitions:
+  oauth2_auth:
+    type: oauth2
+    flow: accessCode
+    authorizationUrl: https://login.windows.net/common/oauth2/authorize
+    tokenUrl: https://login.windows.net/common/oauth2/authorize
+    scopes: {client_credentials: client_credentials}
+paths:
+  ? /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/output
+  : get:
+      tags: [Job]
+      operationId: Job_GetOutput
+      description: Retrieve the job output identified by job ID.
+      externalDocs: {url: 'http://aka.ms/azureautomationsdk/joboperations'}
+      parameters:
+      - name: subscriptionId
+        in: path
+        required: true
+        description: Gets subscription credentials which uniquely identify Microsoft
+          Azure subscription. The subscription ID forms part of the URI for every
+          service call.
+        schema: {type: string}
+        type: string
+      - name: resourceGroupName
+        in: path
+        required: true
+        x-ms-parameter-location: method
+        description: Name of an Azure Resource group.
+        schema: {type: string, minLength: 1, maxLength: 90, pattern: '^[-\w\._]+$'}
+        type: string
+      - name: automationAccountName
+        description: The name of the automation account.
+        required: true
+        in: path
+        x-ms-parameter-location: method
+        schema: {type: string}
+        type: string
+      - name: jobName
+        description: The ID of the job
+        required: true
+        in: path
+        schema: {type: string}
+        type: string
+      - name: api-version
+        in: query
+        required: true
+        description: Client Api Version.
+        schema: {type: string, default: 2017-05-15-preview}
+        type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain; charset=utf-8:
+              schema: {title: The response of the api., type: string}
+      summary: test
+  ? /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/runbookContent
+  : {}
+  ? /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/suspend
+  : {}
+  ? /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/stop
+  : {}
+  ? /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}
+  : {}
+  ? /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/jobs/{jobName}/resume
+  : {}
+servers:
+- {url: 'https://management.azure.com'}
+components:
+  securitySchemes:
+    azure_auth:
+      type: oauth2
+      description: Azure Active Directory OAuth2 Flow
+      flows:
+        implicit:
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/authorize
+          scopes: {user_impersonation: impersonate your user account}
+  schemas:
+    Job:
+      description: Definition of the job.
+      x-ms-mutability: [read, create]
+      properties:
+        properties: {$ref: '#/components/schemas/JobProperties'}
+      allOf:
+      - description: ARM proxy resource.
+        type: object
+        allOf:
+        - description: The core properties of ARM resources
+          type: object
+          properties:
+            id: {readOnly: true, type: string, description: Fully qualified resource
+                Id for the resource}
+            name: {readOnly: true, type: string, description: The name of the resource}
+            type: {readOnly: true, type: string, description: The type of the resource.}
+          x-ms-azure-resource: true
+        properties: {}
+    JobProperties:
+      properties:
+        runbook: {$ref: '#/components/schemas/RunbookAssociationProperty'}
+        startedBy: {type: string, description: Gets or sets the job started by.}
+        runOn: {type: string, description: Gets or sets the runOn which specifies
+            the group name where the job is to be executed.}
+        jobId: {type: string, format: uuid, description: Gets or sets the id of the
+            job., nullable: false}
+        creationTime: {type: string, format: date-time, description: Gets or sets
+            the creation time of the job., nullable: false}
+        status:
+          type: string
+          description: Gets or sets the status of the job.
+          enum: [New, Activating, Running, Completed, Failed, Stopped, Blocked, Suspended,
+            Disconnected, Suspending, Stopping, Resuming, Removing]
+          x-ms-enum: {name: JobStatus, modelAsString: true}
+        statusDetails: {type: string, description: Gets or sets the status details
+            of the job.}
+        startTime: {type: string, format: date-time, description: Gets or sets the
+            start time of the job., nullable: true}
+        endTime: {type: string, format: date-time, description: Gets or sets the end
+            time of the job., nullable: true}
+        exception: {type: string, description: Gets or sets the exception of the job.}
+        lastModifiedTime: {type: string, format: date-time, description: Gets or sets
+            the last modified time of the job., nullable: true}
+        lastStatusModifiedTime: {type: string, format: date-time, description: Gets
+            or sets the last status modified time of the job., nullable: true}
+        parameters:
+          type: object
+          additionalProperties: {type: string}
+          description: Gets or sets the parameters of the job.
+        provisioningState: {$ref: '#/components/schemas/JobProvisioningStateProperty'}
+      description: Definition of job properties.
+    RunbookAssociationProperty:
+      properties:
+        name: {type: string, description: Gets or sets the name of the runbook.}
+      description: The runbook property associated with the entity.
+    JobCreateParameters:
+      properties:
+        properties: {$ref: '#/components/schemas/JobCreateProperties'}
+      required: [properties]
+      description: The parameters supplied to the create job operation.
+    JobCreateProperties:
+      properties:
+        runbook: {$ref: '#/components/schemas/RunbookAssociationProperty'}
+        parameters:
+          type: object
+          additionalProperties: {type: string}
+          description: Gets or sets the parameters of the job.
+        runOn: {type: string, description: Gets or sets the runOn which specifies
+            the group name where the job is to be executed.}
+    JobProvisioningStateProperty:
+      readOnly: true
+      type: string
+      description: The provisioning state of the resource.
+      enum: [Failed, Succeeded, Suspended, Processing]
+      x-ms-enum: {name: JobProvisioningState, modelAsString: true}
+security:
+- oauth2_auth: [client_credentials]
+host: management.azure.com

@@ -1,0 +1,826 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.5.0",
+  "parameters": {
+    "artifactsLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "The base URI where artifacts required by this template are located."
+      },
+      "defaultValue": "https://raw.githubusercontent.com/Azure/RDS-Templates/master/ARM-wvd-templates/DSC/Configuration.zip"
+    },
+    "redeploy": {
+      "type": "bool",
+      "metadata": {
+        "description": "Use redeploy=true only together with the existingDiskNames parameter, ARM will then attempt to create new VM's but using the existing disks as passed into existingDiskNames. If deploying a new pool or not requiring full redeployment, set to false"
+      },
+      "defaultValue": false
+    },    
+    "upgrade": {
+      "type": "bool",
+      "metadata": {
+        "description": "Use upgrade=true in case an upgrade of the OS build is required, snapshots will then be made of each disk in the existingDiskNames parameter."
+      },
+      "defaultValue": false
+    },
+    "currentDateTime": {
+      "type": "string",
+      "metadata": {
+        "description": "used to ensure uniqueness of certain object names, don't change"
+      },
+      "defaultValue": "[utcNow('yyyyMMddTHHmm')]"
+    },
+    "existingDiskNames": {
+      "type": "array",
+      "metadata": {
+        "description": "list of the names of existing disks that should be re-attached, the number properties map to the session host names and should thus be ordered ascendingly! Not needed if redeploy is set to False"
+      },
+      "defaultValue": [
+        "rdsh0_OsDisk_1_6a58fd7423334474b33c12c70133b463",
+        "rdsh1_OsDisk_1_6a58fd742333ff34b33c12c70133b461"
+      ]
+    },
+    "existingVmNames": {
+      "type": "array",
+      "metadata": {
+        "description": "list of the names of existing VM's (excluding domain). Not required for New Hostpools"
+      },
+      "defaultValue": [
+        "weeus15pvd001",
+        "weeus15pvd002"
+      ]
+    },
+    "hostpoolName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the Hostpool to be created."
+      },
+      "defaultValue": "WeEu-S15-Prd-Vdhp-02"
+    },
+    "hostpoolZones": {
+      "type": "int",
+      "metadata": {
+        "description": "A value between 1 and 4, hosts are automatically spread out over the number of zones specified. To check available zones using a powershell command, read https://docs.microsoft.com/en-us/powershell/module/az.compute/get-azcomputeresourcesku"
+      },
+      "minValue": 1,
+      "maxValue": 4,
+      "defaultValue": 2
+    },
+    "hostpoolZoneAllocation": {
+      "type": "string",
+      "allowedValues": [
+        "direct",
+        "automatic"
+      ],
+      "metadata": {
+        "description": "set direct when you want to set the zone of all new VM's to the SINGLE value specified in hostpoolZones. Set automatic to spread out the new VM's over the number of zones specified in hostpoolZones"
+      },
+      "defaultValue": "automatic"
+    },
+    "hostpoolDescription": {
+      "type": "string",
+      "metadata": {
+        "description": "The description of the Hostpool to be created."
+      },
+      "defaultValue": ""
+    },
+    "hostpoolLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "The location where the hostpool, not the VM's, will be deployed (west europe not yet supported)."
+      },
+      "defaultValue": "eastus"
+    },
+    "workSpaceName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the EXISTING workspace in which to place the application group"
+      },
+      "defaultValue": "WeEu-S15-Prd-Vdws-Wivd-01"
+    },
+    "workSpaceResourceGroup": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource group of the EXISTING workspace in which to place the application group"
+      },
+      "defaultValue": "WeEu-S15-Prd-Vdws-Wivd-01"
+    },
+    "workSpaceLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "The geolocation of the EXISTING workspace"
+      },
+      "defaultValue": "eastus"
+    },
+    "applicationGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the application group that should be created for desktop hosts"
+      },
+      "defaultValue": "WeEu-S15-Prd-Vdag-Wivd-02"
+    },
+    "applicationGroupFriendlyName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the desktop as displayed to the user in the WVD clients"
+      },
+      "defaultValue": "Production DevOps Desktop"
+    },
+    "desktopDescription": {
+      "type": "string",
+      "metadata": {
+        "description": "Description of the desktop as displayed to the user in the WVD clients"
+      },
+      "defaultValue": "Gives access to a full desktop"
+    },
+    "administratorAccountUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "A username in the domain that has privileges to join the session hosts to the domain. For example, 'user1@contoso.com'."
+      },
+      "defaultValue": ""
+    },
+    "administratorAccountPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The password that corresponds to the existing domain username."
+      },
+      "defaultValue": ""
+    },
+    "vmLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "The location of the session host VMs that should be created"
+      },
+      "defaultValue": "westeurope"
+    },
+    "vmSize": {
+      "type": "string",
+      "metadata": {
+        "description": "The size of the session host VMs."
+      },
+      "defaultValue": "Standard_D4ds_v4"
+    },
+    "vmNumberOfInstances": {
+      "type": "int",
+      "metadata": {
+        "description": "Number of session hosts that the hostpool should have in total (if more than current, hosts will be added). If redeploy=true, this should be the original number of hosts before you deleted them"
+      },
+      "defaultValue": 1
+    },
+    "vmNamePrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "This prefix will be used in combination with the VM number to create the VM name. If using 'rdsh' as the prefix, VMs would be named 'rdsh-0', 'rdsh-1', etc. You should use a unique prefix to reduce name collisions in Active Directory."
+      },
+      "defaultValue": "rdsh"
+    },
+    "imageSource": {
+      "type": "string",
+      "metadata": {
+        "description": "Set to gallery to build VM's based on a gallery image, set to custom to use a custom disk from a storage account"
+      },
+      "allowedValues": [
+        "gallery",
+        "custom"
+      ],
+      "defaultValue": "gallery"
+    },
+    "customImageName": {
+      "type": "string",
+      "metadata": {
+        "description": "name of the custom image to use, required when imageSource is set to custom"
+      },
+      "defaultValue": "wvd-w10-test"
+    },
+    "customImageVhdUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Required when imageSource = custom, URI of the sysprepped image vhd file to be used to create the session host VMs. For example, https://rdsstorage.blob.core.windows.net/vhds/sessionhostimage.vhd"
+      },
+      "defaultValue": "https://rdsstorage.blob.core.windows.net/vhds/sessionhostimage.vhd"
+    },
+    "vmGalleryImageOffer": {
+      "type": "string",
+      "metadata": {
+        "description": "Gallery image Offer required name when imageSource is set to gallery"
+      },
+      "defaultValue": "office-365"
+    },
+    "vmGalleryImagePublisher": {
+      "type": "string",
+      "metadata": {
+        "description": "Gallery image Publisher."
+      },
+      "defaultValue": "microsoftwindowsdesktop"
+    },
+    "vmGalleryImageSKU": {
+      "type": "string",
+      "metadata": {
+        "description": "Gallery image SKU."
+      },
+      "defaultValue": "20h1-evd-o365pp"
+    },
+    "vmDiskType": {
+      "type": "string",
+      "allowedValues": [
+        "Premium_LRS",
+        "StandardSSD_LRS",
+        "Standard_LRS"
+      ],
+      "metadata": {
+        "description": "The VM disk type for the VM"
+      },
+      "defaultValue": "StandardSSD_LRS"
+    },
+    "existingVnetName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the virtual network the VMs will be connected to."
+      },
+      "defaultValue": "AzureVirtualNetwork"
+    },
+    "existingSubnetName": {
+      "type": "string",
+      "metadata": {
+        "description": "The (name of the) subnet the VMs will be placed in."
+      },
+      "defaultValue": "172.16.230.0"
+    },
+    "virtualNetworkResourceGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource group containing the existing virtual network."
+      },
+      "defaultValue": "Networking"
+    },
+    "enableAcceleratedNetworking": {
+      "type": "bool",
+      "metadata": {
+        "description": "Enables Accelerated Networking feature, notice that VM size must support it, this is supported in most of general purpose and compute-optimized instances with 2 or more vCPUs, on instances that supports hyperthreading it is required minimum of 4 vCPUs."
+      },
+      "defaultValue": false
+    },
+    "networkSecurityGroupId": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource id of an existing network security group"
+      },
+      "defaultValue": ""
+    },
+    "hostpoolType": {
+      "type": "string",
+      "allowedValues": [
+        "Personal",
+        "Pooled",
+        "RemoteApp"
+      ],
+      "metadata": {
+        "description": "Set this parameter to Personal if you would like to enable Persistent Desktop experience, to RemoteApp if only single apps will be hosted, and Pooled if this is a non persistent hostpool."
+      },
+      "defaultValue": "Pooled"
+    },
+    "personalDesktopAssignmentType": {
+      "type": "string",
+      "allowedValues": [
+        "Automatic",
+        "Direct",
+        ""
+      ],
+      "metadata": {
+        "description": "Set the type of assignment for a Personal hostpool type"
+      },
+      "defaultValue": "Automatic"
+    },
+    "maxSessionLimit": {
+      "type": "int",
+      "metadata": {
+        "description": "Maximum number of sessions."
+      },
+      "defaultValue": 99999
+    },
+    "loadBalancerType": {
+      "type": "string",
+      "allowedValues": [
+        "BreadthFirst",
+        "DepthFirst",
+        "Persistent"
+      ],
+      "metadata": {
+        "description": "Type of load balancer algorithm."
+      },
+      "defaultValue": "DepthFirst"
+    },
+    "customRdpProperty": {
+      "type": "string",
+      "metadata": {
+        "description": "Hostpool rdp properties"
+      },
+      "defaultValue": "audiomode:i:0;audiocapturemode:i:1;camerastoredirect:s:;devicestoredirect:s:;singlemoninwindowedmode:i:1;smart sizing:i:1;"
+    },
+    "tokenExpirationTime": {
+      "type": "string",
+      "metadata": {
+        "description": "Hostpool token expiration time, min 1 hour, max 30 days in the following format: 2021-04-01T12:34:56"
+      }
+    },
+    "hostpoolTags": {
+      "type": "object",
+      "metadata": {
+        "description": "The tags to be assigned to the hostpool"
+      },
+      "defaultValue": {}
+    },
+    "applicationGroupTags": {
+      "type": "object",
+      "metadata": {
+        "description": "The tags to be assigned to the application group"
+      },
+      "defaultValue": {}
+    },
+    "networkInterfaceTags": {
+      "type": "object",
+      "metadata": {
+        "description": "The tags to be assigned to the network interfaces"
+      },
+      "defaultValue": {}
+    },
+    "virtualMachineTags": {
+      "type": "object",
+      "metadata": {
+        "description": "The tags to be assigned to the virtual machines"
+      },
+      "defaultValue": {}
+    },
+    "apiVersion": {
+      "type": "string",
+      "metadata": {
+        "description": "WVD api version"
+      },
+      "defaultValue": "2019-12-10-preview"
+    },
+    "validationEnvironment": {
+      "type": "bool",
+      "metadata": {
+        "description": "Whether to use validation enviroment."
+      },
+      "defaultValue": false
+    },
+    "ouPath": {
+      "type": "string",
+      "metadata": {
+        "description": "OUPath for the domain join"
+      },
+      "defaultValue": ""
+    },
+    "domain": {
+      "type": "string",
+      "metadata": {
+        "description": "Domain to join"
+      },
+      "defaultValue": ""
+    },
+    "accessGroupGUID": {
+      "type": "string",
+      "metadata": {
+        "description": "GUID of access group (or user/spn) in Azure AD that contains users that should have access to this hostpool / app group"
+      },
+      "defaultValue": "81ad4fae-d6e5-42c4-85cb-a8e29ea1ce13"
+    },
+    "logAnalyticsResourcegroup": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the resourcegroup in which the log analytics instance resides"
+      },
+      "defaultValue": "WeEu-S15-Prd-Rsg-Mntr-01"
+    },
+    "logAnalyticsName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the shared log analytics workspace instance to log to"
+      },
+      "defaultValue": "WeEu-S15-Prd-La-01"
+    }
+  },
+  "variables": {
+    "existingDomainUsername": "[first(split(parameters('administratorAccountUsername'), '@'))]",
+    "domain": "[if(equals(parameters('domain'), ''), last(split(parameters('administratorAccountUsername'), '@')), parameters('domain'))]",
+    "subnet-id": "[resourceId(parameters('virtualNetworkResourceGroupName'),'Microsoft.Network/virtualNetworks/subnets',parameters('existingVnetName'), parameters('existingSubnetName'))]",
+    "appGroupResourceId": "[resourceId('Microsoft.DesktopVirtualization/applicationgroups/', parameters('applicationGroupName'))]",
+    "imageReference": {
+      "id": "[if(equals(parameters('imageSource'),'custom'),resourceId('Microsoft.Compute/images', parameters('customImageName')),json('null'))]",
+      "publisher": "[if(equals(parameters('imageSource'),'gallery'),parameters('vmGalleryImagePublisher'),json('null'))]",
+      "offer": "[if(equals(parameters('imageSource'),'gallery'),parameters('vmGalleryImageOffer'),json('null'))]",
+      "sku": "[if(equals(parameters('imageSource'),'gallery'),parameters('vmGalleryImageSKU'),json('null'))]",
+      "version": "[if(equals(parameters('imageSource'),'gallery'),'latest',json('null'))]"
+    },
+    "copy": [
+      {
+        "name": "osProfiles",
+        "count": "[parameters('vmNumberOfInstances')]",
+        "input": {
+          "computerName": "[concat(parameters('vmNamePrefix'), copyindex('osProfiles'))]",
+          "adminUsername": "[variables('existingDomainUsername')]",
+          "adminPassword": "[parameters('administratorAccountPassword')]"
+        }
+      }
+    ],
+    "preferredAppGroupType": "[if(equals(parameters('hostpoolType'),'RemoteApp'),'RailApplications','Desktop')]",
+    "workspaceId": "[concat('/subscriptions/',subscription().subscriptionId,'/resourcegroups/',parameters('logAnalyticsResourcegroup'),'/providers/microsoft.operationalinsights/workspaces/',parameters('logAnalyticsName'))]"
+
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2018-09-01-preview",
+      "name": "[guid(resourceGroup().id)]",
+      "properties": {
+        "roleDefinitionId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', '1d18fff3-a72a-46b5-b4a9-0b38a3cd7e63')]",
+        "principalId": "[parameters('accessGroupGUID')]"
+      }
+    },
+    {
+      "condition": "[equals(parameters('imageSource'), 'custom')]",
+      "type": "Microsoft.Compute/images",
+      "apiVersion": "2018-10-01",
+      "name": "[parameters('customImageName')]",
+      "location": "[parameters('vmLocation')]",
+      "properties": {
+        "storageProfile": {
+          "osDisk": {
+            "osType": "Windows",
+            "osState": "Generalized",
+            "blobUri": "[parameters('customImageVhdUri')]",
+            "storageAccountType": "[parameters('vmDiskType')]"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(parameters('vmNamePrefix'), copyindex(), '-nic-01')]",
+      "location": "[parameters('vmLocation')]",
+      "tags": "[parameters('networkInterfaceTags')]",
+      "copy": {
+        "name": "rdsh-nic-loop",
+        "count": "[parameters('vmNumberOfInstances')]"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('subnet-id')]"
+              },
+              "publicIpAddress": "[json('null')]"
+            }
+          }
+        ],
+        "enableAcceleratedNetworking": "[parameters('enableAcceleratedNetworking')]",
+        "networkSecurityGroup": "[if(empty(parameters('networkSecurityGroupId')), json('null'), parameters('networkSecurityGroupId'))]"
+      }
+    },
+    {
+      "name": "[concat(parameters('vmNamePrefix'), copyindex(), '-osdisk-01-Snapshot-Long-Redeploy-',parameters('currentDateTime'))]",
+      "condition": "[parameters('redeploy')]",
+      "type": "Microsoft.Compute/snapshots",
+      "apiVersion": "2020-09-30",
+      "location": "[parameters('vmLocation')]",
+      "tags": {},
+      "copy": {
+        "name": "rdsh-create-snapshots",
+        "count": "[parameters('vmNumberOfInstances')]"
+      },
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "properties": {
+        "osType": "Windows",
+        "creationData": {
+          "createOption": "Copy",
+          "sourceResourceId": "[resourceId(subscription().subscriptionId,resourceGroup().name,'Microsoft.Compute/disks',parameters('existingDiskNames')[copyindex()])]"
+        }
+      }
+    },
+    {
+      "name": "[concat(parameters('vmNamePrefix'), copyindex(), '-osdisk-01-Snapshot-Long-Upgrade-',parameters('currentDateTime'))]",
+      "condition": "[parameters('upgrade')]",
+      "type": "Microsoft.Compute/snapshots",
+      "apiVersion": "2020-09-30",
+      "location": "[parameters('vmLocation')]",
+      "tags": {},
+      "copy": {
+        "name": "rdsh-create-snapshots",
+        "count": "[parameters('vmNumberOfInstances')]"
+      },
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "properties": {
+        "osType": "Windows",
+        "creationData": {
+          "createOption": "Copy",
+          "sourceResourceId": "[resourceId(subscription().subscriptionId,resourceGroup().name,'Microsoft.Compute/disks',parameters('existingDiskNames')[copyindex()])]"
+        }
+      }
+    },
+    {
+      "name": "[concat(parameters('vmNamePrefix'), copyindex(), '-osdisk-01-',parameters('currentDateTime'))]",
+      "condition": "[parameters('redeploy')]",
+      "apiVersion": "2020-09-30",
+      "type": "Microsoft.Compute/disks",
+      "location": "[parameters('vmLocation')]",
+      "copy": {
+        "name": "rdsh-create-managedDisks",
+        "count": "[parameters('vmNumberOfInstances')]"
+      },
+      "properties": {
+        "creationData": {
+          "createOption": "Copy",
+          "sourceResourceId": "[resourceId('Microsoft.Compute/snapshots',concat(parameters('vmNamePrefix'),copyindex(),'-osdisk-01-Snapshot-Long-Redeploy-',parameters('currentDateTime')))]"
+        },
+        "diskSizeGB": "[if(parameters('redeploy'),reference(resourceId('Microsoft.Compute/snapshots',concat(parameters('vmNamePrefix'),copyindex(),'-osdisk-01-Snapshot-Long-Redeploy-',parameters('currentDateTime'))),'2020-09-30').diskSizeGB,json('null'))]",
+        "osType": "Windows",
+        "networkAccessPolicy": "AllowAll"
+      },
+      "sku": {
+        "name": "[parameters('vmDiskType')]"
+      },
+      "tags": {},
+      "zones": [
+        "[if(equals(parameters('hostpoolZoneAllocation'),'direct'),parameters('hostpoolZones'),add(1,mod(copyIndex(),parameters('hostpoolZones'))))]"
+      ]
+    },
+    {
+      "apiVersion": "2018-10-01",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(parameters('vmNamePrefix'), copyindex())]",
+      "location": "[parameters('vmLocation')]",
+      "zones": [
+        "[if(equals(parameters('hostpoolZoneAllocation'),'direct'),parameters('hostpoolZones'),add(1,mod(copyIndex(),parameters('hostpoolZones'))))]"
+      ],
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "tags": "[parameters('virtualMachineTags')]",
+      "copy": {
+        "name": "rdsh-vm-loop",
+        "count": "[parameters('vmNumberOfInstances')]"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Network/networkInterfaces/', parameters('vmNamePrefix'), copyindex(), '-nic-01')]",
+        "rdsh-create-managedDisks"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[if(parameters('redeploy'),parameters('vmSize'),if(contains(parameters('existingVmNames'),concat(parameters('vmNamePrefix'), copyindex())),json('null'),parameters('vmSize')))]"
+        },
+        "osProfile": "[if(parameters('redeploy'),json('null'),if(contains(parameters('existingVmNames'),concat(parameters('vmNamePrefix'), copyindex())),json('null'),variables('osProfiles')[copyIndex()]))]",
+        "storageProfile": {
+          "imageReference": "[if(parameters('redeploy'),json('null'),if(contains(parameters('existingVmNames'),concat(parameters('vmNamePrefix'), copyindex())),json('null'),variables('imageReference')))]",
+          "osDisk": {
+            "createOption": "[if(parameters('redeploy'),'Attach',if(contains(parameters('existingVmNames'),concat(parameters('vmNamePrefix'), copyindex())),json('null'),'FromImage'))]",
+            "managedDisk": {
+              "id": "[if(parameters('redeploy'),resourceId('Microsoft.Compute/disks',concat(parameters('vmNamePrefix'),copyindex(),'-osdisk-01-',parameters('currentDateTime'))),json('null'))]",
+              "storageAccountType": "[parameters('vmDiskType')]"
+            },
+            "osType": "Windows"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat(parameters('vmNamePrefix'), copyindex(), '-nic-01'))]"
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": {
+            "enabled": false
+          }
+        },
+        "licenseType": "Windows_Client"
+      },
+      "resources": [
+        {
+          "apiVersion": "2018-10-01",
+          "type": "extensions",
+          "name": "MMAExtension",
+          "location": "[parameters('vmLocation')]",
+          "dependsOn": [
+            "[concat('Microsoft.Compute/virtualMachines/', parameters('vmNamePrefix'), copyindex())]"
+          ],
+          "properties": {
+            "publisher": "Microsoft.EnterpriseCloud.Monitoring",
+            "type": "MicrosoftMonitoringAgent",
+            "typeHandlerVersion": "1.0",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "workspaceId": "[reference(variables('workspaceId'),'2020-08-01').customerId]",
+              "stopOnMultipleConnections": "true"
+            },
+            "protectedSettings": {
+              "workspaceKey": "[listKeys(variables('workspaceId'), '2020-08-01').primarySharedKey]"
+            }
+          }
+        },
+        {
+          "apiVersion": "2018-10-01",
+          "type": "extensions",
+          "name": "joindomain",
+          "location": "[parameters('vmLocation')]",
+          "dependsOn": [
+            "[concat('Microsoft.Compute/virtualMachines/', parameters('vmNamePrefix'), copyindex())]",
+            "[concat('Microsoft.Compute/virtualMachines/', parameters('vmNamePrefix'), copyindex(),'/extensions/MMAExtension')]"
+          ],
+          "properties": {
+            "publisher": "Microsoft.Compute",
+            "type": "JsonADDomainExtension",
+            "typeHandlerVersion": "1.3",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "name": "[variables('domain')]",
+              "ouPath": "[parameters('ouPath')]",
+              "user": "[parameters('administratorAccountUsername')]",
+              "restart": "true",
+              "options": "3"
+            },
+            "protectedSettings": {
+              "password": "[parameters('administratorAccountPassword')]"
+            }
+          }
+        },
+        {
+          "apiVersion": "2018-10-01",
+          "type": "extensions",
+          "name": "dscextension",
+          "location": "[parameters('vmLocation')]",
+          "dependsOn": [
+            "[concat('Microsoft.Compute/virtualMachines/', parameters('vmNamePrefix'), copyindex())]",
+            "[concat('Microsoft.Compute/virtualMachines/', parameters('vmNamePrefix'), copyindex(),'/extensions/MMAExtension')]"
+          ],
+          "properties": {
+            "publisher": "Microsoft.Powershell",
+            "type": "DSC",
+            "typeHandlerVersion": "2.73",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "modulesUrl": "[parameters('artifactsLocation')]",
+              "configurationFunction": "Configuration.ps1\\AddSessionHost",
+              "properties": {
+                "hostPoolName": "[parameters('hostpoolName')]",
+                "registrationInfoToken": "[reference(resourceId('Microsoft.DesktopVirtualization/hostpools/',parameters('hostpoolName'))).registrationInfo.token]"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "[parameters('hostpoolName')]",
+      "apiVersion": "[parameters('apiVersion')]",
+      "type": "Microsoft.DesktopVirtualization/hostpools",
+      "location": "[parameters('hostpoolLocation')]",
+      "tags": "[parameters('hostpoolTags')]",
+      "properties": {
+        "friendlyName": "Host Pool",
+        "description": "[parameters('hostpoolDescription')]",
+        "hostpoolType": "[if(equals(parameters('hostpoolType'),'Personal'),'Personal','Pooled')]",
+        "customRdpProperty": "[parameters('customRdpProperty')]",
+        "personalDesktopAssignmentType": "[parameters('personalDesktopAssignmentType')]",
+        "maxSessionLimit": "[parameters('maxSessionLimit')]",
+        "loadBalancerType": "[parameters('loadBalancerType')]",
+        "validationEnvironment": "[parameters('validationEnvironment')]",
+        "preferredAppGroupType": "[variables('preferredAppGroupType')]",
+        "ring": null,
+        "registrationInfo": {
+          "expirationTime": "[parameters('tokenExpirationTime')]",
+          "token": null,
+          "registrationTokenOperation": "Update"
+        },
+        "vmTemplate": ""
+      }
+    },
+    {
+      "name": "[concat(parameters('hostpoolName'),'/microsoft.insights/toLogAnalytics')]",
+      "type": "Microsoft.DesktopVirtualization/hostpools/providers/diagnosticSettings",
+      "apiVersion": "2017-05-01-preview",
+      "properties": {
+        "workspaceId": "[variables('workspaceId')]",
+        "logs": [
+          {
+            "category": "Checkpoint",
+            "enabled": true
+          },
+          {
+            "category": "Error",
+            "enabled": true
+          },
+          {
+            "category": "Management",
+            "enabled": true
+          },
+          {
+            "category": "Connection",
+            "enabled": true
+          },
+          {
+            "category": "HostRegistration",
+            "enabled": true
+          },
+          {
+            "category": "AgentHealthStatus",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DesktopVirtualization/hostpools/', parameters('hostpoolName'))]"
+      ]
+    },
+    {
+      "name": "[parameters('applicationGroupName')]",
+      "apiVersion": "[parameters('apiVersion')]",
+      "type": "Microsoft.DesktopVirtualization/applicationgroups",
+      "condition": "[not(equals(parameters('hostpoolType'),'RemoteApp'))]",
+      "location": "[parameters('hostpoolLocation')]",
+      "tags": "[parameters('applicationGroupTags')]",
+      "properties": {
+        "hostpoolarmpath": "[resourceId('Microsoft.DesktopVirtualization/hostpools/', parameters('hostpoolName'))]",
+        "friendlyName": "[parameters('applicationGroupFriendlyName')]",
+        "description": "[parameters('desktopDescription')]",
+        "applicationGroupType": "Desktop"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DesktopVirtualization/hostpools/', parameters('hostpoolName'))]"
+      ]
+    },
+    {
+      "name": "[concat(parameters('applicationGroupName'),'/microsoft.insights/toLogAnalytics')]",
+      "condition": "[not(equals(parameters('hostpoolType'),'RemoteApp'))]",
+      "type": "Microsoft.DesktopVirtualization/applicationgroups/providers/diagnosticSettings",
+      "apiVersion": "2017-05-01-preview",
+      "properties": {
+        "workspaceId": "[variables('workspaceId')]",
+        "logs": [
+          {
+            "category": "Checkpoint",
+            "enabled": true
+          },
+          {
+            "category": "Error",
+            "enabled": true
+          },
+          {
+            "category": "Management",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[concat('Microsoft.DesktopVirtualization/applicationgroups/', parameters('applicationGroupName'))]"
+      ]
+    },
+    {
+      "apiVersion": "2018-05-01",
+      "name": "AddAppGroupToWorkspaceIncrementally",
+      "condition": "[not(equals(parameters('hostpoolType'),'RemoteApp'))]",
+      "type": "Microsoft.Resources/deployments",
+      "resourceGroup": "[parameters('workspaceResourceGroup')]",
+      "properties": {
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "resources": [
+            {
+              "name": "[parameters('workspaceName')]",
+              "apiVersion": "[parameters('apiVersion')]",
+              "condition": "[not(greater(indexOf(string(reference(concat('/subscriptions/',subscription().subscriptionId,'/resourceGroups/',parameters('workspaceResourceGroup'),'/providers/Microsoft.DesktopVirtualization/workspaces/',parameters('workspaceName')),parameters('apiVersion'),'Full').properties.applicationGroupReferences),variables('appGroupResourceId')),0))]",
+              "type": "Microsoft.DesktopVirtualization/workspaces",
+              "location": "[parameters('workSpaceLocation')]",
+              "properties": {
+                "applicationGroupReferences": "[union(reference(concat('/subscriptions/',subscription().subscriptionId,'/resourceGroups/',parameters('workspaceResourceGroup'),'/providers/Microsoft.DesktopVirtualization/workspaces/',parameters('workspaceName')),parameters('apiVersion'),'Full').properties.applicationGroupReferences,array(variables('appGroupResourceId')))]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DesktopVirtualization/applicationgroups/', parameters('applicationGroupName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "hostIdentities": {
+      "type": "array",
+      "copy": {
+        "count": "[parameters('vmNumberOfInstances')]",
+        "input": "[reference(resourceId('Microsoft.Compute/virtualMachines',concat(parameters('vmNamePrefix'), copyindex())),'2020-06-01', 'full').identity.principalId]"
+      }
+    }
+  }
+}

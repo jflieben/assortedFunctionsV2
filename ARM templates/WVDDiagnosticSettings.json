@@ -1,0 +1,129 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "logAnalyticsResourcegroup": {
+            "type": "string",
+            "metadata": {
+            "description": "The name of the resourcegroup in which the log analytics instance resides"
+            }
+        },
+        "logAnalyticsWorkspaceName": {
+            "type": "string",
+            "metadata": {
+            "description": "The name of the shared log analytics workspace instance to log to"
+            }
+        },
+        "workSpaceName": {
+            "type": "string",
+            "metadata": {
+            "description": "The name of the WVD workspace"
+            }
+        },   
+        "hostpoolName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the WVD Hostpool"
+            }
+        },     
+        "applicationGroupName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the WVD application group"
+            }
+        } 
+    },
+    "variables": {
+    },         
+    "resources": [
+        {
+            "name": "[concat(parameters('workSpaceName'),'/microsoft.insights/toLogAnalytics')]",
+            "type": "Microsoft.DesktopVirtualization/workspaces/providers/diagnosticSettings",
+            "apiVersion": "2017-05-01-preview",
+            "properties": {
+                "workspaceId":"[concat('/subscriptions/',subscription().subscriptionId,'/resourcegroups/',parameters('logAnalyticsResourcegroup'),'/providers/microsoft.operationalinsights/workspaces/',parameters('logAnalyticsWorkspaceName'))]",
+                "logs": [
+                    {
+                        "category": "Checkpoint",
+                        "enabled": true
+                    },
+                    {
+                        "category": "Error",
+                        "enabled": true
+                    },
+                    {
+                        "category": "Management",
+                        "enabled": true
+                    },
+                    {
+                        "category": "Feed",
+                        "enabled": true
+                    }                               
+                ]
+            }
+        },
+        {
+            "name": "[concat(parameters('hostpoolName'),'/microsoft.insights/toLogAnalytics')]",
+            "type": "Microsoft.DesktopVirtualization/hostpools/providers/diagnosticSettings",
+            "apiVersion": "2017-05-01-preview",
+            "properties": {
+                "workspaceId":"[concat('/subscriptions/',subscription().subscriptionId,'/resourcegroups/',parameters('logAnalyticsResourcegroup'),'/providers/microsoft.operationalinsights/workspaces/',parameters('logAnalyticsWorkspaceName'))]",
+                "logs": [
+                    {
+                        "category": "Checkpoint",
+                        "enabled": true
+                    },
+                    {
+                        "category": "Error",
+                        "enabled": true
+                    },
+                    {
+                        "category": "Management",
+                        "enabled": true
+                    },
+                    {
+                        "category": "Connection",
+                        "enabled": true
+                    },
+                    {
+                        "category": "HostRegistration",
+                        "enabled": true
+                    },
+                    {
+                        "category": "AgentHealthStatus",
+                        "enabled": true
+                    }                              
+                ]
+            },
+            "dependsOn": [
+                "[concat('Microsoft.DesktopVirtualization/hostpools/', parameters('hostpoolName'))]"
+            ]
+        },    
+        {
+            "name": "[concat(parameters('applicationGroupName'),'/microsoft.insights/toLogAnalytics')]",
+            "type": "Microsoft.DesktopVirtualization/applicationgroups/providers/diagnosticSettings",
+            "apiVersion": "2017-05-01-preview",
+            "properties": {
+                "workspaceId":"[concat('/subscriptions/',subscription().subscriptionId,'/resourcegroups/',parameters('logAnalyticsResourcegroup'),'/providers/microsoft.operationalinsights/workspaces/',parameters('logAnalyticsWorkspaceName'))]",
+                "logs": [
+                    {
+                        "category": "Checkpoint",
+                        "enabled": true
+                    },
+                    {
+                        "category": "Error",
+                        "enabled": true
+                    },
+                    {
+                        "category": "Management",
+                        "enabled": true
+                    }                           
+                ]
+            },
+            "dependsOn": [
+                "[concat('Microsoft.DesktopVirtualization/applicationgroups/', parameters('applicationGroupName'))]"
+            ]
+        }
+    ],
+    "outputs": {}    
+}
