@@ -207,10 +207,12 @@ for($i=0; $i -lt $guests.Count; $i++){
     $reportData+=$obj
 }
 
-$reportData | Export-CSV -Path "guestActivityReport.csv" -Encoding UTF8 -NoTypeInformation
+$csvName = "guestActivityReport_$((Get-Date).ToString('dd-MM-yyyy')).csv"
+
+$reportData | Export-CSV -Path $csvName -Encoding UTF8 -NoTypeInformation
 
 if(!$nonInteractive){
-    .\guestActivityReport.csv
+    .\$csvName
 }
 
 If($mailFrom -and $mailTo){
@@ -236,13 +238,13 @@ If($mailFrom -and $mailTo){
         $body.message.toRecipients += [PSCustomObject]@{"emailAddress" = [PSCustomObject]@{"address"=$recipient}} 
     }
 
-    $attachment = Get-Item "guestActivityReport.csv"
+    $attachment = Get-Item $csvName
 
     $FileName=(Get-Item -Path $attachment).name
     $base64string = [Convert]::ToBase64String([IO.File]::ReadAllBytes($attachment))
     $body.message.attachments += [PSCustomObject]@{
         "@odata.type" = "#microsoft.graph.fileAttachment"
-        "name" = "guestActivityReport.csv"
+        "name" = $csvName
         "contentType" = "text/plain"
         "contentBytes" = "$base64string"
     }
