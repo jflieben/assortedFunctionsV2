@@ -196,7 +196,7 @@ try{
 Write-Output "Manifest parsed, sending API PUT to V1 Hostpool:"
 Write-Output $apiPostData
 
-#send the actual API request to register the package in both common hostpools using the pipeline serviceprincipal
+#send the actual API request to register the package in the hostpool using the pipeline serviceprincipal
 try{
     $context = [Microsoft.Azure.Commands.Common.Authentication.Abstractions.AzureRmProfileProvider]::Instance.Profile.DefaultContext
     $token = [Microsoft.Azure.Commands.Common.Authentication.AzureSession]::Instance.AuthenticationFactory.Authenticate($context.Account, $context.Environment, $context.Tenant.Id.ToString(), $null, [Microsoft.Azure.Commands.Common.Authentication.ShowDialog]::Never, $null, "https://management.azure.com")          
