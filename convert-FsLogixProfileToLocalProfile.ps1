@@ -38,7 +38,7 @@ try{
         $profileRemotePath = (Get-ChildItem $filesharePath | where{$_.Name.EndsWith($user)}).FullName
     }
     Write-Output "Checking for VHD(X) in $profileRemotePath"
-    $profileRemotePath = (Get-ChildItem $profileRemotePath | where{$_.Name.StartsWith("Profile") -and ($_.Name.EndsWith(".vhd") -or $_.Name.EndsWith(".vhdx"))}).FullName
+    $profileRemotePath = (Get-ChildItem $profileRemotePath | where{$_.Name.StartsWith("Profile") -and ($_.Name.EndsWith(".vhd","CurrentCultureIgnoreCase") -or $_.Name.EndsWith(".vhdx","CurrentCultureIgnoreCase"))}).FullName
     if(!(Test-Path $profileRemotePath)){
         Throw "Failed to find a profile directory for $user in $filesharePath"
     }
