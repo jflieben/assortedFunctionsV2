@@ -46,7 +46,9 @@ try{
         $Null = Connect-AzAccount -Identity -ErrorAction Stop
         Write-Output "Logged in as MI"
     }else{
+        Write-Output "Logging in interactively"
         Login-AzAccount -ErrorAction Stop
+        Write-Output "Logged in interactively"
     }
 }catch{
     Throw $_
@@ -54,7 +56,9 @@ try{
 
 $context = [Microsoft.Azure.Commands.Common.Authentication.Abstractions.AzureRmProfileProvider]::Instance.Profile.DefaultContext
 $token = ([Microsoft.Azure.Commands.Common.Authentication.AzureSession]::Instance.AuthenticationFactory.Authenticate($context.Account, $context.Environment, $context.Tenant.Id.ToString(), $null, [Microsoft.Azure.Commands.Common.Authentication.ShowDialog]::Never, $null, "https://graph.microsoft.com")).AccessToken
-            
+
+Write-Output "Token translated, retrieving users from Graph API..."
+
 $propertiesSelector = @("UserType","UserPrincipalName","Id","DisplayName","ExternalUserState","ExternalUserStateChangeDateTime","CreatedDateTime","CreationType","AccountEnabled")
 
 if(!$nonInteractive){
