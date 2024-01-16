@@ -491,9 +491,17 @@ For($s=0; $s -lt $SitesCollections.Count; $s++){
 
 
 For($s=0; $s -lt $SitesCollections.Count; $s++){
-    Remove-SPOUser -Site $SitesCollections[$s].Url -LoginName $userUPN
+    try{
+        Remove-SPOUser -Site $SitesCollections[$s].Url -LoginName $userUPN
+    }catch{
+        Write-Host "Failed to remove user from $($SitesCollections[$s].Url)"
+    }
 }
 
 For($s=0; $s -lt $SitesCollections.Count; $s++){
-    Get-PnPSiteCollectionAdmin | where {$_.LoginName.EndsWith($userUPN)} | Remove-PnPSiteCollectionAdmin
+    try{
+        Get-PnPSiteCollectionAdmin | where {$_.LoginName.EndsWith($userUPN)} | Remove-PnPSiteCollectionAdmin
+    }catch{
+        Write-Host "Failed to remove user from $($SitesCollections[$s].Url)"
+    }
 }
