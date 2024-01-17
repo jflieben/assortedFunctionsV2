@@ -232,7 +232,10 @@ function get-vmRightSize{
 
     #get meta data of targeted VM
     try{
-        $targetVM = Get-AzVM -Name $targetVMName
+        $targetVM = Get-AzVM -Name $targetVMName -ErrorAction Stop
+        if(!$targetVM){
+            Throw "$targetVMName does not exist in this subscription or you do not have permissions to access it"
+        }
         $script:reportRow.currentSize = $targetVM.HardwareProfile.VmSize
         $targetVMPricing = $Null
         $targetVMPricing = $azureVMPrices | where{$_.name -eq $targetVM.HardwareProfile.VmSize}
@@ -268,13 +271,13 @@ function get-vmRightSize{
             Write-Verbose "No data returned by Log Analytics for LA type counter, checking for AM type counter"
             $query = "Perf | where TimeGenerated between (ago($($measurePeriodHours)h) .. ago(0h)) and CounterName =~ 'Available Bytes' and Computer =~ '$($targetVMName)$($domain)'$queryAddition | project TimeGenerated, CounterValue | order by CounterValue"
             Write-Verbose "$targetVMName querying azure monitor: $query"
-            $result = Invoke-AzOperationalInsightsQuery -WorkspaceId $workspaceId -Query $query -ErrorAction Stop
-            $resultsArray = [System.Linq.Enumerable]::ToArray($result.Results)   
+            $result = $Null; $result = Invoke-AzOperationalInsightsQuery -WorkspaceId $workspaceId -Query $query -ErrorAction Stop
+            $resultsArray = $Null; $resultsArray = [System.Linq.Enumerable]::ToArray($result.Results)   
             if($resultsArray.Count -le 0){
                 Write-Verbose "No data returned by Log Analytics for AM type counter"
                 Throw "no data returned by Log Analytics. Was the VM turned on the past hours, and has the 'Available Mbytes' or 'Available Bytes' counter been turned on, and do you have permissions to query Log Analytics?"
             }else{
-                $resultsArray | % {[PSCustomObject]@{"TimeGenerated" = $_.TimeGenerated;"CounterValue"=$_.CounterValue/1MB}}
+                $resultsArray = $resultsArray | % {[PSCustomObject]@{"TimeGenerated" = $_.TimeGenerated;"CounterValue"=$_.CounterValue/1MB}}
             }            
         }
         #we need to ensure enough datapoints exist
