@@ -273,6 +273,7 @@ function get-vmRightSize{
             Write-Verbose "$targetVMName querying azure monitor: $query"
             $result = $Null; $result = Invoke-AzOperationalInsightsQuery -WorkspaceId $workspaceId -Query $query -ErrorAction Stop
             $resultsArray = $Null; $resultsArray = [System.Linq.Enumerable]::ToArray($result.Results)   
+            Write-Verbose "$targetVMName retrieved $($resultsArray.Count) MB (AM type counter) memory datapoints from Azure Monitor"
             if($resultsArray.Count -le 0){
                 Write-Verbose "No data returned by Log Analytics for AM type counter"
                 Throw "no data returned by Log Analytics. Was the VM turned on the past hours, and has the 'Available Mbytes' or 'Available Bytes' counter been turned on, and do you have permissions to query Log Analytics?"
