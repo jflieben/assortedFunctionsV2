@@ -148,9 +148,9 @@ function get-vmRightSize{
     $memoryTrigger = 0.75 #if this percentage of memory + the difference percent is in use on average, more should be added. If under this percentage - the difference percent, memory should be recalculated
     $rightSizingMinimumDifferencePercent = 0.10 #minimum difference/buffer of 10% to avoid VM's getting resized back and forth every time you call this function
     $minMemoryGB = 4 #will never assign less than this (even if you've allowed VM's with more)
-    $maxMemoryGB = 32 #will never assign more than this (even if you've allowed VM's with more)
+    $maxMemoryGB = 128 #will never assign more than this (even if you've allowed VM's with more)
     $minvCPUs = 2 #min 2 required for network acceleration!
-    $maxvCPUs = 12 #in no case will this function assign a vmtype with more vCPU's than this
+    $maxvCPUs = 32 #in no case will this function assign a vmtype with more vCPU's than this
     $defaultSize = "" #if specified, VM's that do not have performance data will be sized to this size as the fallback size. If you don't specify anything, they will remain at their current size untill performance data for right sizing is available
     #####END OF OPTIONAL CONFIGURATION#########
   
