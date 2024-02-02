@@ -472,7 +472,11 @@ function set-rsgRightSize{
         [Switch]$Boot, #after resizing, by default a VM stays offline. Use -Boot to automatically start if after resizing
         [Switch]$WhatIf, #best used together with -Verbose. Causes the script not to modify anything, just to log what it would do
         [Switch]$Report,
-        [Array]$allowedVMTypes = @("Standard_D2ds_v4","Standard_D4ds_v4","Standard_D8ds_v4","Standard_D2ds_v5","Standard_D4ds_v5","Standard_D8ds_v5","Standard_E2ds_v4","Standard_E4ds_v4","Standard_E8ds_v4","Standard_E2ds_v5","Standard_E4ds_v5","Standard_E8ds_v5")
+        [Array]$allowedVMTypes = @("Standard_D2ds_v4","Standard_D4ds_v4","Standard_D8ds_v4","Standard_D2ds_v5","Standard_D4ds_v5","Standard_D8ds_v5","Standard_E2ds_v4","Standard_E4ds_v4","Standard_E8ds_v4","Standard_E2ds_v5","Standard_E4ds_v5","Standard_E8ds_v5"),
+        [Int]$minMemoryGB = 2, #will never assign less than this (even if you've allowed VM's with more)
+        [Int]$maxMemoryGB = 512, #will never assign more than this (even if you've allowed VM's with more)
+        [Int]$minvCPUs = 1, #min 2 required for network acceleration!
+        [Int]$maxvCPUs = 64 #in no case will this function assign a vmtype with more vCPU's than this          
     )    
 
     Write-Verbose "Getting VM's for RSG $targetRSG"
@@ -480,7 +484,7 @@ function set-rsgRightSize{
     $reportRows = @()
     foreach($vm in $targetVMs){
         Write-Verbose "calling set-vmRightSize for $($vm.Name)"
-        $retVal = set-vmRightSize -allowedVMTypes $allowedVMTypes -targetVMName $vm.Name -domain $domain -workspaceId $workspaceId -maintenanceWindowStartHour $maintenanceWindowStartHour -maintenanceWindowLengthInHours $maintenanceWindowLengthInHours -maintenanceWindowDay $maintenanceWindowDay -region $region -measurePeriodHours $measurePeriodHours -Report:$Report.IsPresent -Force:$Force.IsPresent -Boot:$Boot.IsPresent -WhatIf:$WhatIf.IsPresent
+        $retVal = set-vmRightSize -allowedVMTypes $allowedVMTypes -targetVMName $vm.Name -domain $domain -workspaceId $workspaceId -maintenanceWindowStartHour $maintenanceWindowStartHour -maintenanceWindowLengthInHours $maintenanceWindowLengthInHours -maintenanceWindowDay $maintenanceWindowDay -region $region -measurePeriodHours $measurePeriodHours -Report:$Report.IsPresent -Force:$Force.IsPresent -Boot:$Boot.IsPresent -WhatIf:$WhatIf.IsPresent -minMemoryGB $minMemoryGB -maxMemoryGB $maxMemoryGB -minvCPUs $minvCPUs -maxvCPUs $maxvCPUs
         if($Report){
             $reportRows += $retVal
         }else{
