@@ -300,7 +300,7 @@ function get-vmRightSize{
         Throw "$targetVMName failed to get memory performance data from Azure Monitor because $_"
     }
 
-    Write-Verbose "$targetVMName has $($targetVMCurrentHardware.MemoryInMB)MB and in the top 5% of the time it averages at $($targetVMCurrentHardware.MemoryInMB - $memoryStats.Percentile5)MB ($([Math]::Round($memUsedPct*100,2))%) used"
+    Write-Verbose "$targetVMName has $($targetVMCurrentHardware.MemoryInMB)MB and the 95th percentile is $($targetVMCurrentHardware.MemoryInMB - $memoryStats.Percentile5)MB ($([Math]::Round($memUsedPct*100,2))%) used"
 
     #get cpu performance of targeted VM in configured period
     try{
@@ -330,7 +330,7 @@ function get-vmRightSize{
         Throw "$targetVMName failed to get CPU performnace data from Azure Monitor because $_"
     }
 
-    Write-Verbose "$targetVMName has $($targetVMCurrentHardware.NumberOfCores) cpu cores and in the top 5% of the time it averages at $([Math]::Round($cpuStats.Percentile95,2))% max of the cores"
+    Write-Verbose "$targetVMName has $($targetVMCurrentHardware.NumberOfCores) cpu cores and the 95th percentile is $([Math]::Round($cpuStats.Percentile95,2))% max of the cores"
 
     $targetMinimumCPUCount=$targetVMCurrentHardware.NumberOfCores
     $targetMinimumMemoryInMB=$targetVMCurrentHardware.MemoryInMB
