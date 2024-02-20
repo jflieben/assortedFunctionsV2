@@ -135,7 +135,8 @@ function get-vmRightSize{
         [Int]$minMemoryGB = 2, #will never assign less than this (even if you've allowed VM's with more)
         [Int]$maxMemoryGB = 512, #will never assign more than this (even if you've allowed VM's with more)
         [Int]$minvCPUs = 1, #min 2 required for network acceleration!
-        [Int]$maxvCPUs = 64 #in no case will this function assign a vmtype with more vCPU's than this
+        [Int]$maxvCPUs = 64, #in no case will this function assign a vmtype with more vCPU's than this
+        [Switch]$doNotCheckForRecentResize #if this switch is used, the function will not check if the VM was resized within measurePeriodHours and if so will not resize it again
     )
     
     $script:reportRow = [PSCustomObject]@{
@@ -257,6 +258,25 @@ function get-vmRightSize{
         }else{
             $script:reportRow.targetSize = $targetVM.Tags["LCRightSizeConfig"]
             return $targetVM.Tags["LCRightSizeConfig"]
+        }
+    }
+
+    if(!$doNotCheckForRecentResize){
+        Write-Verbose "$targetVMName checking for recent resize in the past $($measurePeriodHours) hours..."
+        $VMAzLog = $Null;$VMAzLog = Get-AzLog -ResourceId $vm.Id -StartTime (Get-Date).AddHours($measurePeriodHours*-1) -WarningAction SilentlyContinue
+        $resized = $False
+        foreach($log in $VMAzLog){
+            if($log.properties.content.responseBody){
+                $json = $log.properties.content.responseBody | convertfrom-json -Depth 10
+                if($json.properties.hardwareProfile.vmSize){
+                    $resized = $True
+                }
+            }
+        }    
+        if($resized){
+            Write-Verbose "$targetVMName was resized in the past $($measurePeriodHours) hours, skipping resize. You can override this with -doNotCheckForRecentResize"
+            $script:reportRow.targetSize = $targetVM.HardwareProfile.VmSize
+            return $targetVM.HardwareProfile.VmSize
         }
     }
 
@@ -476,7 +496,8 @@ function set-rsgRightSize{
         [Int]$minMemoryGB = 2, #will never assign less than this (even if you've allowed VM's with more)
         [Int]$maxMemoryGB = 512, #will never assign more than this (even if you've allowed VM's with more)
         [Int]$minvCPUs = 1, #min 2 required for network acceleration!
-        [Int]$maxvCPUs = 64 #in no case will this function assign a vmtype with more vCPU's than this          
+        [Int]$maxvCPUs = 64, #in no case will this function assign a vmtype with more vCPU's than this 
+        [Switch]$doNotCheckForRecentResize #if this switch is used, the function will not check if the VM was resized within measurePeriodHours and if so will not resize it again         
     )    
 
     Write-Verbose "Getting VM's for RSG $targetRSG"
@@ -484,7 +505,7 @@ function set-rsgRightSize{
     $reportRows = @()
     foreach($vm in $targetVMs){
         Write-Verbose "calling set-vmRightSize for $($vm.Name)"
-        $retVal = set-vmRightSize -allowedVMTypes $allowedVMTypes -targetVMName $vm.Name -domain $domain -workspaceId $workspaceId -maintenanceWindowStartHour $maintenanceWindowStartHour -maintenanceWindowLengthInHours $maintenanceWindowLengthInHours -maintenanceWindowDay $maintenanceWindowDay -region $region -measurePeriodHours $measurePeriodHours -Report:$Report.IsPresent -Force:$Force.IsPresent -Boot:$Boot.IsPresent -WhatIf:$WhatIf.IsPresent -minMemoryGB $minMemoryGB -maxMemoryGB $maxMemoryGB -minvCPUs $minvCPUs -maxvCPUs $maxvCPUs
+        $retVal = set-vmRightSize -doNotCheckForRecentResize:$doNotCheckForRecentResize.IsPresent -allowedVMTypes $allowedVMTypes -targetVMName $vm.Name -domain $domain -workspaceId $workspaceId -maintenanceWindowStartHour $maintenanceWindowStartHour -maintenanceWindowLengthInHours $maintenanceWindowLengthInHours -maintenanceWindowDay $maintenanceWindowDay -region $region -measurePeriodHours $measurePeriodHours -Report:$Report.IsPresent -Force:$Force.IsPresent -Boot:$Boot.IsPresent -WhatIf:$WhatIf.IsPresent -minMemoryGB $minMemoryGB -maxMemoryGB $maxMemoryGB -minvCPUs $minvCPUs -maxvCPUs $maxvCPUs
         if($Report){
             $reportRows += $retVal
         }else{
@@ -534,13 +555,14 @@ function set-vmRightSize{
         [Int]$minMemoryGB = 2, #will never assign less than this (even if you've allowed VM's with more)
         [Int]$maxMemoryGB = 512, #will never assign more than this (even if you've allowed VM's with more)
         [Int]$minvCPUs = 1, #min 2 required for network acceleration!
-        [Int]$maxvCPUs = 64 #in no case will this function assign a vmtype with more vCPU's than this        
+        [Int]$maxvCPUs = 64, #in no case will this function assign a vmtype with more vCPU's than this   
+        [Switch]$doNotCheckForRecentResize #if this switch is used, the function will not check if the VM was resized within measurePeriodHours and if so will not resize it again
     )
     try{
         Write-Verbose "$targetVMName getting metadata"
         $vm = Get-AzVM -Name $targetVMName -Status
         Write-Verbose "$targetVMName calculating optimal size"
-        $optimalSize = get-vmRightSize -allowedVMTypes $allowedVMTypes -targetVMName $targetVMName -workspaceId $workspaceId -maintenanceWindowStartHour $maintenanceWindowStartHour -maintenanceWindowLengthInHours $maintenanceWindowLengthInHours -maintenanceWindowDay $maintenanceWindowDay -region $region -measurePeriodHours $measurePeriodHours -domain $domain -minMemoryGB $minMemoryGB -maxMemoryGB $maxMemoryGB -minvCPUs $minvCPUs -maxvCPUs $maxvCPUs
+        $optimalSize = get-vmRightSize -doNotCheckForRecentResize:$doNotCheckForRecentResize.IsPresent -allowedVMTypes $allowedVMTypes -targetVMName $targetVMName -workspaceId $workspaceId -maintenanceWindowStartHour $maintenanceWindowStartHour -maintenanceWindowLengthInHours $maintenanceWindowLengthInHours -maintenanceWindowDay $maintenanceWindowDay -region $region -measurePeriodHours $measurePeriodHours -domain $domain -minMemoryGB $minMemoryGB -maxMemoryGB $maxMemoryGB -minvCPUs $minvCPUs -maxvCPUs $maxvCPUs
         if($optimalSize -eq $vm.HardwareProfile.VmSize){
             Write-Host "$targetVMName already at optimal size"
             if($Report){
