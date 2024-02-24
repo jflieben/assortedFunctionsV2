@@ -515,7 +515,7 @@ function set-rsgRightSize{
     if($Report){
         $reportPath = Join-Path $Env:TEMP -ChildPath "addrs-report.csv" 
         Write-Output "Writing report with $($reportRows.Count) lines to $reportPath"
-        $reportRows | Export-CSV -Path $reportPath -Force -Encoding UTF8 -NoTypeInformation -Confirm:$False
+        $reportRows | Export-CSV -Path $reportPath -Force -Encoding UTF8 -NoTypeInformation -Confirm:$False -Append
         Start-Process $reportPath
         Write-Output "Report written and launched, script has completed"
     }
