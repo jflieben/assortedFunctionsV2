@@ -267,7 +267,7 @@ function get-vmRightSize{
         $resized = $False
         foreach($log in $VMAzLog){
             if($log.properties.content.responseBody){
-                $json = $log.properties.content.responseBody | convertfrom-json -Depth 10
+                $json = $log.properties.content.responseBody | convertfrom-json
                 if($json.properties.hardwareProfile.vmSize){
                     $resized = $True
                 }
@@ -283,14 +283,14 @@ function get-vmRightSize{
     #get memory performance of targeted VM in configured period
     try{
         $query = "Perf | where TimeGenerated between (ago($($measurePeriodHours)h) .. ago(0h)) and CounterName =~ 'Available Mbytes' and Computer =~ '$($targetVMName)$($domain)'$queryAddition | project TimeGenerated, CounterValue | order by CounterValue"
-        Write-Verbose "$targetVMName querying log analytics: $query"
+        Write-Verbose "$targetVMName querying log analytics workspace $workspaceId : $query"
         $result = Invoke-AzOperationalInsightsQuery -WorkspaceId $workspaceId -Query $query -ErrorAction Stop
         $resultsArray = [System.Linq.Enumerable]::ToArray($result.Results)
         Write-Verbose "$targetVMName retrieved $($resultsArray.Count) MB (LA type counter) memory datapoints from Azure Monitor"
         if($resultsArray.Count -le 0){
             Write-Verbose "No data returned by Log Analytics for LA type counter, checking for AM type counter"
             $query = "Perf | where TimeGenerated between (ago($($measurePeriodHours)h) .. ago(0h)) and CounterName =~ 'Available Bytes' and Computer =~ '$($targetVMName)$($domain)'$queryAddition | project TimeGenerated, CounterValue | order by CounterValue"
-            Write-Verbose "$targetVMName querying azure monitor: $query"
+            Write-Verbose "$targetVMName querying azure monitor workspace $workspaceId : $query"
             $result = $Null; $result = Invoke-AzOperationalInsightsQuery -WorkspaceId $workspaceId -Query $query -ErrorAction Stop
             $resultsArray = $Null; $resultsArray = [System.Linq.Enumerable]::ToArray($result.Results)   
             Write-Verbose "$targetVMName retrieved $($resultsArray.Count) MB (AM type counter) memory datapoints from Azure Monitor"
