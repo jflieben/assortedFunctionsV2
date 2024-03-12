@@ -29,7 +29,7 @@ function set-vmToSize{
             if($Force){
                 Write-Verbose "Stopping $($vm.Name) as it is running and -Force was specified"
                 if(!$WhatIf){
-                    Stop-AzVM -Name $($vm.Name) -Confirm:$False -Force
+                    $vm | Stop-AzVM -Confirm:$False -Force | Out-Null
                 }
                 Write-Verbose "Stopped $($vm.Name)"
             }else{
@@ -52,7 +52,7 @@ function set-vmToSize{
         if($Boot){
             if(!$WhatIf){
                 Write-Verbose "Starting $($vm.Name) as -Boot was specified"
-                Start-AzVM -Name $($vm.Name) -Confirm:$False -NoWait
+                $vm | Start-AzVM -Confirm:$False -NoWait | Out-Null
             }else{
                 Write-Verbose "-Boot specified, but not booting as -WhatIf was specified"
             }
