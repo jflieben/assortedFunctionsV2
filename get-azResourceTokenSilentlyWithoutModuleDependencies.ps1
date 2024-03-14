@@ -31,7 +31,7 @@ Param(
     $tenantId,
     [Parameter(Mandatory=$true)]$userUPN,
     $resource="https://graph.microsoft.com",
-    $clientId="1950a258-227b-4e31-a9cf-717495945fc2" #use 1b730954-1685-4b74-9bfd-dac224a7b894 for audit/sign in logs or other things that only work through the AzureAD module, use d1ddf0e4-d672-4dae-b554-9d5bdfd93547 for Intune
+    $clientId="1950a258-227b-4e31-a9cf-717495945fc2" #use 1b730954-1685-4b74-9bfd-dac224a7b894 for audit/sign in logs or other things that only work through the AzureAD module
 )
 
 $strCurrentTimeZone = (Get-WmiObject win32_timezone).StandardName
