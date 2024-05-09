@@ -180,25 +180,39 @@ function get-vmRightSize{
 
     #use a global var to cache data between subsequent calls to list all available Azure VM sizes in the region
     if(!$global:azureAvailableVMSizes){
-        try{
-            Write-Host "No VM size cache for $region yet, creating this first...."
-            $global:azureAvailableVMSizes = Get-AzVMSize -Location $region -ErrorAction Stop
-            Write-Host "VM Size cache created"
-            Write-Verbose "Cached the following available VM types in $region :"
-            Write-Verbose ($global:azureAvailableVMSizes.Name -Join ",")
-        }catch{
-            Throw "$targetVMName failed to retrieve available Azure VM sizes in region $region because of $_"
+        $localCachePath = Join-Path $env:TEMP "azureAvailableVMSizes.json"
+        if((Test-Path $localCachePath)){
+            $global:azureAvailableVMSizes = Get-Content $localCachePath | ConvertFrom-Json
+            Write-Host "Loaded cached Azure VM sizes from $localCachePath"
+        }else{
+            try{
+                Write-Host "No VM size cache for $region yet, creating this first...."
+                $global:azureAvailableVMSizes = Get-AzVMSize -Location $region -ErrorAction Stop
+                Write-Host "VM Size cache created"
+                Write-Verbose "Cached the following available VM types in $region :"
+                Write-Verbose ($global:azureAvailableVMSizes.Name -Join ",")
+                $global:azureAvailableVMSizes | ConvertTo-Json -Depth 50 | Set-Content $localCachePath -Force -Confirm:$False
+            }catch{
+                Throw "$targetVMName failed to retrieve available Azure VM sizes in region $region because of $_"
+            }
         }
     }
 
     #use a global var to cache data between subsequent calls to list cost and performance data in the selected region
     if(!$global:azureVMPrices){
-        try{
-            Write-Host "No cache of VM performance and pricing data yet, creating this first...."
-            get-azureVMPricesAndPerformance -region $region
-            Write-Host "VM Performance and pricing data cached"
-        }catch{
-            Throw "$targetVMName failed to get pricing and performance data for Azure VM sizes because of $_"
+        $localCachePath = Join-Path $env:TEMP "azureVMPrices.json"
+        if((Test-Path $localCachePath)){
+            $global:azureVMPrices = Get-Content $localCachePath | ConvertFrom-Json
+            Write-Host "Loaded cached Azure VM prices from $localCachePath"
+        }else{        
+            try{
+                Write-Host "No cache of VM performance and pricing data yet, creating this first...."
+                get-azureVMPricesAndPerformance -region $region
+                $global:azureVMPrices | ConvertTo-Json -Depth 50 | Set-Content $localCachePath -Force -Confirm:$False
+                Write-Host "VM Performance and pricing data cached"
+            }catch{
+                Throw "$targetVMName failed to get pricing and performance data for Azure VM sizes because of $_"
+            }
         }
     }
 
