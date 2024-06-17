@@ -30,12 +30,12 @@ $script:ReportFile = "C:\Temp\data.CSV" #report will be generated here
 $userUPN = Read-Host -Prompt "Please type your login name"
 
 $tenantId = (Invoke-RestMethod "https://login.windows.net/$($userUPN.Split("@")[1])/.well-known/openid-configuration" -Method GET).userinfo_endpoint.Split("/")[3]
-$response = Invoke-RestMethod -Method POST -UseBasicParsing -Uri "https://login.microsoftonline.com/$tenantId/oauth2/devicecode" -ContentType "application/x-www-form-urlencoded" -Body "resource=https%3A%2F%2Fgraph.microsoft.com&client_id=d1ddf0e4-d672-4dae-b554-9d5bdfd93547"
+$response = Invoke-RestMethod -Method POST -UseBasicParsing -Uri "https://login.microsoftonline.com/$tenantId/oauth2/devicecode" -ContentType "application/x-www-form-urlencoded" -Body "resource=https%3A%2F%2Fgraph.microsoft.com&client_id=1950a258-227b-4e31-a9cf-717495945fc2"
 Write-Output $response.message
 $waited = 0
 while($true){
     try{
-        $authResponse = Invoke-RestMethod -uri "https://login.microsoftonline.com/$tenantId/oauth2/token" -ContentType "application/x-www-form-urlencoded" -Method POST -Body "grant_type=device_code&resource=https%3A%2F%2Fgraph.microsoft.com&code=$($response.device_code)&client_id=d1ddf0e4-d672-4dae-b554-9d5bdfd93547" -ErrorAction Stop
+        $authResponse = Invoke-RestMethod -uri "https://login.microsoftonline.com/$tenantId/oauth2/token" -ContentType "application/x-www-form-urlencoded" -Method POST -Body "grant_type=device_code&resource=https%3A%2F%2Fgraph.microsoft.com&code=$($response.device_code)&client_id=1950a258-227b-4e31-a9cf-717495945fc2" -ErrorAction Stop
         $refreshToken = $authResponse.refresh_token
         break
     }catch{

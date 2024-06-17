@@ -10,7 +10,7 @@
     Updated: 03/09/2021
 #>
 
-$clientId = "d1ddf0e4-d672-4dae-b554-9d5bdfd93547"
+$clientId = "1950a258-227b-4e31-a9cf-717495945fc2"
 
 $groupName = Read-Host -Prompt "Please type the group name you wish to list users+devices for"
 $userUPN = Read-Host -Prompt "Please type your login name"
