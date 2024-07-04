@@ -105,7 +105,7 @@ for($i=0; $i -lt $devices.Count; $i++){
 
     $obj | Add-Member -MemberType NoteProperty -Name "DeviceAgeInDays" -Value ([math]::Round((New-TimeSpan -Start ([DateTime]$created) -End (Get-Date)).TotalDays))
 
-    if($obj.InactiveDays -gt $inactiveThresholdInDays){       
+    if($obj.InactiveDays -gt $inactiveDeleteThresholdInDays -or $obj.InactiveDays -gt $inactiveDisableThresholdInDays){       
         try{
             if($obj.operatingSystem -eq "Unknown"){
                 Throw "it is an autopilot object and has to be deleted or deactivated in AutoPilot"
