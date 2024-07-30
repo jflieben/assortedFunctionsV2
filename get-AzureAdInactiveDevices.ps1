@@ -55,6 +55,8 @@ if(!$nonInteractive){
     Write-Progress -Activity "Azure AD Device Report" -Status "Grabbing all devices in your AD" -Id 1 -PercentComplete 0
 }
 
+Write-Host "$((Get-Date).ToString()) Getting all devices in your tenant..."
+
 $devices = @()
 $deviceData = Invoke-RestMethod -Uri "https://graph.microsoft.com/beta/devices?`$select=*" -Method GET -Headers @{"Authorization"="Bearer $token"}
 $devices += $deviceData.value
@@ -65,6 +67,8 @@ while($deviceData.'@odata.nextLink'){
     $deviceData = Invoke-RestMethod -Uri $deviceData.'@odata.nextLink' -Method GET -Headers @{"Authorization"="Bearer $token"}    
     $devices += $deviceData.value
 }
+
+Write-Host "$((Get-Date).ToString()) Got $($devices.Count) devices, checking..."
 
 $reportData = @()
 for($i=0; $i -lt $devices.Count; $i++){
@@ -93,13 +97,17 @@ for($i=0; $i -lt $devices.Count; $i++){
         $created = $devices[$i].approximateLastSignInDateTime
     }
 
+    $inactiveDays = 0
+
     if($lastSignIn){
-        Write-Host "$($devices[$i].displayName) detected last signin: $lastSignIn"
+        $inactiveDays = ([math]::Round((New-TimeSpan -Start ($lastSignIn) -End (Get-Date)).TotalDays))
+        Write-Host "$($devices[$i].displayName) detected last signin: $lastSignIn, inactive for $inactiveDays days"        
         $obj | Add-Member -MemberType NoteProperty -Name "LastSignIn" -Value $lastSignIn.ToString("yyyy-MM-dd hh:mm:ss")
-        $obj | Add-Member -MemberType NoteProperty -Name "InactiveDays" -Value ([math]::Round((New-TimeSpan -Start ($lastSignIn) -End (Get-Date)).TotalDays))
+        $obj | Add-Member -MemberType NoteProperty -Name "InactiveDays" -Value $inactiveDays
     }else{
-        Write-Host "$($devices[$i].displayName) detected last signin: Never"
-        $obj | Add-Member -MemberType NoteProperty -Name "InactiveDays" -Value ([math]::Round((New-TimeSpan -Start ([DateTime]$created) -End (Get-Date)).TotalDays))
+        $inactiveDays = ([math]::Round((New-TimeSpan -Start ([DateTime]$created) -End (Get-Date)).TotalDays))
+        Write-Host "$($devices[$i].displayName) detected last signin: Never, inactive for $inactiveDays days"
+        $obj | Add-Member -MemberType NoteProperty -Name "InactiveDays" -Value $inactiveDays
         $obj | Add-Member -MemberType NoteProperty -Name "LastSignIn" -Value "Never"
     }
 
