@@ -3,7 +3,7 @@
     Generates a report of all devices in your tenant, including the last signed in date (if any) based on the last activity.
     Optionally, it can remove devices if they have been inactive for a given threshold number of days by supplying the removeInactiveDevices switch
 
-    If the nonInteractive switch is supplied, the script will leverage Managed Identity (e.g. when running as an Azure Runbook) to log in to the Graph API. 
+    If the nonInteractive switch is supplied, the script will leverage Managed Identity (e.g. when running as an Azure Runbook or on a VM) to log in to the Graph API. 
     Assign the Device.Write.All permissions to the managed identity by using: https://gitlab.com/Lieben/assortedFunctions/-/blob/master/add-roleToManagedIdentity.ps1
 
     If you want the script to send mail reports, also assign a value for the From, To addresses and assign the Mail.Send graph permission to the managed identity as per above instructions.
@@ -18,7 +18,7 @@
     disclaimer: https://www.lieben.nu/liebensraum/contact/#disclaimer-and-copyright
     site:       https://www.lieben.nu
     Created:    16/12/2021
-    Updated:    See Gitlab
+    Updated:    See Github history
 #>
 #Requires -Modules @{ ModuleName="Az.Accounts"; ModuleVersion="2.7.0" }, @{ ModuleName="Az.Resources"; ModuleVersion="5.1.0" }
 
