@@ -69,7 +69,7 @@
     }
 
     #language specific permission name translation
-    switch($spoWebRegion.LocalId){
+    switch($spoWebRegion.LocaleId){
         1043 { $fullControl = "Volledig beheer"}
         Default { $fullControl = "Full Control"}
     }

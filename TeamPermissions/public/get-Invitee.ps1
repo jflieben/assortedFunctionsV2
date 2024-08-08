@@ -12,7 +12,7 @@ function get-Invitee{
     $retVal = @{}
 
     #type 1 = internal user
-    #type 2 = group?
+    #type 2 = group -> enumerate in later version
     #type 3 = external user
     if($invitee.Type -in @(1,2)){
         $usr = $Null;$usr = Get-PnPUser -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Identity 18

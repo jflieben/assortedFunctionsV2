@@ -57,9 +57,14 @@ Function get-PnPObjectPermissions{
             $obj.Type = "List or Library"     
         }
     }    
-    
+
     #retrieve all permissions for the supplied object
-    Get-PnPProperty -ClientObject $Object -Property HasUniqueRoleAssignments, RoleAssignments -Connection (Get-SpOConnection -Type Admin -Url $siteUrl)
+    Get-PnPProperty -ClientObject $Object -Property HasUniqueRoleAssignments, RoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)    
+    if($Object.HasUniqueRoleAssignments -eq $False){
+        Write-Verbose "Skipping $($Object.Title) as it fully inherits permissions from parent"
+        continue
+    }       
+    
     Foreach($roleAssignment in $Object.RoleAssignments){
         Get-PnPProperty -ClientObject $roleAssignment -Property RoleDefinitionBindings, Member -Connection (Get-SpOConnection -Type User -Url $siteUrl)
         
@@ -114,6 +119,12 @@ Function get-PnPObjectPermissions{
             Get-PnPProperty -ClientObject $Object -Property Webs -Connection (Get-SpOConnection -Type User -Url $siteUrl)
             $childObjects = $Null; $childObjects = $Object.Webs
             foreach($childObject in $childObjects){
+                #check if permissions are unique
+                Get-PnPProperty -ClientObject $childObject -Property HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+                if($childObject.HasUniqueRoleAssignments -eq $False){
+                    Write-Verbose "Skipping $($childObject.Title) as it fully inherits permissions from parent"
+                    continue
+                }                
                 Write-Verbose "Enumerating permissions for sub web $($childObject.Title)..."
                 get-PnPObjectPermissions -Object $childObject
             }
@@ -137,14 +148,18 @@ Function get-PnPObjectPermissions{
                     Write-Progress -Id 2 -PercentComplete ($Counter / ($childObjects.Count) * 100) -Activity "Exporting Permissions from List '$($List.Title)' in $($Object.URL)" -Status "Processing $($List.ItemCount) items from List $counter of $($childObjects.Count)"
                     #grab top level info of the list first
                     get-PnPObjectPermissions -Object $List -siteUrl $siteUrl
+
+                    #check if permissions are unique
+                    Get-PnPProperty -ClientObject $List -Property HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+                    if($childObject.HasUniqueRoleAssignments -eq $False){
+                        Write-Verbose "Skipping $($List.Title) as it fully inherits permissions from parent"
+                        continue
+                    }     
+
                     #iterate over child items in the list
                     $listItems = Get-PnPListItem -List $List.Id -PageSize 500 -Fields ID,Title,FileSystemObjectType,URL -Connection (Get-SpOConnection -Type User -Url $siteUrl)
                     $ItemCounter = 0
                     ForEach($ListItem in $listItems){
-                        <#Check if List Item has unique permissions (SharedWithUsers:SW| will exist and have a name/email or similar listed)
-                        If($ListItem.FieldValues.MetaInfo.Split([Environment]::NewLine) | Where{$_ -and $_.StartsWith("SharedWithUsers") -and $_.Length -gt 22}){
-
-                        }#>
                         $ItemCounter++
                         Write-Progress -Id 3 -PercentComplete ($ItemCounter / ($List.ItemCount) * 100) -Activity "Processing Item $ItemCounter of $($List.ItemCount)" -Status "Searching for Unique Permissions in list items of '$($List.Title)'"
                         get-PnPObjectPermissions -Object $ListItem -siteUrl $siteUrl
