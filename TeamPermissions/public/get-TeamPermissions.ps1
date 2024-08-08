@@ -18,7 +18,9 @@
         [Switch]$expandGroups
     )
 
-    get-AuthorizationCode
+    if(!$global:LCCachedToken){
+        get-AuthorizationCode
+    }
 
     $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
     $currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
@@ -59,7 +61,7 @@
     }
 
     $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
-    $spoWebRegion = Get-PnPProperty -ClientObject $spoWeb -Property RegionalSettings -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+    $spoWebRegion = Get-PnPProperty -ClientObject $spoWeb -Property RegionalSettings -Connection (Get-SpOConnection -Type User -Url $site.Url)
     Write-Host "Scanning root $($spoWeb.Url)..."
     $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
     $global:permissions = @{
