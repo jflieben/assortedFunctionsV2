@@ -99,7 +99,7 @@ Function get-PnPObjectPermissions{
                     }                    
                 }else{
                     if($expandGroups){
-                        Get-PnPGroupMembers -name $roleAssignment.Member.Title -parentId $roleAssignment.Member.Id -siteConn (Get-SpOConnection -Type User -Url $siteUrl) | % {
+                        Get-PnPGroupMembers -name $roleAssignment.Member.Title -parentId $roleAssignment.Member.Id -siteConn (Get-SpOConnection -Type User -Url $siteUrl) | ForEach-Object {
                             if($_.PrincipalType -ne "User"){$through = "PrincipalType"}else{$through = "GroupMembership"}
                             New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity $_ -object $obj -permission $permissionLevel.Name -Through $through -parent $roleAssignment.Member.Title)
                         }
@@ -136,7 +136,7 @@ Function get-PnPObjectPermissions{
             $ExcludedListFeatureIDs = @("00000000-0000-0000-0000-000000000000","a0e5a010-1329-49d4-9e09-f280cdbed37d","d11bc7d4-96c6-40e3-837d-3eb861805bfa","00bfea71-c796-4402-9f2f-0eb9a6e71b18","de12eebe-9114-4a4a-b7da-7585dc36a907")
 
             $sharedLinksList = $Null; $sharedLinksList = $childObjects | Where-Object{$_.TemplateFeatureId -eq "d11bc7d4-96c6-40e3-837d-3eb861805bfa" -and $_}
-            $global:sharedLinks = $Null; $global:sharedLinks = Get-PnPListItem -List $sharedLinksList.Id -PageSize 500 -Fields ID,AvailableLinks -Connection (Get-SpOConnection -Type User -Url $siteUrl) | % {
+            $global:sharedLinks = $Null; $global:sharedLinks = Get-PnPListItem -List $sharedLinksList.Id -PageSize 500 -Fields ID,AvailableLinks -Connection (Get-SpOConnection -Type User -Url $siteUrl) | ForEach-Object {
                 try{$_.FieldValues["AvailableLinks"] | ConvertFrom-Json }catch{$Null}
             }
             Write-Verbose "Cached $($sharedLinks.Count) shared links for $($Object.Title)..."

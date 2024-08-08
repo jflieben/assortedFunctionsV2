@@ -29,9 +29,9 @@
     $spoBaseAdmUrl = "https://$($tenantName)-admin.sharepoint.com"
     Write-Host "Using Sharepoint base URL: $spoBaseAdmUrl"
 
-    $sites = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where {`
+    $sites = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
         $_.Template -NotIn ("SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0") -and
-        ($teamName -ne $Null -and $_.Title -eq $teamName) -or ($teamSiteUrl -ne $null -and $_.Url -eq $teamSiteUrl)
+        ($Null -ne $teamName -and $_.Title -eq $teamName) -or ($Null -ne $teamSiteUrl -and $_.Url -eq $teamSiteUrl)
     }
 
     if($sites.Count -gt 1){
@@ -75,7 +75,7 @@
 
     foreach($spoSiteAdmin in $spoSiteAdmins){
         if($spoSiteAdmin.PrincipalType -ne "User" -and $expandGroups){
-            $members = $Null; $members = Get-PnPGroupMembers -name $spoSiteAdmin.Title -parentId $spoSiteAdmin.Id -siteConn (Get-SpOConnection -Type User -Url $site.Url) | Where {$_}
+            $members = $Null; $members = Get-PnPGroupMembers -name $spoSiteAdmin.Title -parentId $spoSiteAdmin.Id -siteConn (Get-SpOConnection -Type User -Url $site.Url) | Where-Object {$_}
             foreach($member in $members){
                 New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $member -object $spoWeb -permission $fullControl -Through "GroupMembership" -parent $spoSiteAdmin.Title)
             }
