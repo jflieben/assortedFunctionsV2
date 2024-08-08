@@ -13,10 +13,9 @@ Function get-PnPObjectPermissions{
     $Object = $spoWeb
     $List = $childObjects[2]
     $Object = $listItems[-1]
-    $uniquePermissionKinds = @()
     #>
 
-    $ignoreablePermissions = @("Guest","RestrictedGuest")
+    $ignoreablePermissions = @("Guest","RestrictedGuest","None")
 
     $obj = [PSCustomObject]@{
         "Title" = $null
@@ -65,9 +64,6 @@ Function get-PnPObjectPermissions{
         Get-PnPProperty -ClientObject $roleAssignment -Property RoleDefinitionBindings, Member -Connection (Get-SpOConnection -Type User -Url $siteUrl)
         
         foreach($permissionLevel in $roleAssignment.RoleDefinitionBindings){
-            if($uniquePermissionKinds -notcontains $permissionLevel.RoleTypeKind){
-                $uniquePermissionKinds += "$($permissionLevel.RoleTypeKind)"
-            }
             Write-Verbose "Detected: $($roleAssignment.Member.Title) $($permissionLevel.Name) ($($permissionLevel.RoleTypeKind))"
             if($ignoreablePermissions -contains $permissionLevel.RoleTypeKind){
                 Write-Verbose "Ignoring $($permissionLevel.Name) permission type for $($roleAssignment.Member.Title) because it is only relevant at a deeper level"
@@ -99,7 +95,7 @@ Function get-PnPObjectPermissions{
                 }else{
                     if($expandGroups){
                         Get-PnPGroupMembers -name $roleAssignment.Member.Title -parentId $roleAssignment.Member.Id -siteConn (Get-SpOConnection -Type User -Url $siteUrl) | % {
-                            if($_.PrincipalType -ne "User"){$through = "DirectAssignment"}else{$through = "GroupMembership"}
+                            if($_.PrincipalType -ne "User"){$through = "PrincipalType"}else{$through = "GroupMembership"}
                             New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity $_ -object $obj -permission $permissionLevel.Name -Through $through -parent $roleAssignment.Member.Title)
                         }
                     }else{
