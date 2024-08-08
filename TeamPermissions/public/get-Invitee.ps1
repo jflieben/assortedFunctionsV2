@@ -11,8 +11,11 @@ function get-Invitee{
 
     $retVal = @{}
 
-    if($invitee.Type -eq 1){
-        $usr = $Null;$usr = Get-PnPUser -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Identity $invitee.PId
+    #type 1 = internal user
+    #type 2 = group?
+    #type 3 = external user
+    if($invitee.Type -in @(1,2)){
+        $usr = $Null;$usr = Get-PnPUser -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Identity 18
         if($usr){
             return $usr
         }else{
