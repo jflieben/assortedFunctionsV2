@@ -61,7 +61,6 @@
     }
 
     $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
-    $spoWebRegion = Get-PnPProperty -ClientObject $spoWeb -Property RegionalSettings -Connection (Get-SpOConnection -Type User -Url $site.Url)
     Write-Host "Scanning root $($spoWeb.Url)..."
     $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
     $global:permissions = @{
@@ -69,8 +68,8 @@
     }
 
     #language specific permission name translation
-    switch($spoWebRegion.LocaleId){
-        1043 { $fullControl = "Volledig beheer"}
+    switch($currentUser.preferredLanguage){
+        "nl-NL" { $fullControl = "Volledig beheer"}
         Default { $fullControl = "Full Control"}
     }
 
