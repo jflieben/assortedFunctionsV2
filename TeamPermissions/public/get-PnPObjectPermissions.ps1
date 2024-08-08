@@ -99,7 +99,7 @@ Function get-PnPObjectPermissions{
                 }else{
                     if($expandGroups){
                         Get-PnPGroupMembers -name $roleAssignment.Member.Title -parentId $roleAssignment.Member.Id -siteConn (Get-SpOConnection -Type User -Url $siteUrl) | % {
-                            if($_.Type -ne "User"){$through = "DirectAssignment"}else{$through = "GroupMembership"}
+                            if($_.PrincipalType -ne "User"){$through = "DirectAssignment"}else{$through = "GroupMembership"}
                             New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity $_ -object $obj -permission $permissionLevel.Name -Through $through -parent $roleAssignment.Member.Title)
                         }
                     }else{
