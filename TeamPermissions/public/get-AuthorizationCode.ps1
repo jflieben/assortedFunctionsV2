@@ -8,7 +8,7 @@ function get-AuthorizationCode{
     $tcpListener.Start()
     Write-Host "Waiting for login using your default browser..."
 
-    $authScopes = @("User.Read","Sites.FullControl.All","Domain.Read.All","Group.Read.All","https://www.sharepoint.com/AllSites.FullControl")
+    $authScopes = @("User.Read.All","User.Read","Sites.FullControl.All","Domain.Read.All","Group.Read.All","https://www.sharepoint.com/AllSites.FullControl")
     $targetUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=$($global:LCClientId)&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1985&response_mode=query&scope=offline_access%20$($authScopes -join "%20")"
 
     try{
