@@ -14,7 +14,7 @@
         ParameterSetName="BySite")]
         [String]
         $teamSiteUrl, 
-               
+
         [Switch]$expandGroups
     )
 
@@ -59,20 +59,27 @@
     }
 
     $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
+    $spoWebRegion = Get-PnPProperty -ClientObject $spoWeb -Property RegionalSettings -Connection (Get-SpOConnection -Type User -Url $siteUrl)
     Write-Host "Scanning root $($spoWeb.Url)..."
     $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
     $global:permissions = @{
         $spoWeb.Url = @()
     }
 
+    #language specific permission name translation
+    switch($spoWebRegion.LocalId){
+        1043 { $fullControl = "Volledig beheer"}
+        Default { $fullControl = "Full Control"}
+    }
+
     foreach($spoSiteAdmin in $spoSiteAdmins){
         if($spoSiteAdmin.PrincipalType -ne "User" -and $expandGroups){
             $members = $Null; $members = Get-PnPGroupMembers -name $spoSiteAdmin.Title -parentId $spoSiteAdmin.Id -siteConn (Get-SpOConnection -Type User -Url $site.Url) | Where {$_}
             foreach($member in $members){
-                New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $member -object $spoWeb -permission "Full Control" -Through "GroupMembership" -parent $spoSiteAdmin.Title)
+                New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $member -object $spoWeb -permission $fullControl -Through "GroupMembership" -parent $spoSiteAdmin.Title)
             }
         }else{
-            New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $spoSiteAdmin -object $spoWeb -permission "Full Control" -Through "DirectAssignment")
+            New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $spoSiteAdmin -object $spoWeb -permission $fullControl -Through "DirectAssignment")
         }
     }
 
