@@ -68,7 +68,7 @@ Function get-PnPObjectPermissions{
             if($uniquePermissionKinds -notcontains $permissionLevel.RoleTypeKind){
                 $uniquePermissionKinds += "$($permissionLevel.RoleTypeKind)"
             }
-            Write-Verbose "Detected: $($roleAssignment.Member.Title) $($permissionLevel.Name) ($($permissionLevel.RoleTypeKind))"}}
+            Write-Verbose "Detected: $($roleAssignment.Member.Title) $($permissionLevel.Name) ($($permissionLevel.RoleTypeKind))"
             if($ignoreablePermissions -contains $permissionLevel.RoleTypeKind){
                 Write-Verbose "Ignoring $($permissionLevel.Name) permission type for $($roleAssignment.Member.Title) because it is only relevant at a deeper level"
                 continue
