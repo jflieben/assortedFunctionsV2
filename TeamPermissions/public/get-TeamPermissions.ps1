@@ -118,7 +118,12 @@
         }
     }
 
-    $basePath = Join-Path -Parent (get-location).Path -ChildPath "TeamPermissions.@@@"
+    if((get-location).Path){
+        $basePath = Join-Path -Path (get-location).Path -ChildPath "TeamPermissions.@@@"
+    }else{
+        $basePath = Join-Path -Path (Split-Path -Path $MyInvocation.MyCommand.Definition -Parent) -ChildPath "TeamPermissions.@@@"
+    }
+
     foreach($format in $outputFormat){
         switch($format){
             "HTML" { 
@@ -129,12 +134,12 @@
                     $curHtml = "<html><head><style>table {border-collapse: collapse;}table, th, td {border: 1px solid black;}</style></head><body><h1>Team Permissions Report</h1></body></html>"
                 }
                 $table = $permissionRows | ConvertTo-Html -Property "ID","Path","Object","Name","Identity","Email","Type","Permission","Through","Parent" -Fragment
-                $curHtml -replace "</body>","$table</body>" | Out-File -FilePath $targetPath -Force -Encoding UTF8 -Confirm:$False
+                $curHtml -replace "</body>","<p><h2>$($spoWeb.Url)</h2>$table</body>" | Out-File -FilePath $targetPath -Force -Encoding UTF8 -Confirm:$False
                 Write-Host "HTML report saved to $targetPath"
             }
             "XLSX" { 
                 $targetPath = $basePath.Replace("@@@","xlsx")
-                $permissionRows | Export-Excel -Path $targetPath -WorksheetName "TeamPermissions" -Append -AutoSize
+                $permissionRows | Export-Excel -Path $targetPath -WorksheetName "TeamPermissions" -TableName "TeamPermissions" -TableStyle Medium10 -Append -AutoSize
                 Write-Host "XLSX report saved to $targetPath"
             }
             "CSV" { 
