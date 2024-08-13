@@ -18,6 +18,10 @@
     .EXAMPLE
     Install-PSResource -Name TeamPermissions -Repository PSGallery
 
+    .EXAMPLE
+    Get-TeamPermissions -TeamSiteUrl "https://tenant.sharepoint.com/sites/site" -ExpandGroups -OutputFormat Default
+    Get-TeamPermissions -teamName "INT-Finance Department" -ExpandGroups -OutputFormat XLSX,HTML
+
 #>
 
 $helperFunctions = @{
@@ -38,14 +42,5 @@ ForEach ($helperFunction in (($helperFunctions.private + $helperFunctions.public
 }
 
 $global:LCClientId = "3dd53891-462c-4f80-8dbd-df21b4a19786"
-$global:LCConstants = @{
-    inviteeTypes = @{
-        1 = "Internal User"
-        3 = "External User"
-    }
-}
-
-###while devving:
-#$VerbosePreference = "Continue"
 
 if ($helperFunctions.public) { Export-ModuleMember -Alias * -Function @($helperFunctions.public.BaseName) }

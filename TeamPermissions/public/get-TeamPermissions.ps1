@@ -3,6 +3,17 @@
         Author               = "Jos Lieben (jos@lieben.nu)"
         CompanyName          = "Lieben Consultancy"
         Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
+        
+        Parameters:
+        -teamName: the name of the Team to scan
+        -teamSiteUrl: the URL of the Team (or any sharepoint location) to scan (e.g. if name is not unique)
+        -expandGroups: if set, group memberships will be expanded to individual users
+        -outputFormat: 
+            HTML
+            XLSX
+            CSV
+            Default (output to Out-GridView)
+            Any combination of above is possible
     #>        
     Param(
         [parameter(Mandatory=$true,
@@ -15,7 +26,10 @@
         [String]
         $teamSiteUrl, 
 
-        [Switch]$expandGroups
+        [Switch]$expandGroups,
+        [parameter(Mandatory=$true)]
+        [ValidateSet('HTML','XLSX','CSV','Default')]
+        [String[]]$outputFormat
     )
 
     if(!$global:LCCachedToken){
@@ -103,7 +117,35 @@
             }
         }
     }
-    $permissionRows | out-gridview
+
+    $basePath = Join-Path -Parent (get-location).Path -ChildPath "TeamPermissions.@@@"
+    foreach($format in $outputFormat){
+        switch($format){
+            "HTML" { 
+                $targetPath = $basePath.Replace("@@@","html")
+                if((Test-Path -Path $targetPath)){
+                    $curHtml = Get-Content -Path $targetPath
+                }else{
+                    $curHtml = "<html><head><style>table {border-collapse: collapse;}table, th, td {border: 1px solid black;}</style></head><body><h1>Team Permissions Report</h1></body></html>"
+                }
+                $table = $permissionRows | ConvertTo-Html -Property "ID","Path","Object","Name","Identity","Email","Type","Permission","Through","Parent" -Fragment
+                $curHtml -replace "</body>","$table</body>" | Out-File -FilePath $targetPath -Force -Encoding UTF8 -Confirm:$False
+                Write-Host "HTML report saved to $targetPath"
+            }
+            "XLSX" { 
+                $targetPath = $basePath.Replace("@@@","xlsx")
+                $permissionRows | Export-Excel -Path $targetPath -WorksheetName "TeamPermissions" -Append -AutoSize
+                Write-Host "XLSX report saved to $targetPath"
+            }
+            "CSV" { 
+                $targetPath = $basePath.Replace("@@@","csv")
+                $permissionRows | Export-Csv -Path "TeamPermissions.csv" -NoTypeInformation  -Append
+                Write-Host "CSV report saved to $targetPath"
+            }
+
+            "Default" { $permissionRows | out-gridview }
+        }
+    }
 
     if(!$wasOwner){
         Write-Host "Cleanup: Removing you as site collection owner..."
