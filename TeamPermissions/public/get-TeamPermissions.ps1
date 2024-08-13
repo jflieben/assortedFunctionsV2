@@ -59,7 +59,7 @@
     $wasOwner = $False
     if((get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)).Email -notcontains $currentUser.userPrincipalName){
         Write-Host "Adding you as site collection owner to ensure all permissions can be read..."
-        Add-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
+        Add-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url) -WarningAction Stop -ErrorAction Stop
         Write-Host "Owner added and marked for removal upon scan completion"
     }else{
         $wasOwner = $True
