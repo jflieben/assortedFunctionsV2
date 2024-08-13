@@ -82,7 +82,7 @@ Function get-PnPObjectPermissions{
                     if($sharingLinkInfo){
                         switch([Int]$sharingLinkInfo.LinkKind){
                             {$_ -in (2,3)}  { #Org wide
-                                New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity @{Title = "Employees";PrincipalType="ORG-WIDE"} -object $obj -permission $permissionLevel.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
+                                New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity @{Title = "All Internal Users";PrincipalType="ORG-WIDE"} -object $obj -permission $permissionLevel.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
                             }                            
                             {$_ -in (4,5)}  { #Anonymous
                                 New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity @{Title = "Anyone / Anonymous";PrincipalType="ANYONE"} -object $obj -permission $permissionLevel.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
@@ -100,7 +100,7 @@ Function get-PnPObjectPermissions{
                 }else{
                     if($expandGroups){
                         Get-PnPGroupMembers -name $roleAssignment.Member.Title -parentId $roleAssignment.Member.Id -siteConn (Get-SpOConnection -Type User -Url $siteUrl) | ForEach-Object {
-                            if($_.PrincipalType -ne "User"){$through = "PrincipalType"}else{$through = "GroupMembership"}
+                            if($_.PrincipalType -ne "User"){$through = "DirectAssignment"}else{$through = "GroupMembership"}
                             New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity $_ -object $obj -permission $permissionLevel.Name -Through $through -parent $roleAssignment.Member.Title)
                         }
                     }else{

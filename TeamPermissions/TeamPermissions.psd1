@@ -23,8 +23,6 @@
     # Description of the functionality provided by this module
     Description          = "Reporting on ALL permissions in a Team site (or sharepoint or onedrive...). Note: for now a proof of concept. Features to be added soon:
     
-    -Export to CSV / Excel
-    -Export to HTML
     -Scanning multiple teams / sites
     -Paralellization / multi-threading
     "
@@ -34,7 +32,8 @@
 
     # Modules that must be imported into the global environment prior to importing this module
     RequiredModules      = @(
-        'PnP.PowerShell'
+        'PnP.PowerShell',
+        'ImportExcel'
     )
 
     # Variables to export from this module
