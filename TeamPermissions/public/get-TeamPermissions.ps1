@@ -57,14 +57,14 @@
     }
 
     $wasOwner = $False
-    if((get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)).Email -notcontains $currentUser.userPrincipalName){
+    if($site.Owners -notcontains $currentUser.userPrincipalName){
         Write-Host "Adding you as site collection owner to ensure all permissions can be read..."
-        Add-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url) -WarningAction Stop -ErrorAction Stop
+        Set-PnPTenantSite -Identity $site.Url -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
         Write-Host "Owner added and marked for removal upon scan completion"
     }else{
         $wasOwner = $True
         Write-Host "Site collection ownership verified :)"
-    }
+    }    
 
     if($site.GroupId.Guid -eq "00000000-0000-0000-0000-000000000000"){
         $groupId = $Null
@@ -154,7 +154,7 @@
 
     if(!$wasOwner){
         Write-Host "Cleanup: Removing you as site collection owner..."
-        Remove-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection $spoSiteConn
+        Remove-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl)
         Write-Host "Cleanup: Owner removed"
     }
 }
