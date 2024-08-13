@@ -154,7 +154,7 @@
 
     if(!$wasOwner){
         Write-Host "Cleanup: Removing you as site collection owner..."
-        Remove-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl)
+        Remove-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
         Write-Host "Cleanup: Owner removed"
     }
 }
