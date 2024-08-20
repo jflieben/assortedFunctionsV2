@@ -50,7 +50,7 @@
     Write-Host "Using Sharepoint base URL: $spoBaseAdmUrl"
 
     $ignoredSiteTypes = @("REDIRECTSITE#0","SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0")
-    $sites = @(Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
+    $sites = @(Get-PnPTenantSite -IncludeOneDriveSites -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
         $_.Template -NotIn $ignoredSiteTypes -and
         ($Null -ne $teamName -and $_.Title -eq $teamName) -or ($Null -ne $teamSiteUrl -and $_.Url -eq $teamSiteUrl)
     })
@@ -87,7 +87,7 @@
             if($targetUrl -and $sites.Url -notcontains $targetUrl){
                 try{
                     Write-Host "Adding $($channel.displayName) with URL $targetUrl to scan list"
-                    $extraSite = $Null; $extraSite = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $targetUrl
+                    $extraSite = $Null; $extraSite = Get-PnPTenantSite -IncludeOneDriveSites -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $targetUrl
                     if($extraSite -and $extraSite.Template -NotIn $ignoredSiteTypes){
                         $sites += $extraSite
                     }
@@ -162,6 +162,8 @@
                 "Permission" = $permission.Permission
                 "Through" = $permission.Through
                 "Parent" = $permission.Parent
+                "LinkCreationDate" = $permission.LinkCreationDate
+                "LinkExpirationDate" = $permission.LinkExpirationDate                
             }
         }
     }

@@ -9,7 +9,9 @@ function get-permissionEntry{
         [Parameter(Mandatory=$true)]$object,
         [Parameter(Mandatory=$true)]$permission,
         $through,
-        $parent
+        $parent,
+        $linkCreationDate,
+        $linkExpirationDate
     )
     if(!$global:uniqueId){
         $global:uniqueId = 1
@@ -25,6 +27,14 @@ function get-permissionEntry{
         $parent = ""
     }
 
+    if([string]::IsNullOrEmpty($linkCreationDate)){
+        $linkCreationDate = ""
+    }
+
+    if([string]::IsNullOrEmpty($linkExpirationDate)){
+        $linkExpirationDate = ""
+    }    
+
     return [PSCustomObject]@{
         "RowId" = $global:uniqueId
         "Object" = $objectType
@@ -35,5 +45,7 @@ function get-permissionEntry{
         "Permission" = $permission
         "Through" = $through
         "Parent" = $parent
+        "LinkCreationDate" = $linkCreationDate
+        "LinkExpirationDate" = $linkExpirationDate
     }
 }

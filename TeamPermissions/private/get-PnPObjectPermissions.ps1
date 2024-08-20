@@ -77,18 +77,17 @@ Function get-PnPObjectPermissions{
                     if($sharingLinkInfo){
                         switch([Int]$sharingLinkInfo.LinkKind){
                             {$_ -in (2,3)}  { #Org wide
-                                New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity @{Title = "All Internal Users";PrincipalType="ORG-WIDE"} -object $obj -permission $permissionLevel.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
+                                New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -linkCreationDate $sharingLinkInfo.CreatedDate -linkExpirationDate $sharingLinkInfo.ExpirationDateTime -entity @{Title = "All Internal Users";PrincipalType="ORG-WIDE"} -object $obj -permission $permissionLevel.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
                             }                            
                             {$_ -in (4,5)}  { #Anonymous
-                                New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity @{Title = "Anyone / Anonymous";PrincipalType="ANYONE"} -object $obj -permission $permissionLevel.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
+                                New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -linkCreationDate $sharingLinkInfo.CreatedDate -linkExpirationDate $sharingLinkInfo.ExpirationDateTime -entity @{Title = "Anyone / Anonymous";PrincipalType="ANYONE"} -object $obj -permission $permissionLevel.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
                             }                            
                             {$_ -in (1,6)}  { #direct, flexible
                                 foreach($invitee in $sharingLinkInfo.invitees){
-                                    New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity (get-Invitee -invitee $invitee -siteUrl $siteUrl) -object $obj -permission $permissionLevel.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
+                                    New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -linkCreationDate $sharingLinkInfo.CreatedDate -linkExpirationDate $sharingLinkInfo.ExpirationDateTime -entity (get-Invitee -invitee $invitee -siteUrl $siteUrl) -object $obj -permission $permissionLevel.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
                                 }
                             }
                         }
-
                     }else{
                         New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity $roleAssignment.Member -object $obj -permission $permissionLevel.Name -Through "SharingLink")
                     }                    

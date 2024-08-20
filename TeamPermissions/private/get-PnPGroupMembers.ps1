@@ -42,7 +42,7 @@ Function Get-PnPGroupMembers{
             $groupGuid = $Null; try{$groupGuid = $member.LoginName.Split("|")[2].Split("_")[0]}catch{$groupGuid = $Null}
             if($member.LoginName -like "*spo-grid-all-users*" -or $member.LoginName -eq "c:0(.s|true"){
                 Write-Verbose "Found $($member.Title) special group"
-                $global:groupCache.$name += $member
+                $global:groupCache.$($group.Title) += $member
                 continue
             }
             if($groupGuid -and [guid]::TryParse($groupGuid, $([ref][guid]::Empty))){
