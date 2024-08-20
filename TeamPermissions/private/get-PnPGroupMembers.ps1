@@ -15,19 +15,19 @@ Function Get-PnPGroupMembers{
     if($Null -eq $global:groupCache){
         $global:groupCache = @{}
     }
-    if($global:groupCache.Keys -contains $name){
-        return $global:groupCache.$name
+    if($global:groupCache.Keys -contains $($group.Title)){
+        return $global:groupCache.$($group.Title)
     }else{
-        $global:groupCache.$name = @()
+        $global:groupCache.$($group.Title) = @()
     }
 
     $groupGuid = $Null; try{$groupGuid = $group.LoginName.Split("|")[2].Split("_")[0]}catch{$groupGuid = $Null}
     if($groupGuid -and [guid]::TryParse($groupGuid, $([ref][guid]::Empty))){
         $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
         foreach($graphMember in $graphMembers){
-            if(!($global:groupCache.$name.LoginName | Where-Object {$_ -and $_.EndsWith($graphMember.userPrincipalName)})){
+            if(!($global:groupCache.$($group.Title).LoginName | Where-Object {$_ -and $_.EndsWith($graphMember.userPrincipalName)})){
                 Write-Verbose "Found $($graphMember.displayName) in graph group"
-                $global:groupCache.$name += [PSCustomObject]@{
+                $global:groupCache.$($group.Title) += [PSCustomObject]@{
                     "Title" = $graphMember.displayName
                     "LoginName" = "i:0#.f|membership|$($graphMember.userPrincipalName)"
                     "PrincipalType" = "User"
@@ -48,9 +48,9 @@ Function Get-PnPGroupMembers{
             if($groupGuid -and [guid]::TryParse($groupGuid, $([ref][guid]::Empty))){
                 $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
                 foreach($graphMember in $graphMembers){
-                    if(!($global:groupCache.$name.LoginName | Where-Object {$_ -and $_.EndsWith($graphMember.userPrincipalName)})){
+                    if(!($global:groupCache.$($group.Title).LoginName | Where-Object {$_ -and $_.EndsWith($graphMember.userPrincipalName)})){
                         Write-Verbose "Found $($graphMember.displayName) in graph group"
-                        $global:groupCache.$name += [PSCustomObject]@{
+                        $global:groupCache.$($group.Title) += [PSCustomObject]@{
                             "Title" = $graphMember.displayName
                             "LoginName" = "i:0#.f|membership|$($graphMember.userPrincipalName)"
                             "PrincipalType" = "User"
@@ -61,17 +61,17 @@ Function Get-PnPGroupMembers{
                 continue
             }
             if($member.Id -ne $parentId){
-                if($member.PrincipalType -eq "User" -and $global:groupCache.$name -notcontains $member){
+                if($member.PrincipalType -eq "User" -and $global:groupCache.$($group.Title) -notcontains $member){
                     Write-Verbose "Found $($member.Title) in sec group"
-                    $global:groupCache.$name += $member
+                    $global:groupCache.$($group.Title) += $member
                     continue
                 }
                 if($member.PrincipalType -eq "SecurityGroup" -or $member.PrincipalType -eq "SharePointGroup"){
                     $subMembers = Get-PnPGroupMembers -name $member.Title -parentId $member.Id -siteConn $siteConn
                     foreach($subMember in $subMembers){
-                        if($global:groupCache.$name -notcontains $subMember){
+                        if($global:groupCache.$($group.Title) -notcontains $subMember){
                             Write-Verbose "Found $($subMember.Title) in sub sec group"
-                            $global:groupCache.$name += $subMember
+                            $global:groupCache.$($group.Title) += $subMember
                         }
                     }
                 }
@@ -80,5 +80,5 @@ Function Get-PnPGroupMembers{
     }   
 
 
-    return $global:groupCache.$name
+    return $global:groupCache.$($group.Title)
 }
