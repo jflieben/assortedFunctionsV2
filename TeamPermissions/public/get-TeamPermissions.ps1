@@ -162,6 +162,8 @@
                 "Permission" = $permission.Permission
                 "Through" = $permission.Through
                 "Parent" = $permission.Parent
+                "LinkCreationDate" = $permission.LinkCreationDate
+                "LinkExpirationDate" = $permission.LinkExpirationDate                
             }
         }
     }
