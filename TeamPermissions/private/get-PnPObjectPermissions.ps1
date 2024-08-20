@@ -10,6 +10,7 @@ Function get-PnPObjectPermissions{
     )
 
     $ignoreablePermissions = @("Guest","RestrictedGuest","None")
+    $global:statistics."Total objects scanned"++
 
     $obj = [PSCustomObject]@{
         "Title" = $null
@@ -30,7 +31,7 @@ Function get-PnPObjectPermissions{
                 $obj.Title = $Object.Folder.Name
                 $obj.Url = "$($siteUrl.Split(".com")[0]).com$($Object.Folder.ServerRelativeUrl)"
                 $obj.Type = "Folder"  
-            }Else{ #File or List Item
+            }Else{
                 Get-PnPProperty -ClientObject $Object -Property File, ParentList -Connection (Get-SpOConnection -Type User -Url $siteUrl)
                 If($Null -ne $Object.File.Name){
                     $obj.Title = $Object.File.Name
@@ -54,7 +55,7 @@ Function get-PnPObjectPermissions{
 
     #retrieve all permissions for the supplied object
     Get-PnPProperty -ClientObject $Object -Property HasUniqueRoleAssignments, RoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)    
-    if($Object.HasUniqueRoleAssignments -eq $False){
+    if(!$global:performanceDebug -and $Object.HasUniqueRoleAssignments -eq $False){
         Write-Verbose "Skipping $($Object.Title) as it fully inherits permissions from parent"
         continue
     }       
@@ -93,7 +94,7 @@ Function get-PnPObjectPermissions{
                     }                    
                 }else{
                     if($expandGroups){
-                        Get-PnPGroupMembers -name $roleAssignment.Member.Title -parentId $roleAssignment.Member.Id -siteConn (Get-SpOConnection -Type User -Url $siteUrl) | ForEach-Object {
+                        Get-PnPGroupMembers -Group $roleAssignment.Member -parentId $roleAssignment.Member.Id -siteConn (Get-SpOConnection -Type User -Url $siteUrl) | ForEach-Object {
                             if($_.PrincipalType -ne "User"){$through = "DirectAssignment"}else{$through = "GroupMembership"}
                             New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity $_ -object $obj -permission $permissionLevel.Name -Through $through -parent $roleAssignment.Member.Title)
                         }
@@ -115,7 +116,7 @@ Function get-PnPObjectPermissions{
             foreach($childObject in $childObjects){
                 #check if permissions are unique
                 Get-PnPProperty -ClientObject $childObject -Property HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
-                if($childObject.HasUniqueRoleAssignments -eq $False){
+                if(!$global:performanceDebug -and $childObject.HasUniqueRoleAssignments -eq $False){
                     Write-Verbose "Skipping $($childObject.Title) as it fully inherits permissions from parent"
                     continue
                 }                
@@ -137,7 +138,7 @@ Function get-PnPObjectPermissions{
             }catch{
                 $global:sharedLinks
             }
-            
+
             Write-Verbose "Cached $($sharedLinks.Count) shared links for $($Object.Title)..."
 
             $counter = 0
@@ -150,7 +151,7 @@ Function get-PnPObjectPermissions{
 
                     #check if permissions are unique
                     Get-PnPProperty -ClientObject $List -Property HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
-                    if($childObject.HasUniqueRoleAssignments -eq $False){
+                    if(!$global:performanceDebug -and $childObject.HasUniqueRoleAssignments -eq $False){
                         Write-Verbose "Skipping $($List.Title) as it fully inherits permissions from parent"
                         continue
                     }     

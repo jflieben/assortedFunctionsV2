@@ -42,6 +42,6 @@ ForEach ($helperFunction in (($helperFunctions.private + $helperFunctions.public
 }
 
 $global:LCClientId = "3dd53891-462c-4f80-8dbd-df21b4a19786"
-$global:uniqueId = 0
+$global:performanceDebug = $False
 
 if ($helperFunctions.public) { Export-ModuleMember -Alias * -Function @($helperFunctions.public.BaseName) }

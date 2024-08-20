@@ -89,7 +89,7 @@
 
     foreach($spoSiteAdmin in $spoSiteAdmins){
         if($spoSiteAdmin.PrincipalType -ne "User" -and $expandGroups){
-            $members = $Null; $members = Get-PnPGroupMembers -name $spoSiteAdmin.Title -parentId $spoSiteAdmin.Id -siteConn (Get-SpOConnection -Type User -Url $site.Url) | Where-Object {$_}
+            $members = $Null; $members = Get-PnPGroupMembers -group $spoSiteAdmin -parentId $spoSiteAdmin.Id -siteConn (Get-SpOConnection -Type User -Url $site.Url) | Where-Object {$_}
             foreach($member in $members){
                 New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $member -object $spoWeb -permission $fullControl -Through "GroupMembership" -parent $spoSiteAdmin.Title)
             }
@@ -98,12 +98,26 @@
         }
     }
 
+    $global:statistics = [PSCustomObject]@{
+            "TeamPermissions version" = $MyInvocation.MyCommand.Module.Version
+            "Scan URL" = $spoWeb.Url
+            "Total objects scanned" = 0
+            "Scan start time" = Get-Date
+            "Scan end time" = ""
+            "Scan performed by" = $currentUser.userPrincipalName
+    }
+
+    $global:uniqueId = 0
+
     get-PnPObjectPermissions -Object $spoWeb
 
-    $permissionRows = @()
-    foreach($row in $global:permissions.Keys){
+    $global:statistics."Scan end time" = Get-Date
+
+    Write-Host "All permissions retrieved, writing reports..."
+
+    $permissionRows = foreach($row in $global:permissions.Keys){
         foreach($permission in $global:permissions.$row){
-            $permissionRows += [PSCustomObject]@{
+            [PSCustomObject]@{
                 "ID" = $permission.RowId
                 "Path" = $row
                 "Object"    = $permission.Object
@@ -140,6 +154,7 @@
             "XLSX" { 
                 $targetPath = $basePath.Replace("@@@","xlsx")
                 $permissionRows | Export-Excel -Path $targetPath -WorksheetName "TeamPermissions" -TableName "TeamPermissions" -TableStyle Medium10 -Append -AutoSize
+                $global:statistics | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
                 Write-Host "XLSX report saved to $targetPath"
             }
             "CSV" { 
