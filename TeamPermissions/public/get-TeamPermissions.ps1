@@ -40,13 +40,20 @@
     $currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
     Write-Host "Performing scan using: $($currentUser.userPrincipalName)"
 
+    #language specific permission name translation
+    switch($currentUser.preferredLanguage){
+        "nl-NL" { $fullControl = "Volledig beheer"}
+        Default { $fullControl = "Full Control"}
+    }  
+
     $spoBaseAdmUrl = "https://$($tenantName)-admin.sharepoint.com"
     Write-Host "Using Sharepoint base URL: $spoBaseAdmUrl"
 
-    $sites = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
-        $_.Template -NotIn ("SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0") -and
+    $ignoredSiteTypes = @("REDIRECTSITE#0","SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0")
+    $sites = @(Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
+        $_.Template -NotIn $ignoredSiteTypes -and
         ($Null -ne $teamName -and $_.Title -eq $teamName) -or ($Null -ne $teamSiteUrl -and $_.Url -eq $teamSiteUrl)
-    }
+    })
 
     if($sites.Count -gt 1){
         Throw "Failed to find a single Team using $teamName. Found: $($sites.Url -join ","). Please use the Url to specify the correct Team"
@@ -56,16 +63,6 @@
         $site = $sites[0]
     }
 
-    $wasOwner = $False
-    if($site.Owners -notcontains $currentUser.userPrincipalName){
-        Write-Host "Adding you as site collection owner to ensure all permissions can be read..."
-        Set-PnPTenantSite -Identity $site.Url -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
-        Write-Host "Owner added and marked for removal upon scan completion"
-    }else{
-        $wasOwner = $True
-        Write-Host "Site collection ownership verified :)"
-    }    
-
     if($site.GroupId.Guid -eq "00000000-0000-0000-0000-000000000000"){
         $groupId = $Null
         Write-Warning "Site is not connected to a group and is likely not a Team site."
@@ -74,36 +71,87 @@
         Write-Host "Site is connected to a group with ID: $groupId"
     }
 
-    $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
-    Write-Host "Scanning root $($spoWeb.Url)..."
-    $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
-    $global:permissions = @{
-        $spoWeb.Url = @()
-    }
-
-    #language specific permission name translation
-    switch($currentUser.preferredLanguage){
-        "nl-NL" { $fullControl = "Volledig beheer"}
-        Default { $fullControl = "Full Control"}
-    }
-
-    foreach($spoSiteAdmin in $spoSiteAdmins){
-        if($spoSiteAdmin.PrincipalType -ne "User" -and $expandGroups){
-            $members = $Null; $members = Get-PnPGroupMembers -name $spoSiteAdmin.Title -parentId $spoSiteAdmin.Id -siteConn (Get-SpOConnection -Type User -Url $site.Url) | Where-Object {$_}
-            foreach($member in $members){
-                New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $member -object $spoWeb -permission $fullControl -Through "GroupMembership" -parent $spoSiteAdmin.Title)
+    if($groupId){
+        try{
+            Write-Host "Retrieving channels for this site/team..."
+            $channels = New-GraphQuery -Uri "https://graph.microsoft.com/beta/teams/$groupId/channels" -NoPagination -Method GET
+            Write-Host "Found $($channels.Count) channels"
+        }catch{
+            Write-Warning "Failed to retrieve channels for this site/team, assuming no additional sub sites to scan"
+            $channels = @()
+        }
+        foreach($channel in $channels){
+            if($channel.filesFolderWebUrl){
+                $targetUrl = $Null; $targetUrl ="https://$($tenantName).sharepoint.com/sites/$($channel.filesFolderWebUrl.Split("/")[4])"
             }
-        }else{
-            New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $spoSiteAdmin -object $spoWeb -permission $fullControl -Through "DirectAssignment")
+            if($targetUrl -and $sites.Url -notcontains $targetUrl){
+                try{
+                    Write-Host "Adding $($channel.displayName) with URL $targetUrl to scan list"
+                    $extraSite = $Null; $extraSite = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $targetUrl
+                    if($extraSite -and $extraSite.Template -NotIn $ignoredSiteTypes){
+                        $sites += $extraSite
+                    }
+                }catch{
+                    Write-Error "Failed to add $($channel.displayName) with URL $targetUrl to scan list because Get-PnPTenantSite failed with $_" -ErrorAction Continue
+                }
+            }          
         }
     }
 
-    get-PnPObjectPermissions -Object $spoWeb
+    $global:statistics = @()
+    $global:permissions = @{}
 
-    $permissionRows = @()
-    foreach($row in $global:permissions.Keys){
+    foreach($site in $sites){
+        $global:uniqueId = 0    
+        $wasOwner = $False
+        if($site.Owners -notcontains $currentUser.userPrincipalName){
+            Write-Host "Adding you as site collection owner to ensure all permissions can be read from $($site.Url)..."
+            Set-PnPTenantSite -Identity $site.Url -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
+            Write-Host "Owner added and marked for removal upon scan completion"
+        }else{
+            $wasOwner = $True
+            Write-Host "Site collection ownership verified for $($site.Url) :)"
+        }            
+        $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
+        $global:statObj = [PSCustomObject]@{
+            "TeamPermissions version" = $MyInvocation.MyCommand.Module.Version
+            "Scan URL" = $spoWeb.Url
+            "Total objects scanned" = 0
+            "Scan start time" = Get-Date
+            "Scan end time" = ""
+            "Scan performed by" = $currentUser.userPrincipalName
+        }            
+        Write-Host "Scanning root $($spoWeb.Url)..."
+        $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
+        $global:permissions.$($spoWeb.Url) = @()
+
+        foreach($spoSiteAdmin in $spoSiteAdmins){
+            if($spoSiteAdmin.PrincipalType -ne "User" -and $expandGroups){
+                $members = $Null; $members = Get-PnPGroupMembers -group $spoSiteAdmin -parentId $spoSiteAdmin.Id -siteConn (Get-SpOConnection -Type User -Url $site.Url) | Where-Object {$_}
+                foreach($member in $members){
+                    New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $member -object $spoWeb -permission $fullControl -Through "GroupMembership" -parent $spoSiteAdmin.Title)
+                }
+            }else{
+                New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $spoSiteAdmin -object $spoWeb -permission $fullControl -Through "DirectAssignment")
+            }
+        }        
+
+        get-PnPObjectPermissions -Object $spoWeb
+
+        $global:statObj."Scan end time" = Get-Date
+        $global:statistics += $global:statObj     
+        if(!$wasOwner){
+            Write-Host "Cleanup: Removing you as site collection owner of $($site.Url)..."
+            Remove-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
+            Write-Host "Cleanup: Owner removed"
+        }          
+    }
+    
+    Write-Host "All permissions retrieved, writing reports..."
+
+    $permissionRows = foreach($row in $global:permissions.Keys){
         foreach($permission in $global:permissions.$row){
-            $permissionRows += [PSCustomObject]@{
+            [PSCustomObject]@{
                 "ID" = $permission.RowId
                 "Path" = $row
                 "Object"    = $permission.Object
@@ -140,6 +188,7 @@
             "XLSX" { 
                 $targetPath = $basePath.Replace("@@@","xlsx")
                 $permissionRows | Export-Excel -Path $targetPath -WorksheetName "TeamPermissions" -TableName "TeamPermissions" -TableStyle Medium10 -Append -AutoSize
+                $global:statistics | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
                 Write-Host "XLSX report saved to $targetPath"
             }
             "CSV" { 
@@ -152,9 +201,5 @@
         }
     }
 
-    if(!$wasOwner){
-        Write-Host "Cleanup: Removing you as site collection owner..."
-        Remove-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
-        Write-Host "Cleanup: Owner removed"
-    }
+
 }
