@@ -15,8 +15,8 @@ Function New-PermissionEntry{
     }
 
     foreach($folder in $global:permissions.Keys){
-        if($Path.StartsWith($folder)){
-            if($global:permissions.$folder.Identity -contains $Permission.Identity){
+        if($Path.Contains($folder)){
+            if($global:permissions.$folder.Identity -Contains $Permission.Identity){
                 #Identity known, check if existing known permission are different
                 if($Permission.Permission -in $($global:permissions.$folder | Where-Object { $_.Identity -eq $Permission.Identity }).Permission){
                     Write-Verbose "Not adding permission $($Permission.Identity) to $Path as it is already present with the same permission"
@@ -25,7 +25,8 @@ Function New-PermissionEntry{
             }
         }
     }
-    if($global:permissions.Keys -notcontains $Path){
+
+    if(!($global:permissions.Keys -Contains $Path)){
         $global:permissions.$($Path) = @()
     }
 
