@@ -10,7 +10,7 @@ Function get-PnPObjectPermissions{
     )
 
     $ignoreablePermissions = @("Guest","RestrictedGuest","None")
-    $global:statistics."Total objects scanned"++
+    $global:statObj."Total objects scanned"++
 
     $obj = [PSCustomObject]@{
         "Title" = $null

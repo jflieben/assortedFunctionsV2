@@ -49,8 +49,9 @@
     $spoBaseAdmUrl = "https://$($tenantName)-admin.sharepoint.com"
     Write-Host "Using Sharepoint base URL: $spoBaseAdmUrl"
 
+    $ignoredSiteTypes = @("REDIRECTSITE#0","SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0")
     $sites = @(Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
-        $_.Template -NotIn ("SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0") -and
+        $_.Template -NotIn $ignoredSiteTypes -and
         ($Null -ne $teamName -and $_.Title -eq $teamName) -or ($Null -ne $teamSiteUrl -and $_.Url -eq $teamSiteUrl)
     })
 
@@ -86,7 +87,10 @@
             if($targetUrl -and $sites.Url -notcontains $targetUrl){
                 try{
                     Write-Host "Adding $($channel.displayName) with URL $targetUrl to scan list"
-                    $sites += Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $targetUrl
+                    $extraSite = $Null; $extraSite = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $targetUrl
+                    if($extraSite -and $extraSite.Template -NotIn $ignoredSiteTypes){
+                        $sites += $extraSite
+                    }
                 }catch{
                     Write-Error "Failed to add $($channel.displayName) with URL $targetUrl to scan list because Get-PnPTenantSite failed with $_" -ErrorAction Continue
                 }
@@ -94,21 +98,22 @@
         }
     }
 
-  
+    $global:statistics = @()
+    $global:permissions = @{}
 
     foreach($site in $sites){
         $global:uniqueId = 0    
         $wasOwner = $False
         if($site.Owners -notcontains $currentUser.userPrincipalName){
-            Write-Host "Adding you as site collection owner to ensure all permissions can be read..."
+            Write-Host "Adding you as site collection owner to ensure all permissions can be read from $($site.Url)..."
             Set-PnPTenantSite -Identity $site.Url -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
             Write-Host "Owner added and marked for removal upon scan completion"
         }else{
             $wasOwner = $True
-            Write-Host "Site collection ownership verified :)"
+            Write-Host "Site collection ownership verified for $($site.Url) :)"
         }            
         $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
-        $global:statistics = [PSCustomObject]@{
+        $global:statObj = [PSCustomObject]@{
             "TeamPermissions version" = $MyInvocation.MyCommand.Module.Version
             "Scan URL" = $spoWeb.Url
             "Total objects scanned" = 0
@@ -118,9 +123,7 @@
         }            
         Write-Host "Scanning root $($spoWeb.Url)..."
         $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
-        $global:permissions = @{
-            $spoWeb.Url = @()
-        }
+        $global:permissions.$($spoWeb.Url) = @()
 
         foreach($spoSiteAdmin in $spoSiteAdmins){
             if($spoSiteAdmin.PrincipalType -ne "User" -and $expandGroups){
@@ -135,7 +138,13 @@
 
         get-PnPObjectPermissions -Object $spoWeb
 
-        $global:statistics."Scan end time" = Get-Date        
+        $global:statObj."Scan end time" = Get-Date
+        $global:statistics += $global:statObj     
+        if(!$wasOwner){
+            Write-Host "Cleanup: Removing you as site collection owner of $($site.Url)..."
+            Remove-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
+            Write-Host "Cleanup: Owner removed"
+        }          
     }
     
     Write-Host "All permissions retrieved, writing reports..."
@@ -192,9 +201,5 @@
         }
     }
 
-    if(!$wasOwner){
-        Write-Host "Cleanup: Removing you as site collection owner..."
-        Remove-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
-        Write-Host "Cleanup: Owner removed"
-    }
+
 }
