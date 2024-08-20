@@ -87,7 +87,7 @@
             if($targetUrl -and $sites.Url -notcontains $targetUrl){
                 try{
                     Write-Host "Adding $($channel.displayName) with URL $targetUrl to scan list"
-                    $extraSite = $Null; $extraSite = Get-PnPTenantSite -IncludeOneDriveSites -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $targetUrl
+                    $extraSite = $Null; $extraSite = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $targetUrl
                     if($extraSite -and $extraSite.Template -NotIn $ignoredSiteTypes){
                         $sites += $extraSite
                     }
