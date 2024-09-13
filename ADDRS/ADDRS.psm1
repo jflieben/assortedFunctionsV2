@@ -79,7 +79,7 @@ function get-azureVMPricesAndPerformance{
 
     Write-Verbose "$($vmPrices.Count) prices retrieved, retrieving performance scores..."
 
-    $vmScoreRawData = (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/virtual-machines/linux/compute-benchmark-scores.md" -Method GET -UseBasicParsing) -split "`n"
+    $vmScoreRawData = (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/MicrosoftDocs/azure-compute-docs/main/articles/virtual-machines/windows/compute-benchmark-scores.md" -Method GET -UseBasicParsing) -split "`n"
     $vmScoreData = @()
     $inTable = $False
     for($l=0;$l -lt $vmScoreRawData.Count; $l++){
