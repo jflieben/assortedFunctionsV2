@@ -53,10 +53,15 @@
     Write-Host "Using Sharepoint base URL: $spoBaseAdmUrl"
 
     $ignoredSiteTypes = @("REDIRECTSITE#0","SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0")
-    $sites = @(Get-PnPTenantSite -IncludeOneDriveSites -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
-        $_.Template -NotIn $ignoredSiteTypes -and
-        ($Null -ne $teamName -and $_.Title -eq $teamName) -or ($Null -ne $teamSiteUrl -and $_.Url -eq $teamSiteUrl)
-    })
+    if($teamSiteUrl){
+        $sites = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $teamSiteUrl
+    }
+    if(!$sites){
+        $sites = @(Get-PnPTenantSite -IncludeOneDriveSites -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
+            $_.Template -NotIn $ignoredSiteTypes -and
+            ($Null -ne $teamName -and $_.Title -eq $teamName) -or ($Null -ne $teamSiteUrl -and $_.Url -eq $teamSiteUrl)
+        })
+    }
 
     if($sites.Count -gt 1){
         Throw "Failed to find a single Team using $teamName. Found: $($sites.Url -join ","). Please use the Url to specify the correct Team"
@@ -104,8 +109,7 @@
     $global:statistics = @()
     $global:permissions = @{}
 
-    foreach($site in $sites){
-        $global:uniqueId = 0    
+    foreach($site in $sites){ 
         $wasOwner = $False
         if($site.Owners -notcontains $currentUser.userPrincipalName){
             Write-Host "Adding you as site collection owner to ensure all permissions can be read from $($site.Url)..."
