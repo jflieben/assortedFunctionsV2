@@ -21,6 +21,7 @@
     .EXAMPLE
     Get-TeamPermissions -TeamSiteUrl "https://tenant.sharepoint.com/sites/site" -ExpandGroups -OutputFormat Default
     Get-TeamPermissions -teamName "INT-Finance Department" -ExpandGroups -OutputFormat XLSX,HTML
+    Get-AllPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser
 
 #>
 
