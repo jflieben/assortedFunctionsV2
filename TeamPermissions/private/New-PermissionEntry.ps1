@@ -14,6 +14,11 @@ Function New-PermissionEntry{
         return $Null
     }
 
+    if($global:ignoreCurrentUser -and $Permission.Email -eq $global:currentUser.userPrincipalName){
+        Write-Verbose "Skipping permission $($Permission.Email) as it is the auditor account"
+        return $Null
+    }
+
     foreach($folder in $global:permissions.Keys){
         if($Path.Contains($folder)){
             if($global:permissions.$folder.Identity -Contains $Permission.Identity){

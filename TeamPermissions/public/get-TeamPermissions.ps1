@@ -14,6 +14,7 @@
             CSV
             Default (output to Out-GridView)
             Any combination of above is possible
+        -ignoreCurrentUser: do not add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
         [parameter(Mandatory=$true,
@@ -29,15 +30,17 @@
         [Switch]$expandGroups,
         [parameter(Mandatory=$true)]
         [ValidateSet('HTML','XLSX','CSV','Default')]
-        [String[]]$outputFormat
+        [String[]]$outputFormat,
+        [Switch]$ignoreCurrentUser
     )
 
     if(!$global:LCCachedToken){
         get-AuthorizationCode
     }
 
+    $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
     $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
-    $currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
+    $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
     Write-Host "Performing scan using: $($currentUser.userPrincipalName)"
 
     #language specific permission name translation
@@ -202,6 +205,4 @@
             "Default" { $permissionRows | out-gridview }
         }
     }
-
-
 }
