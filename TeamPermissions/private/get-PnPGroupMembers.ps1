@@ -32,7 +32,17 @@ Function Get-PnPGroupMembers{
         }
         continue
     }elseif($groupGuid -and [guid]::TryParse($groupGuid, $([ref][guid]::Empty))){
-        $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
+        try{
+            $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
+        }catch{
+            $graphMembers = @(
+                [PSCustomObject]@{
+                    "displayName" = $group.Title
+                    "userPrincipalName" = $groupGuid
+                    "mail" = "FAILED TO ENUMERATE (DELETED?) GROUP MEMBERS!"
+                }
+            )
+        }
         foreach($graphMember in $graphMembers){
             if(!($global:groupCache.$($group.Title).LoginName | Where-Object {$_ -and $_.EndsWith($graphMember.userPrincipalName)})){
                 Write-Verbose "Found $($graphMember.displayName) in graph group"
@@ -55,7 +65,17 @@ Function Get-PnPGroupMembers{
                 continue
             }
             if($groupGuid -and [guid]::TryParse($groupGuid, $([ref][guid]::Empty))){
-                $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
+                try{
+                    $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
+                }catch{
+                    $graphMembers = @(
+                        [PSCustomObject]@{
+                            "displayName" = $group.Title
+                            "userPrincipalName" = $groupGuid
+                            "mail" = "FAILED TO ENUMERATE (DELETED?) GROUP MEMBERS!"
+                        }
+                    )
+                }
                 foreach($graphMember in $graphMembers){
                     if(!($global:groupCache.$($group.Title).LoginName | Where-Object {$_ -and $_.EndsWith($graphMember.userPrincipalName)})){
                         Write-Verbose "Found $($graphMember.displayName) in graph group"
