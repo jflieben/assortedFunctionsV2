@@ -169,29 +169,24 @@ Function get-PnPObjectPermissions{
                         continue
                     }     
 
-                    #Get unique child items in the list and iterate over them
-                    $csomContext = (Get-SpOConnection -Type User -Url $siteUrl).Context
-                    $csomList = $csomContext.Web.Lists.GetById($List.Id)
-                    $csomContext.Load($csomList)
-                    $csomContext.ExecuteQuery()
-                    $camlQuery = New-Object Microsoft.SharePoint.Client.CamlQuery
-                    $camlQuery.ViewXml = "
-                    <Query><Where>
-                          <Eq>
-                             <FieldRef Name='HasUniqueRoleAssignments'/>
-                             <Value Type='Boolean'>1</Value>
-                          </Eq>
-                    </Where></Query>
-                    "
                     $allUniqueListItems = @()
-                    $camlQuery.ListItemCollectionPosition = $null
-                    do {
-                        $uniqueListItems = $Null; $uniqueListItems = $csomList.GetItems($camlQuery)
-                        $csomContext.Load($uniqueListItems)
-                        $csomContext.ExecuteQuery()
-                        $allUniqueListItems += $uniqueListItems
-                        $camlQuery.ListItemCollectionPosition = $uniqueListItems.ListItemCollectionPosition
-                    } while ($Null -ne $camlQuery.ListItemCollectionPosition)    
+                    if($List.ItemCount -lt 5000){
+                        $allUniqueListItems = @(Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Query "
+                        <Query><Where>
+                              <Eq>
+                                 <FieldRef Name='HasUniqueRoleAssignments'/>
+                                 <Value Type='Boolean'>1</Value>
+                              </Eq>
+                        </Where></Query>
+                        ")
+                    }else{
+                        Write-Verbose "List contains more than 5000 items, querying through web api instead..."
+                        $allListItems = New-GraphQuery -spoapi -Uri "$($Object.Url)/_api/web/lists/getbyid('$($List.Id.Guid)')/items?`$select=ID,HasUniqueRoleAssignments&`$top=5000" -NoRetry -Method GET
+                        $allUniqueListItemIDs = @($allListItems | Where-Object { $_.HasUniqueRoleAssignments -eq $True }) | select -ExpandProperty Id
+                        foreach($allUniqueListItemID in $allUniqueListItemIDs){
+                            $allUniqueListItems += Get-PnPListItem -Fields ID,Title,FileSystemObjectType,URL -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemID
+                        }
+                    }
 
                     $ItemCounter = 0
                     ForEach($ListItem in $uniqueListItems){

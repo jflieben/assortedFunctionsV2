@@ -27,10 +27,19 @@ function New-GraphQuery {
         [Switch]$NoRetry,
 
         [Parameter(Mandatory = $false)]
-        [int]$MaxAttempts = 5
+        [int]$MaxAttempts = 5,
+
+        [Parameter(Mandatory = $false)]
+        [Switch]$sPoAPI 
     )
 
-    $headers = get-AccessToken -resource "https://graph.microsoft.com" -returnHeader
+    if($sPoAPI){
+        $headers = get-AccessToken -resource "https://www.sharepoint.com" -returnHeader
+        $headers['Accept'] = "application/json;odata=verbose"
+    }else{
+        $headers = get-AccessToken -resource "https://graph.microsoft.com" -returnHeader
+    }
+    
 
     if ($ComplexFilter) {
         $headers['ConsistencyLevel'] = 'eventual'
@@ -76,6 +85,9 @@ function New-GraphQuery {
                     try {
                         [System.GC]::Collect()
                         $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -ContentType 'application/json; charset=utf-8' -ErrorAction Stop)
+                        if($sPoAPI){
+                            $Data = ($Data | convertfrom-json -Depth 999 -AsHashtable).d
+                        }
                         $attempts = $MaxAttempts
                     }
                     catch {
@@ -86,8 +98,16 @@ function New-GraphQuery {
                         Start-Sleep -Seconds (1 + (2 * $attempts))
                     }
                 }
-                ($Data.psobject.properties.name -icontains 'value') ? ($Data.value) : ($Data)
-                ($NoPagination) ? $($nextURL = $null) : $($nextURL = $Data.'@odata.nextLink')
+                if($sPoAPI){
+                    ($Data.Keys -icontains 'results') ? ($Data.results) : ($Data)
+                }else{
+                    ($Data.psobject.properties.name -icontains 'value') ? ($Data.value) : ($Data)
+                }
+                if($sPoAPI){
+                    ($NoPagination) ? $($nextURL = $null) : $($nextURL = $Data.__next)
+                }else{
+                    ($NoPagination) ? $($nextURL = $null) : $($nextURL = $Data.'@odata.nextLink')
+                }
             }
             catch {
                 $Message = ($_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction SilentlyContinue).error.message
