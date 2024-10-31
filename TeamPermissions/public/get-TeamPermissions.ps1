@@ -153,10 +153,10 @@
             if($spoSiteAdmin.PrincipalType -ne "User" -and $expandGroups){
                 $members = $Null; $members = Get-PnPGroupMembers -group $spoSiteAdmin -parentId $spoSiteAdmin.Id -siteConn (Get-SpOConnection -Type User -Url $site.Url) | Where-Object {$_}
                 foreach($member in $members){
-                    New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $member -object $spoWeb -permission $fullControl -Through "GroupMembership" -parent $spoSiteAdmin.Title)
+                    New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $member -object $spoWeb -permission "Owner" -Through "GroupMembership" -parent $spoSiteAdmin.Title)
                 }
             }else{
-                New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $spoSiteAdmin -object $spoWeb -permission $fullControl -Through "DirectAssignment")
+                New-PermissionEntry -Path $spoWeb.Url -Permission (get-permissionEntry -entity $spoSiteAdmin -object $spoWeb -permission "Owner" -Through "DirectAssignment")
             }
         }        
 
