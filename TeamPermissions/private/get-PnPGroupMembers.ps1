@@ -30,7 +30,6 @@ Function Get-PnPGroupMembers{
             "PrincipalType" = "SecurityGroup"
             "Email" = "N/A"
         }
-        continue
     }elseif($group.LoginName.Split("|")[0] -eq "c:0-.f"){
         Write-Verbose "Found $($group.Title) special group"
         $global:groupCache.$($group.Title) += [PSCustomObject]@{
@@ -39,7 +38,6 @@ Function Get-PnPGroupMembers{
             "PrincipalType" = "SecurityGroup"
             "Email" = "N/A"
         }
-        continue
     }elseif($group.LoginName.Split("|")[0] -eq "c:0t.c"){
         Write-Verbose "Found $($group.Title) special group (global administrators)"
         $global:groupCache.$($group.Title) += [PSCustomObject]@{
@@ -48,7 +46,6 @@ Function Get-PnPGroupMembers{
             "PrincipalType" = "Role"
             "Email" = "N/A"
         }
-        continue
     }elseif($groupGuid -and [guid]::TryParse($groupGuid, $([ref][guid]::Empty))){
         try{
             $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
@@ -72,7 +69,6 @@ Function Get-PnPGroupMembers{
                 }
             }
         }
-        continue
     }else{
         $members = Get-PnPGroupMember -Group $group.Id -Connection (Get-SpOConnection -Type User -Url $site.Url)
         foreach($member in $members){   
