@@ -49,16 +49,30 @@ Function get-PnPObjectPermissions{
             $rootFolder = Get-PnPProperty -ClientObject $Object -Property RootFolder -Connection (Get-SpOConnection -Type User -Url $siteUrl)
             $obj.Title = $Object.Title
             $obj.Url = "$($siteUrl.Split(".com")[0]).com$($rootFolder.ServerRelativeUrl)"
-            $obj.Type = "List or Library"     
+            $obj.Type = "List or Library"    
         }
     }    
 
     #retrieve all permissions for the supplied object
     Get-PnPProperty -ClientObject $Object -Property HasUniqueRoleAssignments, RoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)    
     if(!$global:performanceDebug -and $Object.HasUniqueRoleAssignments -eq $False){
-        Write-Verbose "Skipping $($Object.Title) as it fully inherits permissions from parent"
+        Write-Verbose "Skipping $($obj.Title) as it fully inherits permissions from parent"
         continue
-    }       
+    }
+
+    #sharepoint libraries / subsites etc do not list root level owner permissions, but we should still add them since those always trickle down
+    if($Object.TypedObject.ToString() -ne "Microsoft.SharePoint.Client.ListItem"){
+        foreach($folder in $($global:permissions.Keys)){
+            if($obj.Url.Contains($folder)){
+                foreach($permission in $global:permissions.$folder){
+                    if($Permission.Object -eq "root"){
+                        Write-Verbose "Added: $($rootPermission.Permission) for $($rootPermission.Name) because of forced inheritance through the site root"
+                        New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity @{Email = $Permission.Email; LoginName = $Permission.Identity;Title = $Permission.Name;PrincipalType=$Permission.Type} -object $obj -permission $Permission.Permission -Through "ForcedInheritance" -parent $folder)
+                    }
+                }
+            }
+        }
+    }
     
     Foreach($roleAssignment in $Object.RoleAssignments){
         Get-PnPProperty -ClientObject $roleAssignment -Property RoleDefinitionBindings, Member -Connection (Get-SpOConnection -Type User -Url $siteUrl)
@@ -116,7 +130,7 @@ Function get-PnPObjectPermissions{
                 #check if permissions are unique
                 Get-PnPProperty -ClientObject $childObject -Property HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
                 if(!$global:performanceDebug -and $childObject.HasUniqueRoleAssignments -eq $False){
-                    Write-Verbose "Skipping $($childObject.Title) as it fully inherits permissions from parent"
+                    Write-Verbose "Skipping $($childObject.Title) child web as it fully inherits permissions from parent"
                     continue
                 }                
                 Write-Verbose "Enumerating permissions for sub web $($childObject.Title)..."
@@ -149,9 +163,9 @@ Function get-PnPObjectPermissions{
                     get-PnPObjectPermissions -Object $List -siteUrl $siteUrl
 
                     #check if permissions are unique
-                    Get-PnPProperty -ClientObject $List -Property HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+                    Get-PnPProperty -ClientObject $List -Property Title, HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
                     if(!$global:performanceDebug -and $List.HasUniqueRoleAssignments -eq $False){
-                        Write-Verbose "Skipping $($List.Title) as it fully inherits permissions from parent"
+                        Write-Verbose "Skipping $($List.Title) List as it fully inherits permissions from parent"
                         continue
                     }     
 
@@ -175,11 +189,7 @@ Function get-PnPObjectPermissions{
                         $uniqueListItems = $Null; $uniqueListItems = $csomList.GetItems($camlQuery)
                         $csomContext.Load($uniqueListItems)
                         $csomContext.ExecuteQuery()
-                    
-                        # Append current batch of items to $allItems array
                         $allUniqueListItems += $uniqueListItems
-                    
-                        # Set the paging position for the next batch
                         $camlQuery.ListItemCollectionPosition = $uniqueListItems.ListItemCollectionPosition
                     } while ($Null -ne $camlQuery.ListItemCollectionPosition)    
 

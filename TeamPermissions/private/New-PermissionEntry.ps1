@@ -19,7 +19,7 @@ Function New-PermissionEntry{
         return $Null
     }
 
-    foreach($folder in $global:permissions.Keys){
+    <#foreach($folder in $global:permissions.Keys){
         if($Path.Contains($folder)){
             if($global:permissions.$folder.Identity -Contains $Permission.Identity){
                 #Identity known, check if existing known permission are different
@@ -29,10 +29,13 @@ Function New-PermissionEntry{
                 }
             }
         }
-    }
+    }#>
 
     if(!($global:permissions.Keys -Contains $Path)){
         $global:permissions.$($Path) = @()
+    }elseif($global:permissions.$($Path) -Contains $Permission){
+        Write-Verbose "Not adding permission $($Permission.Identity) to $Path as it is already present"
+        return $Null
     }
 
     Write-Verbose "Adding permission $($Permission.Permission) for $($Permission.Identity) to $Path"
