@@ -3,7 +3,7 @@
     RootModule           = 'TeamPermissions.psm1'
 
     # Version number of this module.
-    ModuleVersion        = "1.1.1"
+    ModuleVersion        = "1.1.2"
     
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -23,7 +23,15 @@
     # Description of the functionality provided by this module
     Description          = "Reporting on ALL permissions in a Team site, but also works very effectively for Sharepoint sites or Onedrive sites.
 
-    Gives an auditor friendly report of all unique permissions per user. Can be pivoted to show permissions for specific users as well.
+    Gives an auditor friendly report of all unique permissions per user. Can be pivoted to show permissions for specific users, groups, types or locations.
+
+    .EXAMPLE
+    Install-PSResource -Name TeamPermissions -Repository PSGallery
+
+    .EXAMPLE
+    Get-TeamPermissions -TeamSiteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default
+    Get-TeamPermissions -teamName `"INT-Finance Department`" -ExpandGroups -OutputFormat XLSX,HTML
+    Get-AllPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites
     "
 
     # Minimum version of the Windows PowerShell engine required by this module
