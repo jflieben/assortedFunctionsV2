@@ -41,11 +41,15 @@
     $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
     $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
     $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
+    #get org info
+    $openIdInfo = Invoke-RestMethod "https://login.windows.net/$($currentUser.userPrincipalName.Split("@")[1])/.well-known/openid-configuration" -Method GET
+    $global:tenantId = $openIdInfo.userinfo_endpoint.Split("/")[3]
+    $global:org = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/organization/$($global:tenantId)" -NoPagination -Method GET
     Write-Host "Performing scan using: $($currentUser.userPrincipalName)"
 
     #language specific permission name translation
-    switch($currentUser.preferredLanguage){
-        "nl-NL" { $fullControl = "Volledig beheer"}
+    switch($global:org.countryLetterCode){
+        "NL" { $fullControl = "Volledig beheer"}
         Default { $fullControl = "Full Control"}
     }  
 
