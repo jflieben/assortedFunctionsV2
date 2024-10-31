@@ -111,15 +111,28 @@
 
     foreach($site in $sites){ 
         $wasOwner = $False
-        if($site.Owners -notcontains $currentUser.userPrincipalName){
-            Write-Host "Adding you as site collection owner to ensure all permissions can be read from $($site.Url)..."
-            Set-PnPTenantSite -Identity $site.Url -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
-            Write-Host "Owner added and marked for removal upon scan completion"
-        }else{
-            $wasOwner = $True
-            Write-Host "Site collection ownership verified for $($site.Url) :)"
-        }            
-        $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
+        try{
+            if($site.Owners -notcontains $currentUser.userPrincipalName){
+                Write-Host "Adding you as site collection owner to ensure all permissions can be read from $($site.Url)..."
+                Set-PnPTenantSite -Identity $site.Url -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
+                Write-Host "Owner added and marked for removal upon scan completion"
+            }else{
+                $wasOwner = $True
+                Write-Host "Site collection ownership verified for $($site.Url) :)"
+            }            
+            $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
+        }catch{
+            $global:statObj = [PSCustomObject]@{
+                "TeamPermissions version" = $MyInvocation.MyCommand.Module.Version
+                "Scan URL" = $spoWeb.Url
+                "Total objects scanned" = 0
+                "Scan start time" = Get-Date
+                "Scan end time" = "ERROR! $_"
+                "Scan performed by" = $currentUser.userPrincipalName
+            }              
+            Write-Error "Failed to parse site $($site.Url) because $_" -ErrorAction Continue
+            continue
+        }
         $global:statObj = [PSCustomObject]@{
             "TeamPermissions version" = $MyInvocation.MyCommand.Module.Version
             "Scan URL" = $spoWeb.Url
