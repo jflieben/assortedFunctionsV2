@@ -150,17 +150,43 @@ Function get-PnPObjectPermissions{
 
                     #check if permissions are unique
                     Get-PnPProperty -ClientObject $List -Property HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
-                    if(!$global:performanceDebug -and $childObject.HasUniqueRoleAssignments -eq $False){
+                    if(!$global:performanceDebug -and $List.HasUniqueRoleAssignments -eq $False){
                         Write-Verbose "Skipping $($List.Title) as it fully inherits permissions from parent"
                         continue
                     }     
 
-                    #iterate over child items in the list
-                    $listItems = Get-PnPListItem -List $List.Id -PageSize 500 -Fields ID,Title,FileSystemObjectType,URL -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+                    #Get unique child items in the list and iterate over them
+                    $csomContext = (Get-SpOConnection -Type User -Url $siteUrl).Context
+                    $csomList = $csomContext.Web.Lists.GetById($List.Id)
+                    $csomContext.Load($csomList)
+                    $csomContext.ExecuteQuery()
+                    $camlQuery = New-Object Microsoft.SharePoint.Client.CamlQuery
+                    $camlQuery.ViewXml = "
+                    <Query><Where>
+                          <Eq>
+                             <FieldRef Name='HasUniqueRoleAssignments'/>
+                             <Value Type='Boolean'>1</Value>
+                          </Eq>
+                    </Where></Query>
+                    "
+                    $allUniqueListItems = @()
+                    $camlQuery.ListItemCollectionPosition = $null
+                    do {
+                        $uniqueListItems = $Null; $uniqueListItems = $csomList.GetItems($camlQuery)
+                        $csomContext.Load($uniqueListItems)
+                        $csomContext.ExecuteQuery()
+                    
+                        # Append current batch of items to $allItems array
+                        $allUniqueListItems += $uniqueListItems
+                    
+                        # Set the paging position for the next batch
+                        $camlQuery.ListItemCollectionPosition = $uniqueListItems.ListItemCollectionPosition
+                    } while ($Null -ne $camlQuery.ListItemCollectionPosition)    
+
                     $ItemCounter = 0
-                    ForEach($ListItem in $listItems){
+                    ForEach($ListItem in $uniqueListItems){
                         $ItemCounter++
-                        Write-Progress -Id 3 -PercentComplete ($ItemCounter / ($List.ItemCount) * 100) -Activity "Processing Item $ItemCounter of $($List.ItemCount)" -Status "Searching for Unique Permissions in list items of '$($List.Title)'"
+                        Write-Progress -Id 3 -PercentComplete ($ItemCounter / ($uniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($uniqueListItems.ItemCount)" -Status "Searching for Unique Permissions in list items of '$($List.Title)'"
                         get-PnPObjectPermissions -Object $ListItem -siteUrl $siteUrl
                     }
                 }else{
