@@ -110,8 +110,8 @@ function New-GraphQuery {
                 }
             }
             catch {
-                $Message = ($_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction SilentlyContinue).error.message
-                if ($null -eq $Message) { $Message = $($_.Exception.Message) }
+                #$Message = ($_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction SilentlyContinue).error.message
+                #if ($null -eq $Message) { $Message = $($_.Exception.Message) }
                 throw $Message
             }
         } until ($null -eq $nextURL)

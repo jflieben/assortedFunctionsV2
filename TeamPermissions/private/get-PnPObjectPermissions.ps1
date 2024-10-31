@@ -10,7 +10,6 @@ Function get-PnPObjectPermissions{
     )
 
     $ignoreablePermissions = @("Guest","RestrictedGuest","None")
-    $global:statObj."Total objects scanned"++
 
     $obj = [PSCustomObject]@{
         "Title" = $null
@@ -24,6 +23,7 @@ Function get-PnPObjectPermissions{
             $obj.Title = $Object.Title
             $obj.Url = $Object.Url
             $obj.Type = "Site"
+            $global:statObj."Total objects scanned"++
         }
         "Microsoft.SharePoint.Client.ListItem"{ 
             If($Object.FileSystemObjectType -eq "Folder"){
@@ -49,7 +49,8 @@ Function get-PnPObjectPermissions{
             $rootFolder = Get-PnPProperty -ClientObject $Object -Property RootFolder -Connection (Get-SpOConnection -Type User -Url $siteUrl)
             $obj.Title = $Object.Title
             $obj.Url = "$($siteUrl.Split(".com")[0]).com$($rootFolder.ServerRelativeUrl)"
-            $obj.Type = "List or Library"    
+            $obj.Type = "List or Library"  
+            $global:statObj."Total objects scanned"++  
         }
     }    
 
@@ -66,7 +67,7 @@ Function get-PnPObjectPermissions{
             if($obj.Url.Contains($folder)){
                 foreach($permission in $global:permissions.$folder){
                     if($Permission.Object -eq "root"){
-                        Write-Verbose "Added: $($rootPermission.Permission) for $($rootPermission.Name) because of forced inheritance through the site root"
+                        Write-Verbose "Added: $($permission.Permission) for $($permission.Name) because of forced inheritance through the site root"
                         New-PermissionEntry -Path $obj.Url -Permission (get-permissionEntry -entity @{Email = $Permission.Email; LoginName = $Permission.Identity;Title = $Permission.Name;PrincipalType=$Permission.Type} -object $obj -permission $Permission.Permission -Through "ForcedInheritance" -parent $folder)
                     }
                 }
@@ -156,6 +157,7 @@ Function get-PnPObjectPermissions{
 
             $counter = 0
             ForEach($List in $childObjects){
+                $global:statObj."Total objects scanned"+=$List.ItemCount
                 If($List.Hidden -eq $False -and $ExcludedListTitles -notcontains $List.Title -and $List.ItemCount -gt 0 -and $List.TemplateFeatureId -notin $ExcludedListFeatureIDs){
                     $counter++
                     Write-Progress -Id 2 -PercentComplete ($Counter / ($childObjects.Count) * 100) -Activity "Exporting Permissions from List '$($List.Title)' in $($Object.URL)" -Status "Processing $($List.ItemCount) items from List $counter of $($childObjects.Count)"
@@ -170,28 +172,17 @@ Function get-PnPObjectPermissions{
                     }     
 
                     $allUniqueListItems = @()
-                    if($List.ItemCount -lt 5000){
-                        $allUniqueListItems = @(Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Query "
-                        <Query><Where>
-                              <Eq>
-                                 <FieldRef Name='HasUniqueRoleAssignments'/>
-                                 <Value Type='Boolean'>1</Value>
-                              </Eq>
-                        </Where></Query>
-                        ")
-                    }else{
-                        Write-Verbose "List contains more than 5000 items, querying through web api instead..."
-                        $allListItems = New-GraphQuery -spoapi -Uri "$($Object.Url)/_api/web/lists/getbyid('$($List.Id.Guid)')/items?`$select=ID,HasUniqueRoleAssignments&`$top=5000" -NoRetry -Method GET
-                        $allUniqueListItemIDs = @($allListItems | Where-Object { $_.HasUniqueRoleAssignments -eq $True }) | select -ExpandProperty Id
-                        foreach($allUniqueListItemID in $allUniqueListItemIDs){
-                            $allUniqueListItems += Get-PnPListItem -Fields ID,Title,FileSystemObjectType,URL -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemID
-                        }
+                    Write-Verbose "List contains $($List.ItemCount), querying through web api..."
+                    $allListItems = $Null; $allListItems = New-GraphQuery -spoapi -Uri "$($Object.Url)/_api/web/lists/getbyid('$($List.Id.Guid)')/items?`$select=ID,HasUniqueRoleAssignments&`$top=4000" -Method GET
+                    $allUniqueListItemIDs = $Null; $allUniqueListItemIDs = @($allListItems | Where-Object { $_.HasUniqueRoleAssignments -eq $True }) | select -ExpandProperty Id
+                    foreach($allUniqueListItemID in $allUniqueListItemIDs){
+                        $allUniqueListItems += Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemID
                     }
 
                     $ItemCounter = 0
-                    ForEach($ListItem in $uniqueListItems){
+                    ForEach($ListItem in $allUniqueListItems){
                         $ItemCounter++
-                        Write-Progress -Id 3 -PercentComplete ($ItemCounter / ($uniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($uniqueListItems.ItemCount)" -Status "Searching for Unique Permissions in list items of '$($List.Title)'"
+                        Write-Progress -Id 3 -PercentComplete ($ItemCounter / ($allUniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItems.ItemCount)" -Status "Searching for Unique Permissions in list items of '$($List.Title)'"
                         get-PnPObjectPermissions -Object $ListItem -siteUrl $siteUrl
                     }
                 }else{
