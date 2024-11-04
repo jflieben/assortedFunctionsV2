@@ -17,7 +17,7 @@ function get-AccessToken{
 
     if(!$global:LCCachedToken -or !$jwtTokenProperties -or ($jwtTokenProperties -and ([timezone]::CurrentTimeZone.ToLocalTime('1/1/1970').AddSeconds($jwtTokenProperties.exp) -lt (Get-Date).AddMinutes(-10)) -or $jwtTokenProperties.aud -ne $resource)){
         Write-Verbose "Token cache miss, refreshing for $resource..."
-        $response = (Invoke-RestMethod "https://login.microsoftonline.com/common/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=refresh_token&refresh_token=$($global:LCRefreshToken)&client_id=$($global:LCClientId)&scope=openid" -ErrorAction Stop)
+        $response = (Invoke-RestMethod "https://login.microsoftonline.com/common/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=refresh_token&refresh_token=$($global:LCRefreshToken)&client_id=$($global:LCClientId)&scope=openid" -ErrorAction Stop -Verbose:$false)
         if($response.refresh_token -and $response.access_token){
             $global:LCRefreshToken = $response.refresh_token
             $global:LCCachedToken = $response.access_token

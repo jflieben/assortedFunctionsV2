@@ -30,13 +30,21 @@ function New-GraphQuery {
         [int]$MaxAttempts = 5,
 
         [Parameter(Mandatory = $false)]
-        [String]$resource = "https://graph.microsoft.com" 
+        [String]$resource = "https://graph.microsoft.com",
+
+        [Parameter(Mandatory = $false)]
+        [Int]$expectedTotalResults = 0
+
     )
 
     $headers = get-AccessToken -resource $resource -returnHeader
 
+    if($expectedTotalResults -gt 0){
+        Write-Progress -Id 10 -Activity "Querying $resource API" -Status "Retrieving initial batch of $expectedTotalResults expected records" -PercentComplete 0
+    }
+
     if($resource -eq "https://www.sharepoint.com"){
-        $headers['Accept'] = "application/json;odata=verbose"
+        $headers['Accept'] = "application/json;odata=nometadata"
     }    
 
     if ($ComplexFilter) {
@@ -74,6 +82,7 @@ function New-GraphQuery {
         }                               
         return $Data
     }else{
+        $totalResults = 0
         $ReturnedData = do {
             try {
                 $attempts = 0
@@ -81,7 +90,7 @@ function New-GraphQuery {
                     $attempts ++
                     try {
                         [System.GC]::Collect()
-                        $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -ContentType 'application/json; charset=utf-8' -ErrorAction Stop)
+                        $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -ContentType 'application/json; charset=utf-8' -ErrorAction Stop -Verbose:$false)
                         $attempts = $MaxAttempts
                     }
                     catch {
@@ -93,19 +102,36 @@ function New-GraphQuery {
                     }
                 }
                 if($resource -eq "https://www.sharepoint.com"){
-                    $Data = ($Data | convertfrom-json -Depth 999 -AsHashtable).d
-                    ($Data.Keys -icontains 'results') ? ($Data.results) : ($Data)
-                    ($NoPagination) ? $($nextURL = $null) : $($nextURL = $Data.__next)
+                    $Data = $Data | ConvertFrom-Json -AsHashtable
+                }
+
+                if($Data.psobject.properties.name -icontains 'value' -or $Data.Keys -icontains 'value'){
+                    $totalResults+=$Data.value.count
+                    ($Data.value)
                 }else{
-                    ($Data.psobject.properties.name -icontains 'value') ? ($Data.value) : ($Data)
-                    ($NoPagination) ? $($nextURL = $null) : $($nextURL = $Data.'@odata.nextLink')
+                    $totalResults+=$Data.count                
+                    ($Data)
+                }
+                if($expectedTotalResults -gt 0){
+                    Try {$percentComplete = ($totalResults / $expectedTotalResults * 100)}Catch{$percentComplete = 0}
+                    Write-Progress -Id 10 -Activity "Querying $resource API" -Status "Retrieved $totalResults of $expectedTotalResults items" -PercentComplete $percentComplete
+                }                
+                
+                if($NoPagination){
+                    $nextURL = $null
+                }elseif($Data.'@odata.nextLink'){
+                    $nextURL = $Data.'@odata.nextLink'  
+                }elseif($Data.'odata.nextLink'){
+                    $nextURL = $Data.'odata.nextLink'  
+                }else{
+                    $nextURL = $null
                 }
             }
             catch {
-                throw $Message
+                throw $_
             }
         } until ($null -eq $nextURL)
-
+        Write-Progress -Id 10 -Completed -Activity "Querying $resource API"
         if ($ReturnedData -and !$ReturnedData.value -and $ReturnedData.PSObject.Properties["value"]) { return $null }
         [System.GC]::Collect()
         return $ReturnedData

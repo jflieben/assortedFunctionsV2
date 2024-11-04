@@ -80,8 +80,8 @@ Function get-PnPObjectPermissions{
         
         foreach($permissionLevel in $roleAssignment.RoleDefinitionBindings){
             Write-Verbose "Detected: $($roleAssignment.Member.Title) $($permissionLevel.Name) ($($permissionLevel.RoleTypeKind))"
-            if($ignoreablePermissions -contains $permissionLevel.RoleTypeKind){
-                Write-Verbose "Ignoring $($permissionLevel.Name) permission type for $($roleAssignment.Member.Title) because it is only relevant at a deeper level"
+            if($ignoreablePermissions -contains $permissionLevel.RoleTypeKind -or $roleAssignment.Member.IsHiddenInUI){
+                Write-Verbose "Ignoring $($permissionLevel.Name) permission type for $($roleAssignment.Member.Title) because it is only relevant at a deeper level or hidden"
                 continue
             }
             if($roleAssignment.Member.PrincipalType -eq "User"){
@@ -160,7 +160,7 @@ Function get-PnPObjectPermissions{
                 $global:statObj."Total objects scanned"+=$List.ItemCount
                 If($List.Hidden -eq $False -and $ExcludedListTitles -notcontains $List.Title -and $List.ItemCount -gt 0 -and $List.TemplateFeatureId -notin $ExcludedListFeatureIDs){
                     $counter++
-                    Write-Progress -Id 2 -PercentComplete ($Counter / ($childObjects.Count) * 100) -Activity "Exporting Permissions from List '$($List.Title)' in $($Object.URL)" -Status "Processing $($List.ItemCount) items from List $counter of $($childObjects.Count)"
+                    Write-Progress -Id 2 -PercentComplete ($Counter / ($childObjects.Count) * 100) -Activity "Exporting Permissions from List '$($List.Title)'" -Status "Processing $($List.ItemCount) items from List $counter of $($childObjects.Count)"
                     #grab top level info of the list first
                     get-PnPObjectPermissions -Object $List -siteUrl $siteUrl
 
@@ -172,8 +172,8 @@ Function get-PnPObjectPermissions{
                     }     
 
                     $allUniqueListItems = @()
-                    Write-Verbose "List contains $($List.ItemCount), querying through web api..."
-                    $allListItems = $Null; $allListItems = New-GraphQuery -resource "https://www.sharepoint.com" -Uri "$($Object.Url)/_api/web/lists/getbyid('$($List.Id.Guid)')/items?`$select=ID,HasUniqueRoleAssignments&`$top=4000" -Method GET
+                    Write-Verbose "List contains $($List.ItemCount) items"
+                    $allListItems = $Null; $allListItems = New-GraphQuery -resource "https://www.sharepoint.com" -Uri "$($Object.Url)/_api/web/lists/getbyid('$($List.Id.Guid)')/items?`$select=ID,HasUniqueRoleAssignments&`$top=5000&`$format=json" -Method GET -expectedTotalResults $List.ItemCount
                     $allUniqueListItemIDs = $Null; $allUniqueListItemIDs = @($allListItems | Where-Object { $_.HasUniqueRoleAssignments -eq $True }) | select -ExpandProperty Id
                     foreach($allUniqueListItemID in $allUniqueListItemIDs){
                         $allUniqueListItems += Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemID
@@ -182,13 +182,15 @@ Function get-PnPObjectPermissions{
                     $ItemCounter = 0
                     ForEach($ListItem in $allUniqueListItems){
                         $ItemCounter++
-                        Write-Progress -Id 3 -PercentComplete ($ItemCounter / ($allUniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItems.ItemCount)" -Status "Searching for Unique Permissions in list items of '$($List.Title)'"
+                        Write-Progress -Id 3 -PercentComplete ($ItemCounter / ($allUniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItems.ItemCount)" -Status "Searching for Unique Permissions"
                         get-PnPObjectPermissions -Object $ListItem -siteUrl $siteUrl
                     }
+                    Write-Progress -Id 3 -Completed -Activity "Processing Item $ItemCounter of $($allUniqueListItems.ItemCount)"
                 }else{
                     Write-Verbose "Skipping $($List.Title) as it is hidden, empty or excluded"
                 }
             }
+            Write-Progress -Id 2 -Completed -Activity "Exporting Permissions from Lists"
         }  
     }      
 }

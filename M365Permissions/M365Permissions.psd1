@@ -23,14 +23,23 @@
     # Description of the functionality provided by this module
     Description          = "Reporting on permissions in a Microsoft 365 environment. Allows a 360 view of what a given user can access.
 
-    Installation:
+    INSTALLATION:
+
     Install-PSResource -Name M365Permissions -Repository PSGallery
 
-    Examples:
+    EXAMPLES:
+    
     Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default
-    Get-SpOPermissions -teamName `"INT-Finance Department`" -ExpandGroups -OutputFormat XLSX,HTML
+    
+    Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV
+    
     get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites
-    "
+    
+    Get-EntraPermissions -OutputFormat XLSX -expandGroups
+    
+    Get-AllM365Permissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser -includeOneDriveSites
+
+    Please note that this module is provided AS-IS, no guarantees or warranties provided. Use at your own risk."
 
     # Minimum version of the Windows PowerShell engine required by this module
     PowerShellVersion    = '5.1'

@@ -4,7 +4,7 @@
         [Switch]$expandGroups,
         [Switch]$ignoreCurrentUser,
         [parameter(Mandatory=$true)]
-        [ValidateSet('HTML','XLSX','CSV')]
+        [ValidateSet('XLSX','CSV')]
         [String[]]$outputFormat
     )
 
@@ -14,10 +14,8 @@
 
     $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
     $currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
-    Write-Host "You are: $($currentUser.userPrincipalName)"
-
     $spoBaseAdmUrl = "https://$($tenantName)-admin.sharepoint.com"
-    Write-Host "Retrieving site list from: $spoBaseAdmUrl"
+    Write-Host "Scanning all sites as $($currentUser.userPrincipalName)"
 
     $ignoredSiteTypes = @("REDIRECTSITE#0","SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0")
     $sites = @(Get-PnPTenantSite -IncludeOneDriveSites:$includeOnedriveSites.IsPresent -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`

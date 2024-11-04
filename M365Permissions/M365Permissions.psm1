@@ -31,7 +31,6 @@ ForEach ($helperFunction in (($helperFunctions.private + $helperFunctions.public
 }
 
 $global:LCClientId = "0ee7aa45-310d-4b82-9cb5-11cc01ad38e4"
-$global:statistics = @()
 $global:pnpUrlAuthCaches = @{}
 $global:SPOPermissions = @{}
 $global:PnPGroupCache = @{}

@@ -1,15 +1,12 @@
-﻿Function get-SpOPermissions{
+﻿Function get-EntraPermissions{
     <#
         Author               = "Jos Lieben (jos@lieben.nu)"
         CompanyName          = "Lieben Consultancy"
         Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
         
         Parameters:
-        -teamName: the name of the Team to scan
-        -siteUrl: the URL of the Team (or any sharepoint location) to scan (e.g. if name is not unique)
         -expandGroups: if set, group memberships will be expanded to individual users
         -outputFormat: 
-            HTML
             XLSX
             CSV
             Default (output to Out-GridView)
@@ -19,7 +16,7 @@
     Param(
         [Switch]$expandGroups,
         [parameter(Mandatory=$true)]
-        [ValidateSet('HTML','XLSX','CSV','Default')]
+        [ValidateSet('XLSX','CSV','Default')]
         [String[]]$outputFormat
     )
 
@@ -38,7 +35,7 @@
     
     $global:EntraPermissions = @{}
 
-    $global:statObj = [PSCustomObject]@{
+    $statObj = [PSCustomObject]@{
         "Module version" = $MyInvocation.MyCommand.Module.Version
         "Category" = "Entra"
         "Subject" = "Roles"
@@ -55,20 +52,34 @@
     $roleAssignments = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?$expand=principal' -Method GET
 
     foreach($roleAssignment in $roleAssignments){
-        $global:statObj."Total objects scanned"++
+        $statObj."Total objects scanned"++
         $roleDefinition = $roleDefinitions | Where-Object { $_.id -eq $roleAssignment.roleDefinitionId }
         New-EntraPermissionEntry -path $roleAssignment.directoryScopeId -type "PermanentRole" -principalId $roleAssignment.principal.id -roleDefinitionId $roleAssignment.roleDefinitionId -principalName $roleAssignment.principal.displayName -principalUpn $roleAssignment.principal.userPrincipalName -principalType $roleAssignment.principal."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName
     }
 
-    #get eligible assignments
-    #/roleManagement/directory/roleEligibilityScheduleRequests
-
-    $global:statObj."Scan end time" = Get-Date
-    $global:statistics += $global:statObj  
+    #get eligible role assignments
+    $roleEligibilities = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleRequests' -NoPagination -Method GET
+    foreach($roleEligibility in $roleEligibilities){
+        $statObj."Total objects scanned"++
+        $roleDefinition = $roleDefinitions | Where-Object { $_.id -eq $roleEligibility.roleDefinitionId }
+        $principal = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/directoryObjects/$($roleEligibility.principalId)" -Method GET
+        New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $principal.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $principal.displayName -principalUpn $principal.userPrincipalName -principalType $principal."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName
+    }
+    
+    $statObj."Scan end time" = Get-Date
     Write-Host "All permissions retrieved, writing reports..."
-
     $permissionRows = foreach($row in $global:EntraPermissions.Keys){
-        $global:EntraPermissions.$row
+        foreach($permission in $global:EntraPermissions.$row){
+            [PSCustomObject]@{
+                "Path" = $row
+                "Type" = $permission.Type
+                "principalId"    = $permission.principalId
+                "principalName" = $permission.principalName
+                "principalUpn" = $permission.principalUpn
+                "roleDefinitionId" = $permission.roleDefinitionId
+                "roleDefinitionName" = $permission.roleDefinitionName         
+            }
+        }
     }
 
     if((get-location).Path){
@@ -82,12 +93,12 @@
             "XLSX" { 
                 $targetPath = $basePath.Replace("@@@","xlsx")
                 $permissionRows | Export-Excel -Path $targetPath -WorksheetName "EntraPermissions" -TableName "EntraPermissions" -TableStyle Medium10 -Append -AutoSize
-                $global:statistics | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
+                $statObj | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
                 Write-Host "XLSX report saved to $targetPath"
             }
             "CSV" { 
-                $targetPath = $basePath.Replace("@@@","csv")
-                $permissionRows | Export-Csv -Path "M365Permissions-Entra.csv" -NoTypeInformation  -Append
+                $targetPath = $basePath.Replace(".@@@","-Entra.csv")
+                $permissionRows | Export-Csv -Path $targetPath -NoTypeInformation  -Append
                 Write-Host "CSV report saved to $targetPath"
             }
 

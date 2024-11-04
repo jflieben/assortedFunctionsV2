@@ -15,6 +15,10 @@ Function New-EntraPermissionEntry{
         [Parameter(Mandatory=$false)]$roleDefinitionName
     )
 
+    if($currentUser.userPrincipalName -eq $principalUpn){
+        Write-Verbose "Skipping permission $($roleDefinitionName) scoped at $path for $($principalUpn) as it is the auditor account"
+        return $Null
+    }
     Write-Verbose "Adding permission $($roleDefinitionName) scoped at $path for $($principalUpn)"
     if(!$global:EntraPermissions.$path){
         $global:EntraPermissions.$path = @()
