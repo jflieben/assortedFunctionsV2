@@ -19,7 +19,7 @@ Function get-PnPObjectPermissions{
 
     Switch($Object.TypedObject.ToString()){
         "Microsoft.SharePoint.Client.Web"  { 
-            $siteUrl = "https://$($Object.Url.Split("/")[2..4] -join "/")"
+            $siteUrl = $Object.Url#"https://$($Object.Url.Split("/")[2..4] -join "/")"
             $obj.Title = $Object.Title
             $obj.Url = $Object.Url
             $obj.Type = "Site"
@@ -125,7 +125,7 @@ Function get-PnPObjectPermissions{
     #retrieve permissions for any (if present) child objects
     Switch($Object.TypedObject.ToString()){
         "Microsoft.SharePoint.Client.Web"  {     
-            Get-PnPProperty -ClientObject $Object -Property Webs -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+            $Null = Get-PnPProperty -ClientObject $Object -Property Webs -Connection (Get-SpOConnection -Type User -Url $siteUrl)
             $childObjects = $Null; $childObjects = $Object.Webs
             foreach($childObject in $childObjects){
                 #check if permissions are unique
