@@ -58,12 +58,18 @@
     }
 
     #get eligible role assignments
-    $roleEligibilities = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleRequests' -NoPagination -Method GET
+    $roleEligibilities = (New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleRequests' -Method GET | Where-Object {$_ -and $_.status -eq "Provisioned"})
     foreach($roleEligibility in $roleEligibilities){
         $statObj."Total objects scanned"++
         $roleDefinition = $roleDefinitions | Where-Object { $_.id -eq $roleEligibility.roleDefinitionId }
-        $principal = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/directoryObjects/$($roleEligibility.principalId)" -Method GET
-        New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $principal.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $principal.displayName -principalUpn $principal.userPrincipalName -principalType $principal."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName
+        try{
+            $principal = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/directoryObjects/$($roleEligibility.principalId)" -Method GET
+        }catch{
+            Write-Warning "Failed to resolve principal $($roleEligibility.principalId) to a directory object, was it deleted?"    
+            $principal = $Null
+        }
+
+        New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $principal.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $principal.displayName -principalUpn $principal.userPrincipalName -principalType $principal."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.scheduleInfo.startDateTime -endDateTime $roleEligibility.scheduleInfo.expiration.endDateTime
     }
     
     $statObj."Scan end time" = Get-Date

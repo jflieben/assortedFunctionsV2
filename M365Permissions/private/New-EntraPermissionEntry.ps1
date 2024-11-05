@@ -9,10 +9,12 @@ Function New-EntraPermissionEntry{
         [Parameter(Mandatory=$true)]$type,
         [Parameter(Mandatory=$true)]$principalId,
         [Parameter(Mandatory=$true)]$roleDefinitionId,
-        [Parameter(Mandatory=$false)]$principalUpn,
-        [Parameter(Mandatory=$true)]$principalName,
-        [Parameter(Mandatory=$true)]$principalType,
-        [Parameter(Mandatory=$false)]$roleDefinitionName
+        [Parameter(Mandatory=$false)]$principalUpn="Unknown",
+        [Parameter(Mandatory=$false)]$principalName="Unknown",
+        [Parameter(Mandatory=$false)]$principalType="Unknown",
+        [Parameter(Mandatory=$false)]$roleDefinitionName="Legacy Role",
+        [Parameter(Mandatory=$false)]$startDateTime,
+        [Parameter(Mandatory=$false)]$endDateTime
     )
 
     if($currentUser.userPrincipalName -eq $principalUpn){
@@ -24,10 +26,6 @@ Function New-EntraPermissionEntry{
         $global:EntraPermissions.$path = @()
     }
 
-    if($roleDefinitionName -eq $null){
-        $roleDefinitionName = "Legacy Role"
-    }
-
     $global:EntraPermissions.$path += [PSCustomObject]@{
         scope = $path
         type = $type
@@ -37,5 +35,7 @@ Function New-EntraPermissionEntry{
         principalName = $principalName
         principalType = $principalType
         roleDefinitionName = $roleDefinitionName
+        startDateTime = $startDateTime
+        endDateTime = $endDateTime
     }
 }
