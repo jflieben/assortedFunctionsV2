@@ -5,5 +5,5 @@
 #>    
 function invoke-PublishModule {
     $apiKey = ""
-    Publish-Module -Path "C:\git\assortedFunctionsV2\TeamPermissions" -NuGetApiKey $apiKey -Verbose
+    Publish-Module -Path "C:\git\assortedFunctionsV2\M365Permissions" -NuGetApiKey $apiKey -Verbose
 }

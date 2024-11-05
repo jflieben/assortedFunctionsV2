@@ -3,7 +3,7 @@
     RootModule           = 'M365Permissions.psm1'
 
     # Version number of this module.
-    ModuleVersion        = "1.0.0"
+    ModuleVersion        = "1.0.1"
     
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -20,8 +20,11 @@
     # Copyright statement for this module
     Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
 
+    # Code and readme locations
+    HelpInfoURI          = "https://github.com/jflieben/assortedFunctionsV2/tree/main/M365Permissions"
+
     # Description of the functionality provided by this module
-    Description          = "Reporting on permissions in a Microsoft 365 environment. Allows a 360 view of what a given user can access.
+    Description          = "Report on permissions in a Microsoft 365 tenant. Provides a 360° view of what a given identity can see and do.
 
     INSTALLATION:
 

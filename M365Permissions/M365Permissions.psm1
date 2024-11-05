@@ -6,7 +6,7 @@
     .NOTES
     AUTHOR              : Jos Lieben (jos@lieben.nu)
     Copyright/License   : https://www.lieben.nu/liebensraum/commercial-use/ (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
-    CREATED             : 06/11/2024
+    CREATED             : 04/11/2024
     UPDATED             : See GitHub
 
     .LINK
