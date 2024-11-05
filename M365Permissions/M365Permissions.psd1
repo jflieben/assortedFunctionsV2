@@ -21,7 +21,7 @@
     Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
 
     # Description of the functionality provided by this module
-    Description          = "Reporting on permissions in a Microsoft 365 environment. Allows a 360 view of what a given user can access.
+    Description          = "Report on permissions in a Microsoft 365 tenant. Provides a 360° view of what a given identity can see and do.
 
     INSTALLATION:
 
