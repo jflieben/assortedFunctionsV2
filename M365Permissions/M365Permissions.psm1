@@ -10,7 +10,7 @@
     UPDATED             : See GitHub
 
     .LINK
-    https://github.com/jflieben/assortedFunctionsV2/M365Permissions
+    https://www.lieben.nu/liebensraum/m365permissions
 #>
 
 $helperFunctions = @{
