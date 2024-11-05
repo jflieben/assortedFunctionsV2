@@ -23,11 +23,16 @@ Function New-EntraPermissionEntry{
         Write-Verbose "Skipping permission $($roleDefinitionName) scoped at $path for $($principalUpn) as it is the auditor account"
         return $Null
     }
+
+    if(!$roleDefinitionName){
+        $roleDefinitionName = "Legacy Role"
+    }
+
     Write-Verbose "Adding permission $($roleDefinitionName) scoped at $path for $($principalUpn)"
     if(!$global:EntraPermissions.$path){
         $global:EntraPermissions.$path = @()
     }
-
+    $global:statObj."Total objects scanned"++
     $global:EntraPermissions.$path += [PSCustomObject]@{
         scope = $path
         type = $type
