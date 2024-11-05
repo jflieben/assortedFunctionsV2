@@ -21,7 +21,7 @@
     Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
 
     # Code and readme locations
-    ProjectURI          = "https://github.com/jflieben/assortedFunctionsV2/tree/main/M365Permissions"
+    HelpInfoURI          = "https://github.com/jflieben/assortedFunctionsV2/tree/main/M365Permissions"
 
     # Description of the functionality provided by this module
     Description          = "Report on permissions in a Microsoft 365 tenant. Provides a 360° view of what a given identity can see and do.
