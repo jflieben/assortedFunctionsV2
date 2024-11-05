@@ -15,7 +15,11 @@ function get-SpOInvitee{
     #type 2 = group -> enumerate in later version
     #type 3 = external user
     if($invitee.Type -in @(1,2)){
-        $usr = $Null;$usr = Get-PnPUser -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Identity $invitee.PId
+        try{
+            $usr = $Null;$usr = Get-PnPUser -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Identity $invitee.PId
+        }catch{
+            $usr = $Null
+        }
         if($usr){
             return $usr
         }else{
