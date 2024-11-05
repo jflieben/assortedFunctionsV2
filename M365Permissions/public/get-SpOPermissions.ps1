@@ -79,7 +79,7 @@
     if($groupId){
         try{
             Write-Host "Retrieving channels for this site/team..."
-            $channels = New-GraphQuery -Uri "https://graph.microsoft.com/beta/teams/$groupId/channels" -Method GET
+            $channels = New-GraphQuery -Uri "https://graph.microsoft.com/beta/teams/$groupId/channels" -Method GET -NoRetry
             Write-Host "Found $($channels.Count) channels"
         }catch{
             Write-Warning "Failed to retrieve channels for this site/team, assuming no additional sub sites to scan"
