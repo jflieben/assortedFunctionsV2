@@ -24,13 +24,18 @@
     HelpInfoURI          = "https://github.com/jflieben/assortedFunctionsV2/tree/main/M365Permissions"
 
     # Description of the functionality provided by this module
-    Description          = "Report on permissions in a Microsoft 365 tenant. Provides a 360° view of what a given identity can see and do.
+    Description          = "
+    SUMMARY:
+
+    Report on permissions in a Microsoft 365 tenant. Provides a 360° view of what a given identity can see and do.
 
     INSTALLATION:
 
     Install-PSResource -Name M365Permissions -Repository PSGallery
 
     EXAMPLES:
+
+    Get-AllM365Permissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser -includeOneDriveSites
     
     Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default
     
@@ -39,8 +44,6 @@
     get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites
     
     Get-EntraPermissions -OutputFormat XLSX -expandGroups
-    
-    Get-AllM365Permissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser -includeOneDriveSites
 
     Please note that this module is provided AS-IS, no guarantees or warranties provided. Use at your own risk."
 
