@@ -126,7 +126,7 @@
     foreach($format in $outputFormat){
         switch($format){
             "XLSX" { 
-                $targetPath = $basePath.Replace(".@@@","1.xlsx")
+                $targetPath = $basePath.Replace("@@@","xlsx")
                 $permissionRows | Export-Excel -Path $targetPath -WorksheetName "EntraPermissions" -TableName "EntraPermissions" -TableStyle Medium10 -Append -AutoSize
                 $global:statObj | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
                 Write-Host "XLSX report saved to $targetPath"
