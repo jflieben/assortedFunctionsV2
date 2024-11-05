@@ -12,6 +12,8 @@ Function New-EntraPermissionEntry{
         [Parameter(Mandatory=$false)]$principalUpn="Unknown",
         [Parameter(Mandatory=$false)]$principalName="Unknown",
         [Parameter(Mandatory=$false)]$principalType="Unknown",
+        [Parameter(Mandatory=$false)]$through="Direct",
+        [Parameter(Mandatory=$false)]$parent = "N/A",
         [Parameter(Mandatory=$false)]$roleDefinitionName="Legacy Role",
         [Parameter(Mandatory=$false)]$startDateTime,
         [Parameter(Mandatory=$false)]$endDateTime
@@ -29,13 +31,15 @@ Function New-EntraPermissionEntry{
     $global:EntraPermissions.$path += [PSCustomObject]@{
         scope = $path
         type = $type
-        principalId = $principalId
-        roleDefinitionId = $roleDefinitionId
         principalUpn = $principalUpn
-        principalName = $principalName
-        principalType = $principalType
         roleDefinitionName = $roleDefinitionName
         startDateTime = $startDateTime
         endDateTime = $endDateTime
+        principalName = $principalName
+        principalType = $principalType        
+        principalId = $principalId
+        roleDefinitionId = $roleDefinitionId
+        through = $through
+        parent = $parent        
     }
 }

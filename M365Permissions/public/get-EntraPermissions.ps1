@@ -31,8 +31,7 @@
         $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
     }
     Write-Host "Performing Entra scan using: $($currentUser.userPrincipalName)"
-
-    
+    Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Entra ID" -Status "Retrieving role definitions"
     $global:EntraPermissions = @{}
 
     $statObj = [PSCustomObject]@{
@@ -48,30 +47,57 @@
     #get role definitions
     $roleDefinitions = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/directoryRoleTemplates' -Method GET
 
+    Write-Progress -Id 1 -PercentComplete 5 -Activity "Scanning Entra ID" -Status "Retrieving fixed assigments"
+
     #get fixed assignments
     $roleAssignments = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?$expand=principal' -Method GET
+
+    Write-Progress -Id 1 -PercentComplete 15 -Activity "Scanning Entra ID" -Status "Processing fixed assigments"
 
     foreach($roleAssignment in $roleAssignments){
         $statObj."Total objects scanned"++
         $roleDefinition = $roleDefinitions | Where-Object { $_.id -eq $roleAssignment.roleDefinitionId }
-        New-EntraPermissionEntry -path $roleAssignment.directoryScopeId -type "PermanentRole" -principalId $roleAssignment.principal.id -roleDefinitionId $roleAssignment.roleDefinitionId -principalName $roleAssignment.principal.displayName -principalUpn $roleAssignment.principal.userPrincipalName -principalType $roleAssignment.principal."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName
+        $principalType = $roleAssignment.principal."@odata.type".Split(".")[2]
+        if($principalType -eq "group" -and $expandGroups){
+            $groupMembers = get-entraGroupMembers -groupId $principal.id        
+            foreach($groupMember in $groupMembers){
+                New-EntraPermissionEntry -path $roleAssignment.directoryScopeId -type "PermanentRole" -principalId $groupMember.id -roleDefinitionId $roleAssignment.roleDefinitionId -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupMember."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName -through "SecurityGroup" -parent $roleAssignment.principal.id
+            }
+        }else{
+            New-EntraPermissionEntry -path $roleAssignment.directoryScopeId -type "PermanentRole" -principalId $roleAssignment.principal.id -roleDefinitionId $roleAssignment.roleDefinitionId -principalName $roleAssignment.principal.displayName -principalUpn $roleAssignment.principal.userPrincipalName -principalType $principalType -roleDefinitionName $roleDefinition.displayName
+        }
     }
+
+    Write-Progress -Id 1 -PercentComplete 35 -Activity "Scanning Entra ID" -Status "Retrieving flexible assigments"
 
     #get eligible role assignments
     $roleEligibilities = (New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleRequests' -Method GET | Where-Object {$_ -and $_.status -eq "Provisioned"})
+
+    Write-Progress -Id 1 -PercentComplete 60 -Activity "Scanning Entra ID" -Status "Processing flexible assigments"
+
     foreach($roleEligibility in $roleEligibilities){
         $statObj."Total objects scanned"++
         $roleDefinition = $roleDefinitions | Where-Object { $_.id -eq $roleEligibility.roleDefinitionId }
+        $principalType = "Unknown"
         try{
             $principal = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/directoryObjects/$($roleEligibility.principalId)" -Method GET
+            $principalType = $principal."@odata.type".Split(".")[2]
         }catch{
             Write-Warning "Failed to resolve principal $($roleEligibility.principalId) to a directory object, was it deleted?"    
             $principal = $Null
         }
-
-        New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $principal.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $principal.displayName -principalUpn $principal.userPrincipalName -principalType $principal."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.scheduleInfo.startDateTime -endDateTime $roleEligibility.scheduleInfo.expiration.endDateTime
+        if($principalType -eq "group" -and $expandGroups){
+            $groupMembers = get-entraGroupMembers -groupId $principal.id
+            foreach($groupMember in $groupMembers){
+                New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $groupMember.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupMember."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.scheduleInfo.startDateTime -endDateTime $roleEligibility.scheduleInfo.expiration.endDateTime -parent $principal.id -through "SecurityGroup"
+            }
+        }else{
+            New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $principal.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $principal.displayName -principalUpn $principal.userPrincipalName -principalType $principalType -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.scheduleInfo.startDateTime -endDateTime $roleEligibility.scheduleInfo.expiration.endDateTime
+        }
     }
     
+    Write-Progress -Id 1 -PercentComplete 90 -Activity "Scanning Entra ID" -Status "Writing report..."
+
     $statObj."Scan end time" = Get-Date
     Write-Host "All permissions retrieved, writing reports..."
     $permissionRows = foreach($row in $global:EntraPermissions.Keys){
@@ -79,11 +105,16 @@
             [PSCustomObject]@{
                 "Path" = $row
                 "Type" = $permission.Type
-                "principalId"    = $permission.principalId
                 "principalName" = $permission.principalName
+                "roleDefinitionName" = $permission.roleDefinitionName               
                 "principalUpn" = $permission.principalUpn
+                "principalType" = $permission.principalType
+                "through" = $permission.through
+                "parent" = $permission.parent
+                "startDateTime" = $permission.startDateTime
+                "endDateTime" = $permission.endDateTime
+                "principalId"    = $permission.principalId                
                 "roleDefinitionId" = $permission.roleDefinitionId
-                "roleDefinitionName" = $permission.roleDefinitionName         
             }
         }
     }
@@ -107,8 +138,8 @@
                 $permissionRows | Export-Csv -Path $targetPath -NoTypeInformation  -Append
                 Write-Host "CSV report saved to $targetPath"
             }
-
             "Default" { $permissionRows | out-gridview }
         }
     }
+    Write-Progress -Id 1 -Completed -Activity "Scanning Entra ID"
 }
