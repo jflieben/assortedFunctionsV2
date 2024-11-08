@@ -9,6 +9,7 @@ function New-ExOQuery {
     Param(
         [parameter(Mandatory = $True)]$cmdlet,
         $cmdParams,
+        [Switch]$NoPagination,
         $retryCount = 1
     )
     $token = Get-AccessToken -Resource "https://outlook.office365.com"
@@ -34,32 +35,49 @@ function New-ExOQuery {
         'X-AnchorMailbox' = "UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@$($global:OnMicrosoft)"
     }
 
-    $attempts = 0
-    try {
-        while ($attempts -lt $retryCount) {
-            try {
-                $ReturnedData = Invoke-RestMethod "https://outlook.office365.com/adminapi/beta/$($OnMicrosoft)/InvokeCommand" -Method POST -Body $ExoBody -Headers $Headers -ContentType 'application/json; charset=utf-8'
-                $attempts = $retryCount
-            }
-            catch {
-                $attempts++
-                if ($attempts -eq $retryCount) {
-                    Throw $_
+    $nextURL = "https://outlook.office365.com/adminapi/beta/$($global:OnMicrosoft)/InvokeCommand"
+
+    $ReturnedData = do {
+        try {
+            $attempts = 0
+            while ($attempts -lt $retryCount) {
+                try {
+                    $Data = Invoke-RestMethod -Uri $nextURL -Method POST -Body $ExoBody -Headers $Headers -ContentType 'application/json; charset=utf-8'              
+                    $attempts = $retryCount
+                }catch {
+                    $attempts++
+                    if ($attempts -eq $retryCount) {
+                        $nextUrl = $null
+                        Throw $_
+                    }
+                    $sleepTime = $attempts * 2
+                    Write-Verbose "EXO request failed, sleeping for $sleepTime seconds..."
+                    Start-Sleep -Seconds $sleepTime
                 }
-                $sleepTime = $attempts * 2
-                Write-Verbose "EXO request failed, sleeping for $sleepTime seconds..."
-                Start-Sleep -Seconds $sleepTime
             }
+            if($NoPagination){
+                $nextURL = $null
+            }elseif($Data.'@odata.nextLink'){
+                $nextURL = $Data.'@odata.nextLink'  
+            }elseif($Data.'odata.nextLink'){
+                $nextURL = $Data.'odata.nextLink'  
+            }else{
+                $nextURL = $null 
+            } 
+            if($Data.psobject.properties.name -icontains 'value' -or $Data.Keys -icontains 'value'){
+                ($Data.value)
+            }else{         
+                ($Data)
+            }         
+        }catch {
+            $ReportedError = ($_.ErrorDetails | ConvertFrom-Json -ErrorAction SilentlyContinue)
+            $Message = if ($ReportedError.error.details.message) { $ReportedError.error.details.message } else { $ReportedError.error.innererror.internalException.message }
+            if ($null -eq $Message) { $Message = $($_.Exception.Message) }
+            throw $Message
         }
-    }
-    catch {
-        $ReportedError = ($_.ErrorDetails | ConvertFrom-Json -ErrorAction SilentlyContinue)
-        $Message = if ($ReportedError.error.details.message) { $ReportedError.error.details.message } else { $ReportedError.error.innererror.internalException.message }
-        if ($null -eq $Message) { $Message = $($_.Exception.Message) }
-        throw $Message
-    }
+    }until($null -eq $nextURL)
 
     [System.GC]::GetTotalMemory($true) | out-null
     [System.GC]::Collect()
-    return $ReturnedData.value
+    return $ReturnedData
 }
