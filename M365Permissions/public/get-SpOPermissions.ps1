@@ -104,7 +104,7 @@
 
     foreach($site in $sites){ 
         $global:statObj = [PSCustomObject]@{
-            "Module version" = $MyInvocation.MyCommand.Module.Version
+            "Module version" = $global:moduleVersion
             "Category" = "SharePoint"
             "Subject" = $site.Url
             "Total objects scanned" = 0

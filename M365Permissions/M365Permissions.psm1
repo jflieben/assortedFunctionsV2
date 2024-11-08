@@ -38,6 +38,28 @@ $global:EntraPermissions = @{}
 $global:LCRefreshToken = $Null
 $global:LCCachedTokens = @{}
 $global:performanceDebug = $False
+$global:moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
 
 if ($helperFunctions.public) { Export-ModuleMember -Alias * -Function @($helperFunctions.public.BaseName) }
 if ($env:username -like "*joslieben*"){Export-ModuleMember -Alias * -Function @($helperFunctions.private.BaseName) }
+
+cls
+write-host "----------------------------------"
+Write-Host "Welcome to M365Permissions v$($global:moduleVersion)!" -ForegroundColor DarkCyan
+Write-Host "Visit https://www.lieben.nu/liebensraum/m365permissions/ for documentation" -ForegroundColor DarkCyan
+write-host "----------------------------------"
+Write-Host ""
+Write-Host "Prompting for delegated (safe/non persistent) AAD auth..."
+Write-Host ""
+$global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
+Write-Host "Thank you $($currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
+Write-Host ""
+Write-Host ">> Get-AllM365Permissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser -includeOneDriveSites" -ForegroundColor Magenta
+    
+Write-Host ">> Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default" -ForegroundColor Magenta
+
+Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV" -ForegroundColor Magenta
+
+Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites" -ForegroundColor Magenta
+
+Write-Host ">> Get-EntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta

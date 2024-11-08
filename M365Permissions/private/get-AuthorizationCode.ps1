@@ -7,9 +7,21 @@ function get-AuthorizationCode{
 
     $tcpListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 1985)
     $tcpListener.Start()
-    Write-Host "Waiting for login using your default browser..."
 
-    $targetUrl = "https://login.microsoftonline.com/common/oauth2/authorize?client_id=$($global:LCClientId)&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1985&response_mode=query&resource=https://graph.microsoft.com&prompt=admin_consent"
+    $adminPrompt = "&prompt=admin_consent"
+
+    $cachedModuleVersion = Join-Path -Path $env:APPDATA -ChildPath "M365Permissions.version"
+    if(!(Test-Path $cachedModuleVersion)){
+        Set-Content -Path $cachedModuleVersion -Value $global:moduleVersion -Force
+    }else{
+        if(([System.Version]::Parse((Get-Content -Path $cachedModuleVersion -Raw)) -lt [System.Version]::Parse($global:moduleVersion))){
+            Set-Content -Path $cachedModuleVersion -Value $global:moduleVersion -Force
+        }else{
+            $adminPrompt = $Null
+        }
+    }
+
+    $targetUrl = "https://login.microsoftonline.com/common/oauth2/authorize?client_id=$($global:LCClientId)&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1985&response_mode=query&resource=https://graph.microsoft.com$($adminPrompt)"
 
     try{
         Start-Process $targetUrl
