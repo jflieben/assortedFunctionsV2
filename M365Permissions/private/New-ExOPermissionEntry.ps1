@@ -8,16 +8,16 @@ Function New-ExOPermissionEntry{
     Param(
         [Parameter(Mandatory=$true)]$path,
         [Parameter(Mandatory=$true)]$type,
-        [Parameter(Mandatory=$false)]$principalEntraId="Unknown",
-        [Parameter(Mandatory=$false)]$principalUpn="Unknown",
-        [Parameter(Mandatory=$false)]$principalName="Unknown",
-        [Parameter(Mandatory=$false)]$principalType="Unknown",
+        [Parameter(Mandatory=$false)]$principalEntraId="",
+        [Parameter(Mandatory=$false)]$principalUpn="",
+        [Parameter(Mandatory=$false)]$principalName="",
+        [Parameter(Mandatory=$false)]$principalType="",
         [Parameter(Mandatory=$true)]$role,
         [Parameter(Mandatory=$true)]$through,
         [Parameter(Mandatory=$true)]$kind
     )
 
-    if($currentUser.userPrincipalName -eq $principalUpn){
+    if($global:currentUser.userPrincipalName -eq $principalUpn -and $global:ignoreCurrentUser){
         Write-Verbose "Skipping permission $($roleDefinitionName) scoped at $path for $($principalUpn) as it is the auditor account"
         return $Null
     }

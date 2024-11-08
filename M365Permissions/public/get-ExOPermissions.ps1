@@ -15,20 +15,20 @@
     #>        
     Param(
         [Switch]$expandGroups,
+        [Switch]$ignoreCurrentUser,
         [parameter(Mandatory=$true)]
         [ValidateSet('XLSX','CSV','Default')]
         [String[]]$outputFormat
     )
 
-    if(!$global:currentUser){
-        $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
-    }
+    $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
+
     Write-Host "Performing ExO scan using: $($currentUser.userPrincipalName)"
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Exchange Online" -Status "Retrieving all role assignments"
     $global:ExOPermissions = @{}
 
     $global:statObj = [PSCustomObject]@{
-        "Module version" = $MyInvocation.MyCommand.Module.Version
+        "Module version" = $global:moduleVersion
         "Category" = "ExO"
         "Subject" = "Roles"
         "Total objects scanned" = 0
@@ -42,10 +42,13 @@
     }
     $assignedManagementRoles = $Null;$assignedManagementRoles = (New-ExOQuery -cmdlet "Get-ManagementRoleAssignment" -cmdParams $params)
 
-    Write-Progress -Id 1 -PercentComplete 25 -Activity "Scanning Exchange Online" -Status "Parsing role assignments"
+    Write-Progress -Id 1 -PercentComplete 5 -Activity "Scanning Exchange Online" -Status "Parsing role assignments"
 
     $identityCache = @{}
+    $count = 0
     foreach($assignedManagementRole in $assignedManagementRoles){
+        $count++
+        Write-Progress -Id 2 -PercentComplete ($count/$assignedManagementRoles.Count*100) -Activity "Scanning Roles" -Status "Examining role $($count) of $($assignedManagementRoles.Count)"
         $global:statObj."Total objects scanned"++
         try{
             $mailbox = $Null; $mailbox = $identityCache.$($assignedManagementRole.EffectiveUserName)
@@ -53,13 +56,29 @@
                 $mailbox = (New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{Identity = $assignedManagementRole.EffectiveUserName})
                 if(!$mailbox){
                     $identityCache.$($assignedManagementRole.EffectiveUserName) = $False
+                }else{
+                    $identityCache.$($assignedManagementRole.EffectiveUserName) = $mailbox
                 }
             }
         }catch{
             $identityCache.$($assignedManagementRole.EffectiveUserName) = $False
         }
         if($false -eq $identityCache.$($assignedManagementRole.EffectiveUserName)){
-            #non existent role assignment (eg a group that is expanded in a later return value)? Check for apps later
+            #mailbox not found, but its a guid (instead of e.g. a group), so probably a deleted mailbox
+            if([guid]::TryParse($assignedManagementRole.EffectiveUserName, $([ref][guid]::Empty))){
+                $splat = @{
+                    path = "/"
+                    type = "AdminRole"
+                    principalEntraId = "Unknown"
+                    principalUpn = $assignedManagementRole.EffectiveUserName
+                    principalName = "Unknown"
+                    principalType = "DELETED OBJECT"               
+                    role = "$($assignedManagementRole.Role)"
+                    through = "$($assignedManagementRole.RoleAssignee)"
+                    kind = "$($assignedManagementRole.RoleAssignmentDelegationType)"
+                }
+                New-ExOPermissionEntry @splat
+            }
         }else{
             $splat = @{
                 path = "/"
@@ -74,8 +93,39 @@
             }
             New-ExOPermissionEntry @splat
         }
+        
     }
+
+    Write-Progress -Id 2 -Completed -Activity "Scanning Roles"
     
+    Write-Progress -Id 1 -PercentComplete 15 -Activity "Scanning Exchange Online" -Status "Retrieving mailboxes..."
+    
+    $mailboxes = (New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{"ResultSize" = "Unlimited"}) | Where-Object {$_.RecipientTypeDetails -ne "DiscoveryMailbox"}
+        
+    Write-Progress -Id 1 -PercentComplete 35 -Activity "Scanning Exchange Online" -Status "Checking mailboxes for non default permissions..."
+
+    $count = 0
+    foreach($mailbox in $mailboxes){
+        $count++
+        Write-Progress -Id 2 -PercentComplete ($count/$mailboxes.Count*100) -Activity "Scanning Mailboxes" -Status "Examining mailbox $($count) of $($mailboxes.Count)"
+        $global:statObj."Total objects scanned"++
+        $permissions = $Null; $permissions = (New-ExOQuery -cmdlet "Get-Mailboxpermission" -cmdParams @{Identity = $mailbox.Guid}) | Where-Object {$_.User -like "*@*"}
+        foreach($permission in $permissions){
+            foreach($AccessRight in $permission.AccessRights){
+                $splat = @{
+                    path = "/$($mailbox.UserPrincipalName)"
+                    type = "Mailbox"
+                    principalUpn = $permission.User
+                    role = $AccessRight
+                    through = $(if($permission.IsInherited){ "Inherited" }else{ "Direct" })
+                    kind = $(if($permission.Deny -eq "False"){ "Allow" }else{ "Deny" })
+                }
+                New-ExOPermissionEntry @splat
+            }
+        }
+    }
+
+    Write-Progress -Id 2 -Completed -Activity "Scanning Mailboxes"
     Write-Progress -Id 1 -PercentComplete 75 -Activity "Scanning Exchange Online" -Status "Writing report..."
 
     Write-Host "All permissions retrieved, writing reports..."
