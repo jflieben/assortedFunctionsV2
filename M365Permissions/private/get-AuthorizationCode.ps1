@@ -4,12 +4,12 @@ function get-AuthorizationCode{
         CompanyName          = "Lieben Consultancy"
         Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
     #>        
+
     $tcpListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 1985)
     $tcpListener.Start()
     Write-Host "Waiting for login using your default browser..."
 
-    $authScopes = @("offline_access","User.Read.All","Directory.Read.All","Sites.FullControl.All","https://www.sharepoint.com/AllSites.FullControl","RoleEligibilitySchedule.ReadWrite.Directory","RoleManagement.ReadWrite.Directory")
-    $targetUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=$($global:LCClientId)&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1985&response_mode=query&scope=$($authScopes -join "%20")"
+    $targetUrl = "https://login.microsoftonline.com/common/oauth2/authorize?client_id=$($global:LCClientId)&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1985&response_mode=query&resource=https://graph.microsoft.com&prompt=admin_consent"
 
     try{
         Start-Process $targetUrl
@@ -38,7 +38,7 @@ function get-AuthorizationCode{
         Uri    = "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
         Method = 'Post'
         Body = @{
-            scope                 = "offline_access $($authScopes -join " ")"
+            scope                 = "offline_access https://graph.microsoft.com/.default"
             code                  = $code
             client_id             = $global:LCClientId
             grant_type            = 'authorization_code'
