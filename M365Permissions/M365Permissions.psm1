@@ -35,7 +35,7 @@ $global:pnpUrlAuthCaches = @{}
 $global:SPOPermissions = @{}
 $global:PnPGroupCache = @{}
 $global:EntraPermissions = @{}
-$global:LCRefreshToken = @{}
+$global:LCRefreshToken = $Null
 $global:LCCachedTokens = @{}
 $global:performanceDebug = $False
 
