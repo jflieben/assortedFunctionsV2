@@ -26,6 +26,7 @@
     Write-Host "Performing ExO scan using: $($currentUser.userPrincipalName)"
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Exchange Online" -Status "Retrieving all role assignments"
     $global:ExOPermissions = @{}
+    $global:exoStatObjects = @()
 
     $global:statObj = [PSCustomObject]@{
         "Module version" = $global:moduleVersion
@@ -98,6 +99,19 @@
 
     Write-Progress -Id 2 -Completed -Activity "Scanning Roles"
     
+    $global:statObj."Scan end time" = Get-Date  
+    $global:exoStatObjects += $global:statObj
+    
+    $global:statObj = [PSCustomObject]@{
+        "Module version" = $global:moduleVersion
+        "Category" = "ExO"
+        "Subject" = "Mailboxes"
+        "Total objects scanned" = 0
+        "Scan start time" = Get-Date
+        "Scan end time" = ""
+        "Scan performed by" = $currentUser.userPrincipalName
+    }
+
     Write-Progress -Id 1 -PercentComplete 15 -Activity "Scanning Exchange Online" -Status "Retrieving mailboxes..."
     
     $mailboxes = (New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{"ResultSize" = "Unlimited"}) | Where-Object {$_.RecipientTypeDetails -ne "DiscoveryMailbox"}
@@ -127,6 +141,8 @@
 
     Write-Progress -Id 2 -Completed -Activity "Scanning Mailboxes"
     Write-Progress -Id 1 -PercentComplete 75 -Activity "Scanning Exchange Online" -Status "Writing report..."
+    $global:statObj."Scan end time" = Get-Date
+    $global:exoStatObjects += $global:statObj
 
     Write-Host "All permissions retrieved, writing reports..."
     $permissionRows = foreach($row in $global:ExOPermissions.Keys){
@@ -143,9 +159,7 @@
                 "Kind" = $permission.Kind
             }
         }
-    }
-
-    $global:statObj."Scan end time" = Get-Date    
+    }  
 
     if((get-location).Path){
         $basePath = Join-Path -Path (get-location).Path -ChildPath "M365Permissions.@@@"
@@ -158,7 +172,7 @@
             "XLSX" { 
                 $targetPath = $basePath.Replace("@@@","xlsx")
                 $permissionRows | Export-Excel -Path $targetPath -WorksheetName "ExOPermissions" -TableName "ExOPermissions" -TableStyle Medium10 -Append -AutoSize
-                $global:statObj | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
+                $global:exoStatObjects | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
                 Write-Host "XLSX report saved to $targetPath"
             }
             "CSV" { 
