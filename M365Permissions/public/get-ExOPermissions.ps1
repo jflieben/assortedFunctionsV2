@@ -6,6 +6,7 @@
         
         Parameters:
         -expandGroups: if set, group memberships will be expanded to individual users
+        -maxDetail: if set, folder level permissions for each mailbox will be retrieved. This can be (very) slow
         -outputFormat: 
             XLSX
             CSV
@@ -16,6 +17,7 @@
     Param(
         [Switch]$expandGroups,
         [Switch]$ignoreCurrentUser,
+        [Switch]$maxDetail,
         [parameter(Mandatory=$true)]
         [ValidateSet('XLSX','CSV','Default')]
         [String[]]$outputFormat
@@ -98,7 +100,7 @@
     }
 
     Write-Progress -Id 2 -Completed -Activity "Scanning Roles"
-    
+
     $global:statObj."Scan end time" = Get-Date  
     $global:exoStatObjects += $global:statObj
     
@@ -112,34 +114,86 @@
         "Scan performed by" = $currentUser.userPrincipalName
     }
 
-    Write-Progress -Id 1 -PercentComplete 15 -Activity "Scanning Exchange Online" -Status "Retrieving mailboxes..."
-    
-    $mailboxes = (New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{"ResultSize" = "Unlimited"}) | Where-Object {$_.RecipientTypeDetails -ne "DiscoveryMailbox"}
-        
-    Write-Progress -Id 1 -PercentComplete 35 -Activity "Scanning Exchange Online" -Status "Checking mailboxes for non default permissions..."
+    Write-Progress -Id 1 -PercentComplete 15 -Activity "Scanning Exchange Online" -Status "Retrieving mailboxes and other objects..."
+    $recipients = (New-ExOQuery -cmdlet "Get-Recipient" -cmdParams @{"ResultSize" = "Unlimited"}) 
+
+    Write-Progress -Id 1 -PercentComplete 35 -Activity "Scanning Exchange Online" -Status "Checking recipients for non default permissions..."
 
     $count = 0
-    foreach($mailbox in $mailboxes){
+    foreach($recipient in $recipients){
         $count++
-        Write-Progress -Id 2 -PercentComplete ($count/$mailboxes.Count*100) -Activity "Scanning Mailboxes" -Status "Examining mailbox $($count) of $($mailboxes.Count)"
         $global:statObj."Total objects scanned"++
-        $permissions = $Null; $permissions = (New-ExOQuery -cmdlet "Get-Mailboxpermission" -cmdParams @{Identity = $mailbox.Guid}) | Where-Object {$_.User -like "*@*"}
-        foreach($permission in $permissions){
-            foreach($AccessRight in $permission.AccessRights){
+        if(!$recipient.PrimarySmtpAddress){
+            Write-Warning "skipping $($recipient.identity) as it has no primary smtp address"
+            continue
+        }
+
+        Write-Progress -Id 2 -PercentComplete ($count/$recipients.Count*100) -Activity "Scanning recipients" -Status "Examining $($recipient.displayName) ($($count) of $($recipients.Count))"
+        
+        #mailboxes have mailbox permissions
+        if($recipient.RecipientTypeDetails -like "*Mailbox*" -and $recipient.RecipientTypeDetails -ne "GroupMailbox"){
+            #get mailbox meta for SOB permissions
+            $mailbox = $Null; $mailbox = (New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{Identity = $recipient.Guid})
+            if($mailbox.GrantSendOnBehalfTo){
+                foreach($sendOnBehalf in $mailbox.GrantSendOnBehalfTo){
+                    $entity = $Null; $entity= $recipients | Where-Object {$_.DisplayName -eq $sendOnBehalf}
+                    $splat = @{
+                        path = "/$($recipient.PrimarySmtpAddress)"
+                        type = $recipient.RecipientTypeDetails
+                        principalUpn = $sendOnBehalf
+                        principalName = $entity.displayName
+                        principalEntraId = $entity.ExternalDirectoryObjectId
+                        principalType = $entity.RecipientTypeDetails
+                        role = "SendOnBehalf"
+                        through = "Direct"
+                        kind = "Allow"
+                    }
+                    New-ExOPermissionEntry @splat
+                }
+            }            
+            $mailboxPermissions = $Null; $mailboxPermissions = (New-ExOQuery -cmdlet "Get-Mailboxpermission" -cmdParams @{Identity = $recipient.Guid}) | Where-Object {$_.User -like "*@*"}
+            foreach($mailboxPermission in $mailboxPermissions){
+                foreach($AccessRight in $mailboxPermission.AccessRights){
+                    $entity = $Null; $entity= $recipients | Where-Object {$_.PrimarySmtpAddress -eq $mailboxPermission.User}
+                    $splat = @{
+                        path = "/$($recipient.PrimarySmtpAddress)"
+                        type = $recipient.RecipientTypeDetails
+                        principalUpn = if($entity.windowsLiveId){$entity.windowsLiveId}else{$mailboxPermission.User}
+                        principalName = $entity.displayName
+                        principalEntraId = $entity.ExternalDirectoryObjectId
+                        principalType = $entity.RecipientTypeDetails
+                        role = $AccessRight
+                        through = $(if($mailboxPermission.IsInherited){ "Inherited" }else{ "Direct" })
+                        kind = $(if($mailboxPermission.Deny -eq "False"){ "Allow" }else{ "Deny" })
+                    }
+                    New-ExOPermissionEntry @splat
+                }
+            }            
+        }    
+        
+        #all recipients can have recipient permissions
+        $recipientPermissions = (New-ExOQuery -cmdlet "Get-RecipientPermission" -cmdParams @{"ResultSize" = "Unlimited"; "Identity" = $recipient.Guid}) | Where-Object {$_.Trustee -ne "NT Authority\SELF" }
+        foreach($recipientPermission in $recipientPermissions){
+            $entity = $Null; $entity= $recipients | Where-Object {$_.PrimarySmtpAddress -eq $recipientPermission.Trustee}
+            foreach($AccessRight in $recipientPermission.AccessRights){
                 $splat = @{
-                    path = "/$($mailbox.UserPrincipalName)"
-                    type = "Mailbox"
-                    principalUpn = $permission.User
+                    path = "/$($recipient.PrimarySmtpAddress)"
+                    type = $recipient.RecipientTypeDetails
+                    principalUpn = $recipientPermission.Trustee
+                    principalName = $entity.displayName
+                    principalEntraId = $entity.ExternalDirectoryObjectId
+                    principalType = $entity.RecipientTypeDetails
                     role = $AccessRight
-                    through = $(if($permission.IsInherited){ "Inherited" }else{ "Direct" })
-                    kind = $(if($permission.Deny -eq "False"){ "Allow" }else{ "Deny" })
+                    through = $(if($recipientPermission.IsInherited){ "Inherited" }else{ "Direct" })
+                    kind = $recipientPermission.AccessControlType
                 }
                 New-ExOPermissionEntry @splat
             }
-        }
+        }        
     }
 
     Write-Progress -Id 2 -Completed -Activity "Scanning Mailboxes"
+
     Write-Progress -Id 1 -PercentComplete 75 -Activity "Scanning Exchange Online" -Status "Writing report..."
     $global:statObj."Scan end time" = Get-Date
     $global:exoStatObjects += $global:statObj
