@@ -20,13 +20,6 @@
         [String[]]$outputFormat
     )
 
-    if(!$global:LCCachedToken){
-        get-AuthorizationCode
-    }
-
-    if(!$global:tenantName){
-        $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
-    }
     if(!$global:currentUser){
         $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
     }

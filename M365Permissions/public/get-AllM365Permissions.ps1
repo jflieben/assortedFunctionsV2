@@ -1,4 +1,9 @@
-﻿Function get-AllM365Permissions{     
+﻿Function get-AllM365Permissions{   
+    <#
+        Author               = "Jos Lieben (jos@lieben.nu)"
+        CompanyName          = "Lieben Consultancy"
+        Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
+    #>         
     Param(
         [Switch]$includeOnedriveSites,
         [Switch]$expandGroups,
@@ -7,10 +12,6 @@
         [ValidateSet('XLSX','CSV')]
         [String[]]$outputFormat
     )
-
-    if(!$global:LCCachedToken){
-        get-AuthorizationCode
-    }
 
     $currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
     Write-Host "Starting FULL M365 Tenant scan as $($currentUser.userPrincipalName)"

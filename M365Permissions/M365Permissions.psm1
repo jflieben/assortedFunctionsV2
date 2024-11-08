@@ -35,7 +35,8 @@ $global:pnpUrlAuthCaches = @{}
 $global:SPOPermissions = @{}
 $global:PnPGroupCache = @{}
 $global:EntraPermissions = @{}
-
+$global:LCRefreshToken = @{}
+$global:LCCachedTokens = @{}
 $global:performanceDebug = $False
 
 if ($helperFunctions.public) { Export-ModuleMember -Alias * -Function @($helperFunctions.public.BaseName) }

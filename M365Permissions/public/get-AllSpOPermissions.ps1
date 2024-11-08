@@ -1,4 +1,9 @@
-﻿Function get-AllSPOPermissions{     
+﻿Function get-AllSPOPermissions{   
+    <#
+        Author               = "Jos Lieben (jos@lieben.nu)"
+        CompanyName          = "Lieben Consultancy"
+        Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
+    #>         
     Param(
         [Switch]$includeOnedriveSites,
         [Switch]$expandGroups,
@@ -7,10 +12,6 @@
         [ValidateSet('XLSX','CSV')]
         [String[]]$outputFormat
     )
-
-    if(!$global:LCCachedToken){
-        get-AuthorizationCode
-    }
 
     $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
     $currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
