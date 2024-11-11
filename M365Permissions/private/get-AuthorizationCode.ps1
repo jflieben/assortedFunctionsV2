@@ -4,12 +4,24 @@ function get-AuthorizationCode{
         CompanyName          = "Lieben Consultancy"
         Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
     #>        
+
     $tcpListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 1985)
     $tcpListener.Start()
-    Write-Host "Waiting for login using your default browser..."
 
-    $authScopes = @("offline_access","User.Read.All","Directory.Read.All","Sites.FullControl.All","https://www.sharepoint.com/AllSites.FullControl","RoleEligibilitySchedule.ReadWrite.Directory","RoleManagement.ReadWrite.Directory")
-    $targetUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=$($global:LCClientId)&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1985&response_mode=query&scope=$($authScopes -join "%20")"
+    $adminPrompt = "&prompt=admin_consent"
+
+    $cachedModuleVersion = Join-Path -Path $env:APPDATA -ChildPath "M365Permissions.version"
+    if(!(Test-Path $cachedModuleVersion)){
+        Set-Content -Path $cachedModuleVersion -Value $global:moduleVersion -Force
+    }else{
+        if(([System.Version]::Parse((Get-Content -Path $cachedModuleVersion -Raw)) -lt [System.Version]::Parse($global:moduleVersion))){
+            Set-Content -Path $cachedModuleVersion -Value $global:moduleVersion -Force
+        }else{
+            $adminPrompt = $Null
+        }
+    }
+
+    $targetUrl = "https://login.microsoftonline.com/common/oauth2/authorize?client_id=$($global:LCClientId)&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1985&response_mode=query&resource=https://graph.microsoft.com$($adminPrompt)"
 
     try{
         Start-Process $targetUrl
@@ -38,7 +50,7 @@ function get-AuthorizationCode{
         Uri    = "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
         Method = 'Post'
         Body = @{
-            scope                 = "offline_access $($authScopes -join " ")"
+            scope                 = "offline_access https://graph.microsoft.com/.default"
             code                  = $code
             client_id             = $global:LCClientId
             grant_type            = 'authorization_code'

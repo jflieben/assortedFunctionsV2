@@ -15,27 +15,24 @@
     #>        
     Param(
         [Switch]$expandGroups,
+        [Switch]$ignoreCurrentUser,
         [parameter(Mandatory=$true)]
         [ValidateSet('XLSX','CSV','Default')]
         [String[]]$outputFormat
     )
 
-    if(!$global:LCCachedToken){
-        get-AuthorizationCode
-    }
-
-    if(!$global:tenantName){
-        $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
-    }
     if(!$global:currentUser){
         $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
     }
+
+    $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
+
     Write-Host "Performing Entra scan using: $($currentUser.userPrincipalName)"
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Entra ID" -Status "Retrieving role definitions"
     $global:EntraPermissions = @{}
 
     $global:statObj = [PSCustomObject]@{
-        "Module version" = $MyInvocation.MyCommand.Module.Version
+        "Module version" = $global:moduleVersion
         "Category" = "Entra"
         "Subject" = "Roles"
         "Total objects scanned" = 0

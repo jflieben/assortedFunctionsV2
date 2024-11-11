@@ -43,7 +43,7 @@ function New-GraphQuery {
         Write-Progress -Id 10 -Activity "Querying $resource API" -Status "Retrieving initial batch of $expectedTotalResults expected records" -PercentComplete 0
     }
 
-    if($resource -eq "https://www.sharepoint.com"){
+    if($resource -like "*sharepoint.com*"){
         $headers['Accept'] = "application/json;odata=nometadata"
     }    
 
@@ -101,7 +101,7 @@ function New-GraphQuery {
                         Start-Sleep -Seconds (1 + (2 * $attempts))
                     }
                 }
-                if($resource -eq "https://www.sharepoint.com"){
+                if($resource -like "*sharepoint.com*"){
                     $Data = $Data | ConvertFrom-Json -AsHashtable
                 }
 

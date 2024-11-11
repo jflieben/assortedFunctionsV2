@@ -33,10 +33,6 @@
         [Switch]$ignoreCurrentUser
     )
 
-    if(!$global:LCCachedToken){
-        get-AuthorizationCode
-    }
-
     $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
     if(!$global:tenantName){
         $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
@@ -108,7 +104,7 @@
 
     foreach($site in $sites){ 
         $global:statObj = [PSCustomObject]@{
-            "Module version" = $MyInvocation.MyCommand.Module.Version
+            "Module version" = $global:moduleVersion
             "Category" = "SharePoint"
             "Subject" = $site.Url
             "Total objects scanned" = 0
