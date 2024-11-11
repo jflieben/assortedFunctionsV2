@@ -35,7 +35,7 @@
 
     EXAMPLES:
 
-    Get-AllM365Permissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser -includeOneDriveSites
+    Get-AllM365Permissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser
     
     Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default
     
@@ -44,6 +44,8 @@
     get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites
     
     Get-EntraPermissions -OutputFormat XLSX -expandGroups
+
+    Get-ExOPermissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser 
 
     Please note that this module is provided AS-IS, no guarantees or warranties provided. Use at your own risk."
 
