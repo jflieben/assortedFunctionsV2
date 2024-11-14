@@ -31,7 +31,7 @@
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Entra ID" -Status "Retrieving role definitions"
     $global:EntraPermissions = @{}
 
-    $global:statObj = [PSCustomObject]@{
+    $global:statObjRoles = [PSCustomObject]@{
         "Module version" = $global:moduleVersion
         "Category" = "Entra"
         "Subject" = "Roles"
@@ -64,14 +64,17 @@
         }
     }
 
-    Write-Progress -Id 1 -PercentComplete 35 -Activity "Scanning Entra ID" -Status "Retrieving flexible assigments"
+    Write-Progress -Id 1 -PercentComplete 25 -Activity "Scanning Entra ID" -Status "Retrieving flexible assigments"
 
     #get eligible role assignments
     $roleEligibilities = (New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleInstances' -Method GET | Where-Object {$_})
 
-    Write-Progress -Id 1 -PercentComplete 60 -Activity "Scanning Entra ID" -Status "Processing flexible assigments"
+    Write-Progress -Id 1 -PercentComplete 35 -Activity "Scanning Entra ID" -Status "Processing flexible assigments"
 
+    $count = 0
     foreach($roleEligibility in $roleEligibilities){
+        $count++
+        Write-Progress -Id 2 -PercentComplete $(try{$count / $roleEligibilities.Count *100}catch{1}) -Activity "Processing flexible assignments" -Status "[$count / $($roleEligibilities.Count)]"
         $roleDefinition = $roleDefinitions | Where-Object { $_.id -eq $roleEligibility.roleDefinitionId }
         $principalType = "Unknown"
         try{
@@ -90,10 +93,58 @@
             New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "Eligible" -principalId $principal.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $principal.displayName -principalUpn $principal.userPrincipalName -principalType $principalType -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.startDateTime -endDateTime $roleEligibility.endDateTime
         }
     }
+    Write-Progress -Id 2 -Completed -Activity "Processing flexible assignments"
+    $global:statObjRoles."Scan end time" = Get-Date    
+
+
+    $global:statObjEntities = [PSCustomObject]@{
+        "Module version" = $global:moduleVersion
+        "Category" = "Entra"
+        "Subject" = "Entities"
+        "Total objects scanned" = 0
+        "Scan start time" = Get-Date
+        "Scan end time" = ""
+        "Scan performed by" = $currentUser.userPrincipalName
+    }    
+    Write-Progress -Id 1 -PercentComplete 45 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
+    $groupMemberRows = @()
+    $allGroups = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/groups' -Method GET
+    $count = 0
+    foreach($group in $allGroups){
+        $count++
+        Write-Progress -Id 2 -PercentComplete $(try{$count / $allGroups.Count *100}catch{1}) -Activity "Processing groups" -Status "[$count / $($allGroups.Count)] $($group.displayName)"
+
+        if($group.groupTypes -contains "Unified"){
+            $groupType = "Microsoft 365 Group"
+        }elseif($group.mailEnabled -and $group.securityEnabled){
+            $groupType = "Mail-enabled Security Group"
+        }elseif($group.mailEnabled -and -not $group.securityEnabled){
+            $groupType = "Distribution Group"
+        }elseif($group.membershipRule){
+            $groupType = "Dynamic Security Group"
+        }else{
+            $groupType = "Security Group"
+        }
+        $groupMembers = get-entraGroupMembers -groupId $group.id
+        foreach($groupMember in $groupMembers){
+            $global:statObjEntities."Total objects scanned"++
+            $groupMemberRows += [PSCustomObject]@{
+                "GroupName" = $group.displayName
+                "GroupType" = $groupType
+                "GroupID" = $group.id
+                "MemberName" = $groupMember.displayName
+                "MemberID" = $groupMember.id
+                "MemberType" = $groupMember."@odata.type".Split(".")[2]
+            }
+        }
+    }
     
+    Write-Progress -Id 2 -Completed -Activity "Processing groups"
+    $global:statObjEntities."Scan end time" = Get-Date
+
     Write-Progress -Id 1 -PercentComplete 90 -Activity "Scanning Entra ID" -Status "Writing report..."
 
-    $global:statObj."Scan end time" = Get-Date
+
     Write-Host "All permissions retrieved, writing reports..."
     $permissionRows = foreach($row in $global:EntraPermissions.Keys){
         foreach($permission in $global:EntraPermissions.$row){
@@ -124,13 +175,17 @@
         switch($format){
             "XLSX" { 
                 $targetPath = $basePath.Replace("@@@","xlsx")
+                $groupMemberRows | Export-Excel -Path $targetPath -WorksheetName "EntraGroupMembers" -TableName "EntraGroupMembers" -TableStyle Medium10 -AutoSize
                 $permissionRows | Export-Excel -Path $targetPath -WorksheetName "EntraPermissions" -TableName "EntraPermissions" -TableStyle Medium10 -Append -AutoSize
-                $global:statObj | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
+                $global:statObjRoles | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
+                $global:statObjEntities | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
                 Write-Host "XLSX report saved to $targetPath"
             }
             "CSV" { 
+                $targetPath = $basePath.Replace(".@@@","-EntraGroupMembers.csv")
+                $groupMemberRows | Export-Csv -Path $targetPath -NoTypeInformation -Append
                 $targetPath = $basePath.Replace(".@@@","-Entra.csv")
-                $permissionRows | Export-Csv -Path $targetPath -NoTypeInformation  -Append
+                $permissionRows | Export-Csv -Path $targetPath -NoTypeInformation -Append
                 Write-Host "CSV report saved to $targetPath"
             }
             "Default" { $permissionRows | out-gridview }
