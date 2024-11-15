@@ -182,10 +182,10 @@ Function get-PnPObjectPermissions{
                     $ItemCounter = 0
                     ForEach($ListItem in $allUniqueListItems){
                         $ItemCounter++
-                        Write-Progress -Id 3 -PercentComplete ($ItemCounter / ($allUniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItems.ItemCount)" -Status "Searching for Unique Permissions"
+                        Write-Progress -Id 3 -PercentComplete (($ItemCounter / $allUniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItems.Count)" -Status "Searching for Unique Permissions"
                         get-PnPObjectPermissions -Object $ListItem -siteUrl $siteUrl
                     }
-                    Write-Progress -Id 3 -Completed -Activity "Processing Item $ItemCounter of $($allUniqueListItems.ItemCount)"
+                    Write-Progress -Id 3 -Completed -Activity "Processing Item $ItemCounter of $($allUniqueListItems.Count)"
                 }else{
                     Write-Verbose "Skipping $($List.Title) as it is hidden, empty or excluded"
                 }
