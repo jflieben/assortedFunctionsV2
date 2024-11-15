@@ -52,7 +52,7 @@
     if(!$sites){
         $sites = @(Get-PnPTenantSite -IncludeOneDriveSites -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
             $_.Template -NotIn $ignoredSiteTypes -and
-            ($Null -ne $teamName -and $_.Title -eq $teamName) -or ($Null -ne $siteUrl -and $_.Url -eq $siteUrl)
+            ($Null -ne $teamName -and $_.Title -eq $teamName -and $_.Template -notlike "*CHANNEL*") -or ($Null -ne $siteUrl -and $_.Url -eq $siteUrl)
         })
     }
 
@@ -83,11 +83,11 @@
         }
         foreach($channel in $channels){
             if($channel.filesFolderWebUrl){
-                $targetUrl = $Null; $targetUrl ="https://$($tenantName).sharepoint.com/sites/$($channel.filesFolderWebUrl.Split("/")[4])"
+                $targetUrl = $Null; $targetUrl ="https://$($tenantName).sharepoint.com/$($channel.filesFolderWebUrl.Split("/")[3])/$($channel.filesFolderWebUrl.Split("/")[4])"
             }
             if($targetUrl -and $sites.Url -notcontains $targetUrl){
                 try{
-                    Write-Host "Adding Channel $($channel.displayName) with URL $targetUrl to scan list"
+                    Write-Host "Adding Channel $($channel.displayName) with URL $targetUrl to scan list as it has its own site"
                     $extraSite = $Null; $extraSite = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $targetUrl
                     if($extraSite -and $extraSite.Template -NotIn $ignoredSiteTypes){
                         $sites += $extraSite
