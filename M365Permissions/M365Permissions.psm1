@@ -11,6 +11,11 @@
 
     .LINK
     https://www.lieben.nu/liebensraum/m365permissions
+
+    .ROADMAP
+    1.0.4 Add mailbox folder level permissions
+    1.0.x Add support for PowerBI
+    1.0.x Add support for App-Only authentication
 #>
 
 $helperFunctions = @{
@@ -55,7 +60,7 @@ Write-Host ""
 $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
 Write-Host "Thank you $($currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
 Write-Host ""
-Write-Host ">> Get-AllM365Permissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser -includeOneDriveSites" -ForegroundColor Magenta
+Write-Host ">> Get-AllM365Permissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser" -ForegroundColor Magenta
 
 Write-Host ">> Get-ExOPermissions -OutputFormat XLSX" -ForegroundColor Magenta
 
