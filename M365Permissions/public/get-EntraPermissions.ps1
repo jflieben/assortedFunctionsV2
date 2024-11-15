@@ -125,9 +125,18 @@
         }else{
             $groupType = "Security Group"
         }
-        $groupMembers = get-entraGroupMembers -groupId $group.id
+        try{
+            $groupOwners = $Null; $groupOwners = get-entraGroupOwners -groupId $group.id
+        }catch{
+            Write-Verbose "Failed to get owners for $($group.displayName) because $_"
+        }
+        $groupMembers = $Null; $groupMembers = get-entraGroupMembers -groupId $group.id
         foreach($groupMember in $groupMembers){
             $global:statObjEntities."Total objects scanned"++
+            $memberRoles = "Member"
+            if($groupOwners.id -contains $groupMember.id){
+                $memberRoles = "Member, Owner"
+            }
             $groupMemberRows += [PSCustomObject]@{
                 "GroupName" = $group.displayName
                 "GroupType" = $groupType
@@ -135,6 +144,21 @@
                 "MemberName" = $groupMember.displayName
                 "MemberID" = $groupMember.id
                 "MemberType" = $groupMember."@odata.type".Split(".")[2]
+                "Roles" = $memberRoles
+            }
+        }
+        foreach($groupOwner in $groupOwners){
+            $global:statObjEntities."Total objects scanned"++
+            if($groupMemberRows.MemberID -notcontains $groupOwner.id){
+                $groupMemberRows += [PSCustomObject]@{
+                    "GroupName" = $group.displayName
+                    "GroupType" = $groupType
+                    "GroupID" = $group.id
+                    "MemberName" = $groupOwner.displayName
+                    "MemberID" = $groupOwner.id
+                    "MemberType" = $groupOwner."@odata.type".Split(".")[2]
+                    "Roles" = "Owner"
+                }
             }
         }
     }
