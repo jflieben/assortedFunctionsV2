@@ -93,7 +93,7 @@
                         $sites += $extraSite
                     }
                 }catch{
-                    Write-Error "Failed to add Channel $($channel.displayName) with URL $targetUrl to scan list because Get-PnPTenantSite failed with $_" -ErrorAction Continue
+                    Write-Error "Failed to add Channel $($channel.displayName) with URL $targetUrl to scan list. It may have been deleted, because Get-PnPTenantSite failed with $_" -ErrorAction Continue
                 }
             }          
         }
