@@ -175,7 +175,10 @@ Function get-PnPObjectPermissions{
                     Write-Verbose "List contains $($List.ItemCount) items"
                     $allListItems = $Null; $allListItems = New-GraphQuery -resource "https://www.sharepoint.com" -Uri "$($Object.Url)/_api/web/lists/getbyid('$($List.Id.Guid)')/items?`$select=ID,HasUniqueRoleAssignments&`$top=5000&`$format=json" -Method GET -expectedTotalResults $List.ItemCount
                     $allUniqueListItemIDs = $Null; $allUniqueListItemIDs = @($allListItems | Where-Object { $_.HasUniqueRoleAssignments -eq $True }) | select -ExpandProperty Id
+                    $ItemCounter = 0
                     foreach($allUniqueListItemID in $allUniqueListItemIDs){
+                        $ItemCounter++
+                        Write-Progress -Id 3 -PercentComplete (($ItemCounter / $allUniqueListItemIDs.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItemIDs.Count)" -Status "Getting Metadata for each Unique Item Metadata"
                         $allUniqueListItems += Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemID
                     }
 
