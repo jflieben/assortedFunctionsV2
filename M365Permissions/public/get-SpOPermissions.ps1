@@ -187,7 +187,7 @@
         switch($format){
             "XLSX" { 
                 $targetPath = $basePath.Replace("@@@","xlsx")
-                $permissionRows | Export-Excel -Path $targetPath -WorksheetName "TeamPermissions" -TableName "TeamPermissions" -TableStyle Medium10 -Append -AutoSize
+                $permissionRows | Export-Excel -Path $targetPath -WorksheetName "SpOPermissions" -TableName "SpOPermissions" -TableStyle Medium10 -Append -AutoSize
                 $statObjects | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
                 Write-Host "XLSX report saved to $targetPath"
             }

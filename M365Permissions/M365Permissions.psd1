@@ -41,7 +41,7 @@
     
     Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV
     
-    get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites
+    get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites -ExcludeOtherSites
     
     Get-EntraPermissions -OutputFormat XLSX -expandGroups
 

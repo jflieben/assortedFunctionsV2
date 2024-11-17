@@ -68,6 +68,6 @@ Write-Host ">> Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites
 
 Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV" -ForegroundColor Magenta
 
-Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites" -ForegroundColor Magenta
+Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
 
 Write-Host ">> Get-EntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta
