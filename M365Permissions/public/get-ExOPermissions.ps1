@@ -50,7 +50,7 @@
     $count = 0
     foreach($assignedManagementRole in $assignedManagementRoles){
         $count++
-        Write-Progress -Id 2 -PercentComplete ($count/$assignedManagementRoles.Count*100) -Activity "Scanning Roles" -Status "Examining role $($count) of $($assignedManagementRoles.Count)"
+        Write-Progress -Id 2 -PercentComplete (($count/$assignedManagementRoles.Count)*100) -Activity "Scanning Roles" -Status "Examining role $($count) of $($assignedManagementRoles.Count)"
         $global:statObj."Total objects scanned"++
         try{
             $mailbox = $Null; $mailbox = $identityCache.$($assignedManagementRole.EffectiveUserName)
@@ -128,7 +128,7 @@
             continue
         }
 
-        Write-Progress -Id 2 -PercentComplete ($count/$recipients.Count*100) -Activity "Scanning recipients" -Status "Examining $($recipient.displayName) ($($count) of $($recipients.Count))"
+        Write-Progress -Id 2 -PercentComplete (($count/$recipients.Count)*100) -Activity "Scanning recipients" -Status "Examining $($recipient.displayName) ($($count) of $($recipients.Count))"
         
         #mailboxes have mailbox permissions
         if($recipient.RecipientTypeDetails -like "*Mailbox*" -and $recipient.RecipientTypeDetails -ne "GroupMailbox"){
@@ -193,7 +193,7 @@
                             if($folderPermission.AccessRights -notcontains "None"){
                                 foreach($AccessRight in $folderPermission.AccessRights){
                                     $splat = @{
-                                        path = "/$($targetFolderId.Replace("\","/"))"
+                                        path = "/$($mailbox.UserPrincipalName)$($folder.FolderPath)"
                                         type = "MailboxFolder"
                                         principalUpn = $Null
                                         principalName = $folderPermission.User
@@ -208,7 +208,7 @@
                             }
                         }
                     }catch{
-                        Write-Warning "Failed to retrieve folder permissions for $($targetFolderId)"
+                        Write-Warning "Failed to retrieve folder permissions for $($mailbox.UserPrincipalName)$($folder.FolderPath)"
                     }
                 }
 
