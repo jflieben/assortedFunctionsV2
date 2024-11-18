@@ -55,7 +55,7 @@
         try{
             $mailbox = $Null; $mailbox = $identityCache.$($assignedManagementRole.EffectiveUserName)
             if($Null -eq $mailbox){
-                $mailbox = (New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{Identity = $assignedManagementRole.EffectiveUserName})
+                $mailbox = (New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{Identity = $assignedManagementRole.EffectiveUserName} -retryCount 2)
                 if(!$mailbox){
                     $identityCache.$($assignedManagementRole.EffectiveUserName) = $False
                 }else{
@@ -133,7 +133,7 @@
         #mailboxes have mailbox permissions
         if($recipient.RecipientTypeDetails -like "*Mailbox*" -and $recipient.RecipientTypeDetails -ne "GroupMailbox"){
             #get mailbox meta for SOB permissions
-            $mailbox = $Null; $mailbox = New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{Identity = $recipient.Guid}
+            $mailbox = $Null; $mailbox = New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{Identity = $recipient.Guid} -retryCount 2
             if($mailbox.GrantSendOnBehalfTo){
                 foreach($sendOnBehalf in $mailbox.GrantSendOnBehalfTo){
                     $entity = $Null; $entity= @($recipients | Where-Object {$_.DisplayName -eq $sendOnBehalf})[0]
@@ -173,7 +173,7 @@
             if($mailbox.UserPrincipalName -and $includeFolderLevelPermissions){
                 Write-Progress -Id 3 -PercentComplete 1 -Activity "Scanning folders" -Status "Retrieving folder list for $($mailbox.UserPrincipalName)"
                 try{
-                    $folders = $Null; $folders = Get-ExOAdminApiResult -userPrincipalName $mailbox.UserPrincipalName
+                    $folders = $Null; $folders = New-ExOQuery -cmdlet "Get-MailboxFolderStatistics" -cmdParams @{"ResultSize"="unlimited";"Identity"= $mailbox.UserPrincipalName}
                 }catch{
                     Write-Warning "Failed to retrieve folder list for $($mailbox.UserPrincipalName)"
                 }      
@@ -188,7 +188,7 @@
                         continue
                     }
                     try{
-                        $folderPermissions = $Null; $folderPermissions = Get-ExOAdminApiResult -userPrincipalName $mailbox.UserPrincipalName -folderId $folder.FolderId
+                        $folderPermissions = $Null; $folderPermissions = New-ExoQuery -cmdlet "Get-MailboxFolderPermission" -cmdParams @{Identity = "$($mailbox.UserPrincipalName):$($folder.FolderId)"}
                         foreach($folderPermission in $folderPermissions){
                             if($folderPermission.AccessRights -notcontains "None"){
                                 foreach($AccessRight in $folderPermission.AccessRights){
