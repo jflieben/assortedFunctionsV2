@@ -136,12 +136,12 @@
             $mailbox = $Null; $mailbox = New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{Identity = $recipient.Guid}
             if($mailbox.GrantSendOnBehalfTo){
                 foreach($sendOnBehalf in $mailbox.GrantSendOnBehalfTo){
-                    $entity = $Null; $entity= $recipients | Where-Object {$_.DisplayName -eq $sendOnBehalf}
+                    $entity = $Null; $entity= @($recipients | Where-Object {$_.DisplayName -eq $sendOnBehalf})[0]
                     $splat = @{
                         path = "/$($recipient.PrimarySmtpAddress)"
                         type = $recipient.RecipientTypeDetails
-                        principalUpn = $sendOnBehalf
-                        principalName = $entity.displayName
+                        principalUpn = if($entity.PrimarySmtpAddress){$entity.PrimarySmtpAddress}else{$entity.windowsLiveId}
+                        principalName = $sendOnBehalf
                         principalEntraId = $entity.ExternalDirectoryObjectId
                         principalType = $entity.RecipientTypeDetails
                         role = "SendOnBehalf"
@@ -154,12 +154,12 @@
             $mailboxPermissions = $Null; $mailboxPermissions = (New-ExOQuery -cmdlet "Get-Mailboxpermission" -cmdParams @{Identity = $recipient.Guid}) | Where-Object {$_.User -like "*@*"}
             foreach($mailboxPermission in $mailboxPermissions){
                 foreach($AccessRight in $mailboxPermission.AccessRights){
-                    $entity = $Null; $entity= $recipients | Where-Object {$_.PrimarySmtpAddress -eq $mailboxPermission.User}
+                    $entity = $Null; $entity= @($recipients | Where-Object {$_.PrimarySmtpAddress -eq $mailboxPermission.User -or $_.windowsLiveId -eq $mailboxPermission.User})[0]
                     $splat = @{
                         path = "/$($recipient.PrimarySmtpAddress)"
                         type = $recipient.RecipientTypeDetails
-                        principalUpn = if($entity.windowsLiveId){$entity.windowsLiveId}else{$mailboxPermission.User}
-                        principalName = $entity.displayName
+                        principalUpn = if($entity.PrimarySmtpAddress){$entity.PrimarySmtpAddress}else{$entity.windowsLiveId}
+                        principalName = $entity.Identity
                         principalEntraId = $entity.ExternalDirectoryObjectId
                         principalType = $entity.RecipientTypeDetails
                         role = $AccessRight
@@ -173,7 +173,7 @@
             if($mailbox.UserPrincipalName -and $includeFolderLevelPermissions){
                 Write-Progress -Id 3 -PercentComplete 1 -Activity "Scanning folders" -Status "Retrieving folder list for $($mailbox.UserPrincipalName)"
                 try{
-                    $folders = $Null; $folders = Get-ExOMbxFolderStatistics -userPrincipalName $mailbox.UserPrincipalName
+                    $folders = $Null; $folders = Get-ExOAdminApiResult -userPrincipalName $mailbox.UserPrincipalName
                 }catch{
                     Write-Warning "Failed to retrieve folder list for $($mailbox.UserPrincipalName)"
                 }      
@@ -183,16 +183,12 @@
                     $global:statObj."Total objects scanned"++
                     $folderCounter++
                     Write-Progress -Id 3 -PercentComplete (($folderCounter/$folders.Count)*100) -Activity "Scanning folders" -Status "Examining $($folder.Name) ($($folderCounter) of $($folders.Count))"
-                    
-                    $folderIdentity = $($folder.Identity.SubString($($folder.Identity.IndexOf("\")),$folder.Identity.Length-$folder.Identity.IndexOf("\")))
                     if($ignoredFolderTypes -contains $folder.FolderType -or $folder.Name -in @("SearchDiscoveryHoldsFolder")){
                         Write-Verbose "Ignoring folder $($folder.Name) as it is in the ignored list"
                         continue
                     }
-                    
-                    $targetFolderId = "$($mailbox.UserPrincipalName):$($folderIdentity)"
                     try{
-                        $folderPermissions = $Null; $folderPermissions = (New-ExOQuery -cmdlet "Get-MailboxFolderPermission" -cmdParams @{Identity = $targetFolderId})
+                        $folderPermissions = $Null; $folderPermissions = Get-ExOAdminApiResult -userPrincipalName $mailbox.UserPrincipalName -folderId $folder.FolderId
                         foreach($folderPermission in $folderPermissions){
                             if($folderPermission.AccessRights -notcontains "None"){
                                 foreach($AccessRight in $folderPermission.AccessRights){

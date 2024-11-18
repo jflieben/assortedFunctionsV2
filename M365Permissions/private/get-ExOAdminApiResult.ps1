@@ -1,5 +1,5 @@
 
-function get-ExOMbxFolderStatistics {
+function get-ExOAdminApiResult {
     <#
         Author               = "Jos Lieben (jos@lieben.nu)"
         CompanyName          = "Lieben Consultancy"
@@ -8,8 +8,9 @@ function get-ExOMbxFolderStatistics {
     [CmdletBinding()]
     Param(
         [parameter(Mandatory = $True)]$userPrincipalName,
+        $folderId,
         [Switch]$NoPagination,
-        $retryCount = 1
+        $retryCount = 3
     )
     $token = Get-AccessToken -Resource "https://outlook.office365.com"
 
@@ -22,16 +23,22 @@ function get-ExOMbxFolderStatistics {
         'X-AnchorMailbox' = "UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@$($global:OnMicrosoft)"
     }
 
-    $Bytes = [System.Text.Encoding]::Unicode.GetBytes($userPrincipalName)
-    $EncodedText =[Convert]::ToBase64String($Bytes)
-    $nextURL = "https://outlook.office365.com/adminapi/beta/$($global:OnMicrosoft)/Mailbox('$EncodedText')/MailboxFolder/Exchange.GetMailboxFolderStatistics(folderscope=Exchange.ElcFolderType'All')?isEncoded=true"
+    $Bytes = [System.Text.Encoding]::UTF8.GetBytes($userPrincipalName)
+    $encodedUpn =[Convert]::ToBase64String($Bytes)
+    if($folderId){
+        $Bytes = [System.Text.Encoding]::UTF8.GetBytes($folderId)
+        $encodedfolderId =[Convert]::ToBase64String($Bytes)        
+        $nextURL = "https://outlook.office365.com/adminapi/beta/$($global:OnMicrosoft)/Mailbox('$encodedUpn')/MailboxFolder('$encodedfolderId')/MailboxFolderPermission?IsUsingMailboxFolderId=True&isEncoded=true"
+    }else{
+        $nextURL = "https://outlook.office365.com/adminapi/beta/$($global:OnMicrosoft)/Mailbox('$encodedUpn')/MailboxFolder/Exchange.GetMailboxFolderStatistics(folderscope=Exchange.ElcFolderType'All')?isEncoded=true"
+    }
 
     $ReturnedData = do {
         try {
             $attempts = 0
             while ($attempts -lt $retryCount) {
                 try {
-                    $Data = Invoke-RestMethod -Uri $nextURL -Method GET -Headers $Headers -ContentType 'application/json; charset=utf-8'              
+                    $Data = Invoke-RestMethod -Uri $nextURL -Method GET -Headers $Headers -ContentType 'application/json; charset=utf-8'
                     $attempts = $retryCount
                 }catch {
                     $attempts++

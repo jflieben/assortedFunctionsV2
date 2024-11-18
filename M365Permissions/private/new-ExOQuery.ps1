@@ -10,7 +10,7 @@ function New-ExOQuery {
         [parameter(Mandatory = $True)]$cmdlet,
         $cmdParams,
         [Switch]$NoPagination,
-        $retryCount = 1
+        $retryCount = 3
     )
     $token = Get-AccessToken -Resource "https://outlook.office365.com"
     if ($cmdParams) {
