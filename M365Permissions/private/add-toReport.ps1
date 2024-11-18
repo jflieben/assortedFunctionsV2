@@ -12,18 +12,23 @@ function add-toReport{
         $basePath = Join-Path -Path (Split-Path -Path $MyInvocation.MyCommand.Definition -Parent) -ChildPath "M365Permissions.@@@"
     }
 
-    function Export-ExcelWithRetry{
+    function Export-WithRetry{
         Param(
             [parameter(Mandatory=$true)][string]$targetPath,
             [parameter(Mandatory=$true)][string]$category,
-            [parameter(Mandatory=$true)][object]$data
+            [parameter(Mandatory=$true)][object]$data,
+            $type = "XLSX"
         )
         $maxRetries = 30
         $attempts = 0
         while($attempts -lt $maxRetries){
             $attempts++
             try{
-                $data | Export-Excel -Path $targetPath -WorksheetName $($category) -TableName $($category) -TableStyle Medium10 -Append -AutoSize
+                switch($type){
+                    "XLSX" {$data | Export-Excel -Path $targetPath -WorksheetName $($category) -TableName $($category) -TableStyle Medium10 -Append -AutoSize}
+                    "CSV" {$data | Export-Csv -Path $targetPath -NoTypeInformation -Append}
+                }
+                $attempts = $maxRetries
             }catch{
                 if($attempts -eq $maxRetries){
                     Throw
@@ -40,25 +45,18 @@ function add-toReport{
         switch($format){
             "XLSX" { 
                 $targetPath = $basePath.Replace("@@@","xlsx")
-                Export-ExcelWithRetry -targetPath $targetPath -category $category -data $permissions  
-                Export-ExcelWithRetry -targetPath $targetPath -category $Statistics -data $statistics          
+                if($permissions){
+                    Export-WithRetry -targetPath $targetPath -category $category -data $permissions  
+                }
+                if($statistics){
+                    Export-WithRetry -targetPath $targetPath -category "Statistics" -data $statistics          
+                }
                 Write-Host "XLSX report saved to $targetPath"
             }
             "CSV" { 
                 if($permissions){
                     $targetPath = $basePath.Replace(".@@@","$($category).csv")
-                    $attempts = 0
-                    while($attempts -lt $maxRetries){
-                        $attempts++
-                        try{
-                            $permissions | Export-Csv -Path $targetPath -NoTypeInformation -Append
-                            $attempts = $maxRetries
-                        }catch{
-                            if($attempts -eq $maxRetries){
-                                Throw
-                            }
-                        }
-                    }
+                    Export-WithRetry -targetPath $targetPath -category "Statistics" -data $statistics -type "CSV"
                     Write-Host "CSV report saved to $targetPath"
                 }else{
                     Write-Warning "No permissions found to save to CSV"
