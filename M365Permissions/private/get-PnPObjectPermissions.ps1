@@ -178,7 +178,7 @@ Function get-PnPObjectPermissions{
                     $ItemCounter = 0
                     foreach($allUniqueListItemID in $allUniqueListItemIDs){
                         $ItemCounter++
-                        Write-Progress -Id 3 -PercentComplete (($ItemCounter / $allUniqueListItemIDs.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItemIDs.Count)" -Status "Getting Metadata for each Unique Item Metadata"
+                        Write-Progress -Id 3 -PercentComplete (($ItemCounter / $allUniqueListItemIDs.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItemIDs.Count)" -Status "Getting Metadata for each Unique Item"
                         $allUniqueListItems += Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemID
                     }
 

@@ -40,7 +40,7 @@
 
     $counter = 1
     foreach($site in $sites){
-        Write-Progress -Id 1 -PercentComplete ($Counter / ($sites.Count) * 100) -Activity "Exporting Permissions from Site '$($site.Title)'" -Status "Processing site $counter / $($sites.Count)"
+        Write-Progress -Id 1 -PercentComplete (($Counter / $sites.Count) * 100) -Activity "Exporting Permissions from Site '$($site.Title)'" -Status "Processing site $counter / $($sites.Count)"
                     
         get-SpOPermissions -siteUrl $site.Url -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -ignoreCurrentUser:$ignoreCurrentUser.IsPresent
         $counter++

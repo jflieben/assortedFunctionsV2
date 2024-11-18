@@ -6,7 +6,7 @@
         
         Parameters:
         -expandGroups: if set, group memberships will be expanded to individual users
-        -maxDetail: if set, folder level permissions for each mailbox will be retrieved. This can be (very) slow
+        -includeFolderLevelPermissions: if set, folder level permissions for each mailbox will be retrieved. This can be (very) slow
         -outputFormat: 
             XLSX
             CSV
@@ -17,7 +17,7 @@
     Param(
         [Switch]$expandGroups,
         [Switch]$ignoreCurrentUser,
-        [Switch]$maxDetail,
+        [Switch]$includeFolderLevelPermissions,
         [parameter(Mandatory=$true)]
         [ValidateSet('XLSX','CSV','Default')]
         [String[]]$outputFormat
@@ -26,6 +26,9 @@
     $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
 
     Write-Host "Performing ExO scan using: $($currentUser.userPrincipalName)"
+    if($includeFolderLevelPermissions){
+        Write-Host "Including folder level permissions, this can take a VERY long time to complete. Get-ExOPermissions without -includeFolderLevelPermissions" -ForegroundColor Yellow
+    }
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Exchange Online" -Status "Retrieving all role assignments"
     $global:ExOPermissions = @{}
     $global:exoStatObjects = @()
@@ -40,10 +43,7 @@
         "Scan performed by" = $currentUser.userPrincipalName
     }
 
-    $params = @{
-        GetEffectiveUsers = $True
-    }
-    $assignedManagementRoles = $Null;$assignedManagementRoles = (New-ExOQuery -cmdlet "Get-ManagementRoleAssignment" -cmdParams $params)
+    $assignedManagementRoles = $Null;$assignedManagementRoles = (New-ExOQuery -cmdlet "Get-ManagementRoleAssignment" -cmdParams @{GetEffectiveUsers = $True})
 
     Write-Progress -Id 1 -PercentComplete 5 -Activity "Scanning Exchange Online" -Status "Parsing role assignments"
 
@@ -75,7 +75,7 @@
                     principalEntraId = "Unknown"
                     principalUpn = $assignedManagementRole.EffectiveUserName
                     principalName = "Unknown"
-                    principalType = "DELETED OBJECT"               
+                    principalType = "DELETED?"               
                     role = "$($assignedManagementRole.Role)"
                     through = "$($assignedManagementRole.RoleAssignee)"
                     kind = "$($assignedManagementRole.RoleAssignmentDelegationType)"
@@ -115,11 +115,12 @@
     }
 
     Write-Progress -Id 1 -PercentComplete 15 -Activity "Scanning Exchange Online" -Status "Retrieving mailboxes and other objects..."
-    $recipients = (New-ExOQuery -cmdlet "Get-Recipient" -cmdParams @{"ResultSize" = "Unlimited"}) 
+    $recipients = (New-ExOQuery -cmdlet "Get-Recipient" -cmdParams @{"ResultSize" = "Unlimited"}) | Where-Object{$_ -and !$_.Identity.StartsWith("DiscoverySearchMailbox")}
 
     Write-Progress -Id 1 -PercentComplete 35 -Activity "Scanning Exchange Online" -Status "Checking recipients for non default permissions..."
 
     $count = 0
+    $ignoredFolderTypes = @("RecoverableItemsSubstrateHolds","RecoverableItemsPurges","RecoverableItemsVersions","RecoverableItemsDeletions","RecoverableItemsDiscoveryHolds","Audits","CalendarLogging","RecoverableItemsRoot","Root","SyncIssues","Conflicts","LocalFailures","ServerFailures")
     foreach($recipient in $recipients){
         $count++
         $global:statObj."Total objects scanned"++
@@ -133,7 +134,7 @@
         #mailboxes have mailbox permissions
         if($recipient.RecipientTypeDetails -like "*Mailbox*" -and $recipient.RecipientTypeDetails -ne "GroupMailbox"){
             #get mailbox meta for SOB permissions
-            $mailbox = $Null; $mailbox = (New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{Identity = $recipient.Guid})
+            $mailbox = $Null; $mailbox = New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{Identity = $recipient.Guid}
             if($mailbox.GrantSendOnBehalfTo){
                 foreach($sendOnBehalf in $mailbox.GrantSendOnBehalfTo){
                     $entity = $Null; $entity= $recipients | Where-Object {$_.DisplayName -eq $sendOnBehalf}
@@ -168,8 +169,55 @@
                     }
                     New-ExOPermissionEntry @splat
                 }
-            }            
-        }    
+            }
+            #retrieve individual folder permissions if -includeFolderLevelPermissions is set
+            if($mailbox.UserPrincipalName -and $includeFolderLevelPermissions){
+                Write-Progress -Id 3 -PercentComplete 1 -Activity "Scanning folders" -Status "Retrieving folder list for $($mailbox.UserPrincipalName)"
+                try{
+                    $folders = $Null; $folders = Get-ExOMbxFolderStatistics -userPrincipalName $mailbox.UserPrincipalName
+                }catch{
+                    Write-Warning "Failed to retrieve folder list for $($mailbox.UserPrincipalName)"
+                }      
+
+                $folderCounter = 0
+                foreach($folder in $folders){
+                    $folderCounter++
+                    Write-Progress -Id 3 -PercentComplete (($folderCounter/$folders.Count)*100) -Activity "Scanning folders" -Status "Examining $($folder.Name) ($($folderCounter) of $($folders.Count))"
+                    
+                    $folderIdentity = $($folder.Identity.SubString($($folder.Identity.IndexOf("\")),$folder.Identity.Length-$folder.Identity.IndexOf("\")))
+                    if($ignoredFolderTypes -contains $folder.FolderType -or $folder.Name -in @("SearchDiscoveryHoldsFolder")){
+                        Write-Verbose "Ignoring folder $($folder.Name) as it is in the ignored list"
+                        continue
+                    }
+                    
+                    $targetFolderId = "$($mailbox.UserPrincipalName):$($folderIdentity)"
+                    try{
+                        $folderPermissions = $Null; $folderPermissions = (New-ExOQuery -cmdlet "Get-MailboxFolderPermission" -cmdParams @{Identity = $targetFolderId})
+                        foreach($folderPermission in $folderPermissions){
+                            if($folderPermission.AccessRights -notcontains "None"){
+                                foreach($AccessRight in $folderPermission.AccessRights){
+                                    $splat = @{
+                                        path = "/$($targetFolderId.Replace("\","/"))"
+                                        type = "MailboxFolder"
+                                        principalUpn = $Null
+                                        principalName = $folderPermission.User
+                                        principalEntraId = $Null
+                                        principalType = $Null
+                                        role = $AccessRight
+                                        through = "Direct"
+                                        kind = "Allow"
+                                    }
+                                    New-ExOPermissionEntry @splat
+                                }
+                            }
+                        }
+                    }catch{
+                        Write-Warning "Failed to retrieve folder permissions for $($targetFolderId)"
+                    }
+                }
+
+            }
+        }
         
         #all recipients can have recipient permissions
         $recipientPermissions = (New-ExOQuery -cmdlet "Get-RecipientPermission" -cmdParams @{"ResultSize" = "Unlimited"; "Identity" = $recipient.Guid}) | Where-Object {$_.Trustee -ne "NT Authority\SELF" }
@@ -215,27 +263,7 @@
         }
     }  
 
-    if((get-location).Path){
-        $basePath = Join-Path -Path (get-location).Path -ChildPath "M365Permissions.@@@"
-    }else{
-        $basePath = Join-Path -Path (Split-Path -Path $MyInvocation.MyCommand.Definition -Parent) -ChildPath "M365Permissions.@@@"
-    }
+    add-toReport -statistics $global:exoStatObjects -formats $outputFormat -permissions $permissionRows -category "Exo"
 
-    foreach($format in $outputFormat){
-        switch($format){
-            "XLSX" { 
-                $targetPath = $basePath.Replace("@@@","xlsx")
-                $permissionRows | Export-Excel -Path $targetPath -WorksheetName "ExOPermissions" -TableName "ExOPermissions" -TableStyle Medium10 -Append -AutoSize
-                $global:exoStatObjects | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
-                Write-Host "XLSX report saved to $targetPath"
-            }
-            "CSV" { 
-                $targetPath = $basePath.Replace(".@@@","-ExO.csv")
-                $permissionRows | Export-Csv -Path $targetPath -NoTypeInformation  -Append
-                Write-Host "CSV report saved to $targetPath"
-            }
-            "Default" { $permissionRows | out-gridview }
-        }
-    }
     Write-Progress -Id 1 -Completed -Activity "Scanning Exchange Online"
 }

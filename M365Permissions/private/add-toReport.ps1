@@ -18,6 +18,7 @@ function add-toReport{
             [parameter(Mandatory=$true)][string]$category,
             [parameter(Mandatory=$true)][object]$data
         )
+        $maxRetries = 30
         $attempts = 0
         while($attempts -lt $maxRetries){
             $attempts++
@@ -26,12 +27,15 @@ function add-toReport{
             }catch{
                 if($attempts -eq $maxRetries){
                     Throw
+                }else{
+                    Write-Verbose "File locked, waiting..."
+                    Start-Sleep -s 1
                 }
             }
         }      
     }
 
-    $maxRetries = 30
+    
     foreach($format in $formats){
         switch($format){
             "XLSX" { 
