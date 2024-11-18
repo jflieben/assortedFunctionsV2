@@ -12,20 +12,19 @@
             CSV
             Default (output to Out-GridView)
             Any combination of above is possible
-        -ignoreCurrentUser: do not add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
+        -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
         [Switch]$expandGroups,
-        [Switch]$ignoreCurrentUser,
+        [Switch]$includeCurrentUser,
         [Switch]$includeFolderLevelPermissions,
-        [parameter(Mandatory=$true)]
         [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat
+        [String[]]$outputFormat="XLSX"
     )
 
-    $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
+    $global:includeCurrentUser = $includeCurrentUser.IsPresent
 
-    Write-Host "Performing ExO scan using: $($currentUser.userPrincipalName)"
+    Write-Host "Performing ExO scan using: $($global:currentUser.userPrincipalName)"
     if($includeFolderLevelPermissions){
         Write-Host "Including folder level permissions, this can take a VERY long time to complete. Get-ExOPermissions without -includeFolderLevelPermissions" -ForegroundColor Yellow
     }
@@ -40,7 +39,7 @@
         "Total objects scanned" = 0
         "Scan start time" = Get-Date
         "Scan end time" = ""
-        "Scan performed by" = $currentUser.userPrincipalName
+        "Scan performed by" = $global:currentUser.userPrincipalName
     }
 
     $assignedManagementRoles = $Null;$assignedManagementRoles = (New-ExOQuery -cmdlet "Get-ManagementRoleAssignment" -cmdParams @{GetEffectiveUsers = $True})
@@ -111,7 +110,7 @@
         "Total objects scanned" = 0
         "Scan start time" = Get-Date
         "Scan end time" = ""
-        "Scan performed by" = $currentUser.userPrincipalName
+        "Scan performed by" = $global:currentUser.userPrincipalName
     }
 
     Write-Progress -Id 1 -PercentComplete 15 -Activity "Scanning Exchange Online" -Status "Retrieving mailboxes and other objects..."
@@ -181,6 +180,7 @@
 
                 $folderCounter = 0
                 foreach($folder in $folders){
+                    $global:statObj."Total objects scanned"++
                     $folderCounter++
                     Write-Progress -Id 3 -PercentComplete (($folderCounter/$folders.Count)*100) -Activity "Scanning folders" -Status "Examining $($folder.Name) ($($folderCounter) of $($folders.Count))"
                     

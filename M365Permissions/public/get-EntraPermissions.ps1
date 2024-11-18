@@ -11,23 +11,18 @@
             CSV
             Default (output to Out-GridView)
             Any combination of above is possible
-        -ignoreCurrentUser: do not add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
+        -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
         [Switch]$expandGroups,
-        [Switch]$ignoreCurrentUser,
-        [parameter(Mandatory=$true)]
+        [Switch]$includeCurrentUser,
         [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat
+        [String[]]$outputFormat="XLSX"
     )
 
-    if(!$global:currentUser){
-        $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
-    }
+    $global:includeCurrentUser = $includeCurrentUser.IsPresent
 
-    $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
-
-    Write-Host "Performing Entra scan using: $($currentUser.userPrincipalName)"
+    Write-Host "Performing Entra scan using: $($global:currentUser.userPrincipalName)"
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Entra ID" -Status "Retrieving role definitions"
     $global:EntraPermissions = @{}
 
@@ -38,7 +33,7 @@
         "Total objects scanned" = 0
         "Scan start time" = Get-Date
         "Scan end time" = ""
-        "Scan performed by" = $currentUser.userPrincipalName
+        "Scan performed by" = $global:currentUser.userPrincipalName
     }
 
     #get role definitions
@@ -109,7 +104,7 @@
         "Total objects scanned" = 0
         "Scan start time" = Get-Date
         "Scan end time" = ""
-        "Scan performed by" = $currentUser.userPrincipalName
+        "Scan performed by" = $global:currentUser.userPrincipalName
     }    
     Write-Progress -Id 1 -PercentComplete 45 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
     $groupMemberRows = @()

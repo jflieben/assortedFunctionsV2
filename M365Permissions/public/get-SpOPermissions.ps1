@@ -13,7 +13,7 @@
             CSV
             Default (output to Out-GridView)
             Any combination of above is possible
-        -ignoreCurrentUser: do not add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
+        -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
         [parameter(Mandatory=$true,
@@ -27,20 +27,17 @@
         $siteUrl, 
 
         [Switch]$expandGroups,
-        [parameter(Mandatory=$true)]
         [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat,
-        [Switch]$ignoreCurrentUser
+        [String[]]$outputFormat="XLSX",
+        [Switch]$includeCurrentUser
     )
 
-    $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
+    $global:includeCurrentUser = $includeCurrentUser.IsPresent
     if(!$global:tenantName){
         $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
     }
-    if(!$global:currentUser){
-        $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
-    }
-    Write-Host "Scanning $teamName $siteUrl as $($currentUser.userPrincipalName)"
+
+    Write-Host "Scanning $teamName $siteUrl as $($global:currentUser.userPrincipalName)"
 
     $spoBaseAdmUrl = "https://$($tenantName)-admin.sharepoint.com"
     Write-Verbose "Using Sharepoint base URL: $spoBaseAdmUrl"
@@ -110,13 +107,13 @@
             "Total objects scanned" = 0
             "Scan start time" = Get-Date
             "Scan end time" = ""
-            "Scan performed by" = $currentUser.userPrincipalName
+            "Scan performed by" = $global:currentUser.userPrincipalName
         }              
         $wasOwner = $False
         try{
-            if($site.Owners -notcontains $currentUser.userPrincipalName){
+            if($site.Owners -notcontains $global:currentUser.userPrincipalName){
                 Write-Host "Adding you as site collection owner to ensure all permissions can be read from $($site.Url)..."
-                Set-PnPTenantSite -Identity $site.Url -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
+                Set-PnPTenantSite -Identity $site.Url -Owners $global:currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
                 Write-Host "Owner added and marked for removal upon scan completion"
             }else{
                 $wasOwner = $True
@@ -151,7 +148,7 @@
         $statObjects += $global:statObj
         if(!$wasOwner){
             Write-Host "Cleanup: Removing you as site collection owner of $($site.Url)..."
-            Remove-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
+            Remove-PnPSiteCollectionAdmin -Owners $global:currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
             Write-Host "Cleanup: Owner removed"
         }          
     }

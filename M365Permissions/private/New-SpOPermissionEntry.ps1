@@ -14,7 +14,7 @@ Function New-SpOPermissionEntry{
         return $Null
     }
 
-    if($global:ignoreCurrentUser -and ($Permission.Email -eq $global:currentUser.userPrincipalName -or $Permission.Identity -like "*$($global:currentUser.userPrincipalName)*")){
+    if(!$global:includeCurrentUser -and ($Permission.Email -eq $global:currentUser.userPrincipalName -or $Permission.Identity -like "*$($global:currentUser.userPrincipalName)*")){
         Write-Verbose "Skipping permission $($Permission.Email) as it is the auditor account"
         return $Null
     }

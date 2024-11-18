@@ -35,17 +35,17 @@
 
     EXAMPLES:
 
-    Get-AllM365Permissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser
+    Get-AllM365Permissions -OutputFormat XLSX -expandGroups
     
     Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default
     
     Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV
     
-    get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites -ExcludeOtherSites
+    get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -IncludeOneDriveSites -ExcludeOtherSites
     
     Get-EntraPermissions -OutputFormat XLSX -expandGroups
 
-    Get-ExOPermissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser 
+    Get-ExOPermissions -OutputFormat XLSX -expandGroups -includeCurrentUser 
 
     Please note that this module is provided AS-IS, no guarantees or warranties provided. Use at your own risk."
 
