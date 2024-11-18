@@ -24,6 +24,7 @@ function get-AuthorizationCode{
     $targetUrl = "https://login.microsoftonline.com/common/oauth2/authorize?client_id=$($global:LCClientId)&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1985&response_mode=query&resource=https://graph.microsoft.com$($adminPrompt)"
 
     try{
+        Write-Verbose "Opening $targetUrl in your browser..."
         Start-Process $targetUrl
     }catch{
         Write-Host "Failed to open your browser, please go to $targetUrl"
@@ -34,7 +35,7 @@ function get-AuthorizationCode{
     $stream = $client.GetStream();$reader = New-Object System.IO.StreamReader($stream);$writer = New-Object System.IO.StreamWriter($stream);$requestLine = $reader.ReadLine()
     Start-Sleep -s 1
     if($requestLine.Split("?")[1].StartsWith("code")){
-        Write-Host "Authorization code received, retrieving access token..."
+        Write-Verbose "Authorization code received, retrieving refresh token..."
         $code = $requestLine.Split("?")[1].Split("=")[1].Split("&")[0]
     }else{
         Throw "Failed to receive auth code, please try again"
@@ -61,4 +62,5 @@ function get-AuthorizationCode{
     #retrieve the refresh token
     $authResponse = (Invoke-RestMethod @irmSplat)
     $global:LCRefreshToken = $authResponse.refresh_token
+    Write-Verbose "Refresh token cached until next module call :)"
 }

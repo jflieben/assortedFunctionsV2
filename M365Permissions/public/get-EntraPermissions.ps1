@@ -194,31 +194,8 @@
         }
     }
 
-    if((get-location).Path){
-        $basePath = Join-Path -Path (get-location).Path -ChildPath "M365Permissions.@@@"
-    }else{
-        $basePath = Join-Path -Path (Split-Path -Path $MyInvocation.MyCommand.Definition -Parent) -ChildPath "M365Permissions.@@@"
-    }
+    add-toReport -statistics $global:statObjRoles -formats $outputFormat -permissions $groupMemberRows -category "GroupsAndMembers"
+    add-toReport -statistics $global:statObjEntities -formats $outputFormat -permissions $permissionRows -category "Entra"
 
-    foreach($format in $outputFormat){
-        switch($format){
-            "XLSX" { 
-                $targetPath = $basePath.Replace("@@@","xlsx")
-                $groupMemberRows | Export-Excel -Path $targetPath -WorksheetName "EntraGroupMembers" -TableName "EntraGroupMembers" -TableStyle Medium10 -AutoSize
-                $permissionRows | Export-Excel -Path $targetPath -WorksheetName "EntraPermissions" -TableName "EntraPermissions" -TableStyle Medium10 -Append -AutoSize
-                $global:statObjRoles | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
-                $global:statObjEntities | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
-                Write-Host "XLSX report saved to $targetPath"
-            }
-            "CSV" { 
-                $targetPath = $basePath.Replace(".@@@","-EntraGroupMembers.csv")
-                $groupMemberRows | Export-Csv -Path $targetPath -NoTypeInformation -Append
-                $targetPath = $basePath.Replace(".@@@","-Entra.csv")
-                $permissionRows | Export-Csv -Path $targetPath -NoTypeInformation -Append
-                Write-Host "CSV report saved to $targetPath"
-            }
-            "Default" { $permissionRows | out-gridview }
-        }
-    }
     Write-Progress -Id 1 -Completed -Activity "Scanning Entra ID"
 }

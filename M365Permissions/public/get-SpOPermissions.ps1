@@ -177,27 +177,5 @@
         }
     }
 
-    if((get-location).Path){
-        $basePath = Join-Path -Path (get-location).Path -ChildPath "M365Permissions.@@@"
-    }else{
-        $basePath = Join-Path -Path (Split-Path -Path $MyInvocation.MyCommand.Definition -Parent) -ChildPath "M365Permissions.@@@"
-    }
-
-    foreach($format in $outputFormat){
-        switch($format){
-            "XLSX" { 
-                $targetPath = $basePath.Replace("@@@","xlsx")
-                $permissionRows | Export-Excel -Path $targetPath -WorksheetName "SpOPermissions" -TableName "SpOPermissions" -TableStyle Medium10 -Append -AutoSize
-                $statObjects | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
-                Write-Host "XLSX report saved to $targetPath"
-            }
-            "CSV" { 
-                $targetPath = $basePath.Replace("@@@","-SpO.csv")
-                $permissionRows | Export-Csv -Path $targetPath -NoTypeInformation  -Append
-                Write-Host "CSV report saved to $targetPath"
-            }
-
-            "Default" { $permissionRows | out-gridview }
-        }
-    }
+    add-toReport -statistics $statObjects -formats $outputFormat -permissions $permissionRows -category "SpO"
 }
