@@ -22,7 +22,7 @@
 
     $global:includeCurrentUser = $includeCurrentUser.IsPresent
 
-    Write-Host "Performing Entra scan using: $($global:currentUser.userPrincipalName)"
+    Write-Host "Starting Entra scan..."
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Entra ID" -Status "Retrieving role definitions"
     $global:EntraPermissions = @{}
 
