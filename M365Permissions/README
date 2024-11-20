@@ -16,7 +16,7 @@ get-AllSPOPermissions -expandGroups -IncludeOneDriveSites -ExcludeOtherSites
 
 Get-EntraPermissions -OutputFormat CSV -expandGroups
 
-Get-ExOPermissions
+Get-AllExOPermissions -includeFolderLevelPermissions
 
 WARNING:
 Please note that this module is provided AS-IS, no guarantees or warranties provided. Use at your own risk.

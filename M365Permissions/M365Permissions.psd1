@@ -6,7 +6,7 @@
     ModuleVersion        = "1.0.4"
     
     # Supported PSEditions
-    CompatiblePSEditions = @('Desktop', 'Core')
+    CompatiblePSEditions = @('Core')
 
     # ID used to uniquely identify this module
     GUID                 = "748c97a1-b861-4bc5-8455-53494b565526"
@@ -35,22 +35,24 @@
 
     EXAMPLES:
 
-    Get-AllM365Permissions -OutputFormat XLSX -expandGroups
+    Get-AllM365Permissions -expandGroups
     
-    Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default
+    Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups
     
     Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV
     
-    get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -IncludeOneDriveSites -ExcludeOtherSites
+    get-AllSPOPermissions -ExpandGroups -IncludeOneDriveSites -ExcludeOtherSites
     
-    Get-EntraPermissions -OutputFormat XLSX -expandGroups
+    Get-EntraPermissions -expandGroups
 
-    Get-ExOPermissions -OutputFormat XLSX -expandGroups -includeCurrentUser 
+    Get-AllExOPermissions -includeFolderLevelPermissions
+
+    Get-ExOPermissions -recipientIdentity `$mailbox.Identity -includeFolderLevelPermissions
 
     Please note that this module is provided AS-IS, no guarantees or warranties provided. Use at your own risk."
 
     # Minimum version of the Windows PowerShell engine required by this module
-    PowerShellVersion    = '5.1'
+    PowerShellVersion    = '7.4'
 
     # Modules that must be imported into the global environment prior to importing this module
     RequiredModules      = @(

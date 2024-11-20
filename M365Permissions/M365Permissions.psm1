@@ -15,6 +15,7 @@
     .ROADMAP
     1.0.x Add support for PowerBI
     1.0.x Add support for App-Only authentication
+    1.0.x Add multi-threading options for mailbox folder scanning
 #>
 
 $helperFunctions = @{
@@ -60,9 +61,11 @@ Write-Host ""
 $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
 Write-Host "Thank you $($global:currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
 Write-Host ""
-Write-Host ">> Get-AllM365Permissions -OutputFormat XLSX -expandGroups -includeCurrentUser" -ForegroundColor Magenta
+Write-Host ">> Get-AllM365Permissions -expandGroups -includeCurrentUser" -ForegroundColor Magenta
 
-Write-Host ">> Get-ExOPermissions -OutputFormat XLSX" -ForegroundColor Magenta
+Write-Host ">> Get-AllExOPermissions -includeFolderLevelPermissions" -ForegroundColor Magenta
+
+Write-Host ">> Get-ExOPermissions -recipientIdentity `$mailbox.Identity -includeFolderLevelPermissions" -ForegroundColor Magenta
 
 Write-Host ">> Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default" -ForegroundColor Magenta
 
