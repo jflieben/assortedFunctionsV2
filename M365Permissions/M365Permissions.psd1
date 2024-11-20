@@ -43,7 +43,7 @@
     
     get-AllSPOPermissions -ExpandGroups -IncludeOneDriveSites -ExcludeOtherSites
     
-    Get-EntraPermissions -expandGroups
+    get-AllEntraPermissions -expandGroups
 
     Get-AllExOPermissions -includeFolderLevelPermissions
 

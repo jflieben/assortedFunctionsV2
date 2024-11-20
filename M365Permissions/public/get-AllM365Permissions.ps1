@@ -18,7 +18,7 @@
     Write-Host "3. Onedrive permissions"
     Write-Host "4. Teams and Sharepoint permissions"
 
-    get-EntraPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent
+    get-AllEntraPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent
     get-AllExOPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent -includeFolderLevelPermissions
     get-AllSpOPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent -includeOnedriveSites
 }

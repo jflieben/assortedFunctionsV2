@@ -1,4 +1,4 @@
-﻿Function get-EntraPermissions{
+﻿Function get-AllEntraPermissions{
     <#
         Author               = "Jos Lieben (jos@lieben.nu)"
         CompanyName          = "Lieben Consultancy"

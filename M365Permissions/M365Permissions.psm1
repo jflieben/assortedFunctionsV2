@@ -73,4 +73,4 @@ Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFo
 
 Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
 
-Write-Host ">> Get-EntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta
+Write-Host ">> get-AllEntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta
