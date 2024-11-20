@@ -51,13 +51,13 @@ function add-toReport{
                 if($statistics){
                     Export-WithRetry -targetPath $targetPath -category "Statistics" -data $statistics          
                 }
-                Write-Host "XLSX report saved to $targetPath"
+                Write-Host "$category line written to $targetPath"
             }
             "CSV" { 
                 if($permissions){
                     $targetPath = $basePath.Replace(".@@@","$($category).csv")
                     Export-WithRetry -targetPath $targetPath -category "Statistics" -data $statistics -type "CSV"
-                    Write-Host "CSV report saved to $targetPath"
+                    Write-Host "$category line written to $targetPath"
                 }else{
                     Write-Warning "No permissions found to save to CSV"
                 }

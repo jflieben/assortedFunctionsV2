@@ -66,7 +66,8 @@ function New-GraphQuery {
                 $attempts ++
                 try {
                     [System.GC]::Collect()        
-                    $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -Body $Body -ContentType 'application/json; charset=utf-8' -ErrorAction Stop)
+                    $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -Body $Body -ContentType 'application/json; charset=utf-8' -ErrorAction Stop -Verbose:$False)
+                    $attempts = $MaxAttempts
                 }
                 catch {
                     if ($attempts -ge $MaxAttempts) { 

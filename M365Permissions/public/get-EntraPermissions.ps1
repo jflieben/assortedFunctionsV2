@@ -168,8 +168,6 @@
 
     Write-Progress -Id 1 -PercentComplete 90 -Activity "Scanning Entra ID" -Status "Writing report..."
 
-
-    Write-Host "All permissions retrieved, writing reports..."
     $permissionRows = foreach($row in $global:EntraPermissions.Keys){
         foreach($permission in $global:EntraPermissions.$row){
             [PSCustomObject]@{

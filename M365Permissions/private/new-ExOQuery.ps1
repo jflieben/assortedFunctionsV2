@@ -50,7 +50,7 @@ function New-ExOQuery {
             $attempts = 0
             while ($attempts -lt $retryCount) {
                 try {
-                    $Data = Invoke-RestMethod -Uri $nextURL -Method POST -Body $ExoBody -Headers $Headers              
+                    $Data = Invoke-RestMethod -Uri $nextURL -Method POST -Body $ExoBody -Headers $Headers -Verbose:$false         
                     $attempts = $retryCount
                 }catch {
                     $attempts++
