@@ -13,7 +13,7 @@
             CSV
             Default (output to Out-GridView)
             Any combination of above is possible
-        -ignoreCurrentUser: do not add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
+        -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
         [parameter(Mandatory=$true,
@@ -27,20 +27,17 @@
         $siteUrl, 
 
         [Switch]$expandGroups,
-        [parameter(Mandatory=$true)]
         [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat,
-        [Switch]$ignoreCurrentUser
+        [String[]]$outputFormat="XLSX",
+        [Switch]$includeCurrentUser
     )
 
-    $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
+    $global:includeCurrentUser = $includeCurrentUser.IsPresent
     if(!$global:tenantName){
         $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
     }
-    if(!$global:currentUser){
-        $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
-    }
-    Write-Host "Scanning $teamName $siteUrl as $($currentUser.userPrincipalName)"
+
+    Write-Host "Starting SpO Scan of $teamName $siteUrl"
 
     $spoBaseAdmUrl = "https://$($tenantName)-admin.sharepoint.com"
     Write-Verbose "Using Sharepoint base URL: $spoBaseAdmUrl"
@@ -52,7 +49,7 @@
     if(!$sites){
         $sites = @(Get-PnPTenantSite -IncludeOneDriveSites -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
             $_.Template -NotIn $ignoredSiteTypes -and
-            ($Null -ne $teamName -and $_.Title -eq $teamName) -or ($Null -ne $siteUrl -and $_.Url -eq $siteUrl)
+            ($Null -ne $teamName -and $_.Title -eq $teamName -and $_.Template -notlike "*CHANNEL*") -or ($Null -ne $siteUrl -and $_.Url -eq $siteUrl)
         })
     }
 
@@ -83,17 +80,17 @@
         }
         foreach($channel in $channels){
             if($channel.filesFolderWebUrl){
-                $targetUrl = $Null; $targetUrl ="https://$($tenantName).sharepoint.com/sites/$($channel.filesFolderWebUrl.Split("/")[4])"
+                $targetUrl = $Null; $targetUrl ="https://$($tenantName).sharepoint.com/$($channel.filesFolderWebUrl.Split("/")[3])/$($channel.filesFolderWebUrl.Split("/")[4])"
             }
             if($targetUrl -and $sites.Url -notcontains $targetUrl){
                 try{
-                    Write-Host "Adding Channel $($channel.displayName) with URL $targetUrl to scan list"
+                    Write-Host "Adding Channel $($channel.displayName) with URL $targetUrl to scan list as it has its own site"
                     $extraSite = $Null; $extraSite = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $targetUrl
                     if($extraSite -and $extraSite.Template -NotIn $ignoredSiteTypes){
                         $sites += $extraSite
                     }
                 }catch{
-                    Write-Error "Failed to add Channel $($channel.displayName) with URL $targetUrl to scan list because Get-PnPTenantSite failed with $_" -ErrorAction Continue
+                    Write-Error "Failed to add Channel $($channel.displayName) with URL $targetUrl to scan list. It may have been deleted, because Get-PnPTenantSite failed with $_" -ErrorAction Continue
                 }
             }          
         }
@@ -110,13 +107,13 @@
             "Total objects scanned" = 0
             "Scan start time" = Get-Date
             "Scan end time" = ""
-            "Scan performed by" = $currentUser.userPrincipalName
+            "Scan performed by" = $global:currentUser.userPrincipalName
         }              
         $wasOwner = $False
         try{
-            if($site.Owners -notcontains $currentUser.userPrincipalName){
+            if($site.Owners -notcontains $global:currentUser.userPrincipalName){
                 Write-Host "Adding you as site collection owner to ensure all permissions can be read from $($site.Url)..."
-                Set-PnPTenantSite -Identity $site.Url -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
+                Set-PnPTenantSite -Identity $site.Url -Owners $global:currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
                 Write-Host "Owner added and marked for removal upon scan completion"
             }else{
                 $wasOwner = $True
@@ -151,7 +148,7 @@
         $statObjects += $global:statObj
         if(!$wasOwner){
             Write-Host "Cleanup: Removing you as site collection owner of $($site.Url)..."
-            Remove-PnPSiteCollectionAdmin -Owners $currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
+            Remove-PnPSiteCollectionAdmin -Owners $global:currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
             Write-Host "Cleanup: Owner removed"
         }          
     }
@@ -177,27 +174,5 @@
         }
     }
 
-    if((get-location).Path){
-        $basePath = Join-Path -Path (get-location).Path -ChildPath "M365Permissions.@@@"
-    }else{
-        $basePath = Join-Path -Path (Split-Path -Path $MyInvocation.MyCommand.Definition -Parent) -ChildPath "M365Permissions.@@@"
-    }
-
-    foreach($format in $outputFormat){
-        switch($format){
-            "XLSX" { 
-                $targetPath = $basePath.Replace("@@@","xlsx")
-                $permissionRows | Export-Excel -Path $targetPath -WorksheetName "TeamPermissions" -TableName "TeamPermissions" -TableStyle Medium10 -Append -AutoSize
-                $statObjects | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
-                Write-Host "XLSX report saved to $targetPath"
-            }
-            "CSV" { 
-                $targetPath = $basePath.Replace("@@@","-SpO.csv")
-                $permissionRows | Export-Csv -Path $targetPath -NoTypeInformation  -Append
-                Write-Host "CSV report saved to $targetPath"
-            }
-
-            "Default" { $permissionRows | out-gridview }
-        }
-    }
+    add-toReport -statistics $statObjects -formats $outputFormat -permissions $permissionRows -category "SpO"
 }

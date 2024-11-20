@@ -175,17 +175,20 @@ Function get-PnPObjectPermissions{
                     Write-Verbose "List contains $($List.ItemCount) items"
                     $allListItems = $Null; $allListItems = New-GraphQuery -resource "https://www.sharepoint.com" -Uri "$($Object.Url)/_api/web/lists/getbyid('$($List.Id.Guid)')/items?`$select=ID,HasUniqueRoleAssignments&`$top=5000&`$format=json" -Method GET -expectedTotalResults $List.ItemCount
                     $allUniqueListItemIDs = $Null; $allUniqueListItemIDs = @($allListItems | Where-Object { $_.HasUniqueRoleAssignments -eq $True }) | select -ExpandProperty Id
+                    $ItemCounter = 0
                     foreach($allUniqueListItemID in $allUniqueListItemIDs){
+                        $ItemCounter++
+                        Write-Progress -Id 3 -PercentComplete (($ItemCounter / $allUniqueListItemIDs.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItemIDs.Count)" -Status "Getting Metadata for each Unique Item"
                         $allUniqueListItems += Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemID
                     }
 
                     $ItemCounter = 0
                     ForEach($ListItem in $allUniqueListItems){
                         $ItemCounter++
-                        Write-Progress -Id 3 -PercentComplete ($ItemCounter / ($allUniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItems.ItemCount)" -Status "Searching for Unique Permissions"
+                        Write-Progress -Id 3 -PercentComplete (($ItemCounter / $allUniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItems.Count)" -Status "Searching for Unique Permissions"
                         get-PnPObjectPermissions -Object $ListItem -siteUrl $siteUrl
                     }
-                    Write-Progress -Id 3 -Completed -Activity "Processing Item $ItemCounter of $($allUniqueListItems.ItemCount)"
+                    Write-Progress -Id 3 -Completed -Activity "Processing Item $ItemCounter of $($allUniqueListItems.Count)"
                 }else{
                     Write-Verbose "Skipping $($List.Title) as it is hidden, empty or excluded"
                 }

@@ -1,4 +1,4 @@
-﻿Function get-EntraPermissions{
+﻿Function get-AllEntraPermissions{
     <#
         Author               = "Jos Lieben (jos@lieben.nu)"
         CompanyName          = "Lieben Consultancy"
@@ -11,23 +11,18 @@
             CSV
             Default (output to Out-GridView)
             Any combination of above is possible
-        -ignoreCurrentUser: do not add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
+        -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
         [Switch]$expandGroups,
-        [Switch]$ignoreCurrentUser,
-        [parameter(Mandatory=$true)]
+        [Switch]$includeCurrentUser,
         [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat
+        [String[]]$outputFormat="XLSX"
     )
 
-    if(!$global:currentUser){
-        $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
-    }
+    $global:includeCurrentUser = $includeCurrentUser.IsPresent
 
-    $global:ignoreCurrentUser = $ignoreCurrentUser.IsPresent
-
-    Write-Host "Performing Entra scan using: $($currentUser.userPrincipalName)"
+    Write-Host "Starting Entra scan..."
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Entra ID" -Status "Retrieving role definitions"
     $global:EntraPermissions = @{}
 
@@ -38,7 +33,7 @@
         "Total objects scanned" = 0
         "Scan start time" = Get-Date
         "Scan end time" = ""
-        "Scan performed by" = $currentUser.userPrincipalName
+        "Scan performed by" = $global:currentUser.userPrincipalName
     }
 
     #get role definitions
@@ -67,7 +62,12 @@
     Write-Progress -Id 1 -PercentComplete 25 -Activity "Scanning Entra ID" -Status "Retrieving flexible assigments"
 
     #get eligible role assignments
-    $roleEligibilities = (New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleInstances' -Method GET | Where-Object {$_})
+    try{
+        $roleEligibilities = (New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilityScheduleInstances' -Method GET -NoRetry | Where-Object {$_})
+    }catch{
+        Write-Warning "Failed to retrieve flexible assignments, this is fine if you don't use PIM and/or don't have P2 licensing. Error details: $_"
+        $roleEligibilities = @()
+    }
 
     Write-Progress -Id 1 -PercentComplete 35 -Activity "Scanning Entra ID" -Status "Processing flexible assigments"
 
@@ -104,7 +104,7 @@
         "Total objects scanned" = 0
         "Scan start time" = Get-Date
         "Scan end time" = ""
-        "Scan performed by" = $currentUser.userPrincipalName
+        "Scan performed by" = $global:currentUser.userPrincipalName
     }    
     Write-Progress -Id 1 -PercentComplete 45 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
     $groupMemberRows = @()
@@ -168,8 +168,6 @@
 
     Write-Progress -Id 1 -PercentComplete 90 -Activity "Scanning Entra ID" -Status "Writing report..."
 
-
-    Write-Host "All permissions retrieved, writing reports..."
     $permissionRows = foreach($row in $global:EntraPermissions.Keys){
         foreach($permission in $global:EntraPermissions.$row){
             [PSCustomObject]@{
@@ -189,31 +187,8 @@
         }
     }
 
-    if((get-location).Path){
-        $basePath = Join-Path -Path (get-location).Path -ChildPath "M365Permissions.@@@"
-    }else{
-        $basePath = Join-Path -Path (Split-Path -Path $MyInvocation.MyCommand.Definition -Parent) -ChildPath "M365Permissions.@@@"
-    }
+    add-toReport -statistics $global:statObjRoles -formats $outputFormat -permissions $groupMemberRows -category "GroupsAndMembers"
+    add-toReport -statistics $global:statObjEntities -formats $outputFormat -permissions $permissionRows -category "Entra"
 
-    foreach($format in $outputFormat){
-        switch($format){
-            "XLSX" { 
-                $targetPath = $basePath.Replace("@@@","xlsx")
-                $groupMemberRows | Export-Excel -Path $targetPath -WorksheetName "EntraGroupMembers" -TableName "EntraGroupMembers" -TableStyle Medium10 -AutoSize
-                $permissionRows | Export-Excel -Path $targetPath -WorksheetName "EntraPermissions" -TableName "EntraPermissions" -TableStyle Medium10 -Append -AutoSize
-                $global:statObjRoles | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
-                $global:statObjEntities | Export-Excel -Path $targetPath -WorksheetName "Statistics" -TableName "Statistics" -TableStyle Medium10 -Append -AutoSize
-                Write-Host "XLSX report saved to $targetPath"
-            }
-            "CSV" { 
-                $targetPath = $basePath.Replace(".@@@","-EntraGroupMembers.csv")
-                $groupMemberRows | Export-Csv -Path $targetPath -NoTypeInformation -Append
-                $targetPath = $basePath.Replace(".@@@","-Entra.csv")
-                $permissionRows | Export-Csv -Path $targetPath -NoTypeInformation -Append
-                Write-Host "CSV report saved to $targetPath"
-            }
-            "Default" { $permissionRows | out-gridview }
-        }
-    }
     Write-Progress -Id 1 -Completed -Activity "Scanning Entra ID"
 }

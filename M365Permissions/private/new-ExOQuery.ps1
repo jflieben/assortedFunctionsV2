@@ -10,7 +10,7 @@ function New-ExOQuery {
         [parameter(Mandatory = $True)]$cmdlet,
         $cmdParams,
         [Switch]$NoPagination,
-        $retryCount = 1
+        $retryCount = 3
     )
     $token = Get-AccessToken -Resource "https://outlook.office365.com"
     if ($cmdParams) {
@@ -18,7 +18,7 @@ function New-ExOQuery {
     }else {
         $Params = @{}
     }
-
+    
     $ExoBody = ConvertTo-Json -Depth 15 -InputObject @{
         CmdletInput = @{
             CmdletName = $cmdlet
@@ -29,10 +29,18 @@ function New-ExOQuery {
     if(!$global:OnMicrosoft){
         $global:OnMicrosoft = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' | Where-Object -Property isInitial -EQ $true).id
     }
-    
+
     $Headers = @{ 
         Authorization     = "Bearer $token"
+        "Accept-Charset"   = "UTF-8"
+        "X-ResponseFormat" = "json"
+        "Accept" = "application/json"
+        "X-ClientApplication" ="ExoManagementModule"
+        "Prefer" = "odata.maxpagesize=1000"
+        "X-CmdletName"= $cmdlet
+        "X-SerializationLevel" = "Partial"
         'X-AnchorMailbox' = "UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@$($global:OnMicrosoft)"
+        "Content-Type" = "application/json"
     }
 
     $nextURL = "https://outlook.office365.com/adminapi/beta/$($global:OnMicrosoft)/InvokeCommand"
@@ -42,7 +50,7 @@ function New-ExOQuery {
             $attempts = 0
             while ($attempts -lt $retryCount) {
                 try {
-                    $Data = Invoke-RestMethod -Uri $nextURL -Method POST -Body $ExoBody -Headers $Headers -ContentType 'application/json; charset=utf-8'              
+                    $Data = Invoke-RestMethod -Uri $nextURL -Method POST -Body $ExoBody -Headers $Headers -Verbose:$false         
                     $attempts = $retryCount
                 }catch {
                     $attempts++

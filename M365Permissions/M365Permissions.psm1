@@ -13,9 +13,9 @@
     https://www.lieben.nu/liebensraum/m365permissions
 
     .ROADMAP
-    1.0.4 Add mailbox folder level permissions
     1.0.x Add support for PowerBI
     1.0.x Add support for App-Only authentication
+    1.0.x Add multi-threading options for mailbox folder scanning
 #>
 
 $helperFunctions = @{
@@ -44,6 +44,7 @@ $global:LCRefreshToken = $Null
 $global:LCCachedTokens = @{}
 $global:performanceDebug = $False
 $global:OnMicrosoft = $Null
+$global:includeCurrentUser = $False
 $global:moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
 
 if ($helperFunctions.public) { Export-ModuleMember -Alias * -Function @($helperFunctions.public.BaseName) }
@@ -58,16 +59,18 @@ Write-Host ""
 Write-Host "Prompting for delegated (safe/non persistent) AAD auth..."
 Write-Host ""
 $global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
-Write-Host "Thank you $($currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
+Write-Host "Thank you $($global:currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
 Write-Host ""
-Write-Host ">> Get-AllM365Permissions -OutputFormat XLSX -expandGroups -ignoreCurrentUser" -ForegroundColor Magenta
+Write-Host ">> Get-AllM365Permissions -expandGroups -includeCurrentUser" -ForegroundColor Magenta
 
-Write-Host ">> Get-ExOPermissions -OutputFormat XLSX" -ForegroundColor Magenta
+Write-Host ">> Get-AllExOPermissions -includeFolderLevelPermissions" -ForegroundColor Magenta
+
+Write-Host ">> Get-ExOPermissions -recipientIdentity `$mailbox.Identity -includeFolderLevelPermissions" -ForegroundColor Magenta
 
 Write-Host ">> Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default" -ForegroundColor Magenta
 
 Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV" -ForegroundColor Magenta
 
-Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -ignoreCurrentUser -IncludeOneDriveSites" -ForegroundColor Magenta
+Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
 
-Write-Host ">> Get-EntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta
+Write-Host ">> get-AllEntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta

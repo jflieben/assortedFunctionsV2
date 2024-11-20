@@ -6,21 +6,19 @@
     #>         
     Param(
         [Switch]$expandGroups,
-        [Switch]$ignoreCurrentUser,
-        [parameter(Mandatory=$true)]
-        [ValidateSet('XLSX','CSV')]
-        [String[]]$outputFormat
+        [Switch]$includeCurrentUser,
+        [ValidateSet('XLSX','CSV','Default')]
+        [String[]]$outputFormat="XLSX"
     )
 
-    $currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
-    Write-Host "Starting FULL M365 Tenant scan as $($currentUser.userPrincipalName)"
+    Write-Host "Starting FULL M365 Tenant scan as $($global:currentUser.userPrincipalName)"
     Write-Host "Planned scan order:"
     Write-Host "1. Entra permissions"
     Write-Host "2. Exchange permissions"
     Write-Host "3. Onedrive permissions"
     Write-Host "4. Teams and Sharepoint permissions"
 
-    get-ExOPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -ignoreCurrentUser:$ignoreCurrentUser.IsPresent
-    get-EntraPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -ignoreCurrentUser:$ignoreCurrentUser.IsPresent
-    get-AllSpOPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -ignoreCurrentUser:$ignoreCurrentUser.IsPresent -includeOnedriveSites
+    get-AllEntraPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent
+    get-AllExOPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent -includeFolderLevelPermissions
+    get-AllSpOPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent -includeOnedriveSites
 }
