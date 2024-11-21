@@ -25,16 +25,7 @@
     Write-Host "Starting Entra scan..."
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Entra ID" -Status "Retrieving role definitions"
     $global:EntraPermissions = @{}
-
-    $global:statObjRoles = [PSCustomObject]@{
-        "Module version" = $global:moduleVersion
-        "Category" = "Entra"
-        "Subject" = "Roles"
-        "Total objects scanned" = 0
-        "Scan start time" = Get-Date
-        "Scan end time" = ""
-        "Scan performed by" = $global:currentUser.userPrincipalName
-    }
+    New-StatisticsObject -category "Entra" -subject "Roles"
 
     #get role definitions
     $roleDefinitions = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/directoryRoleTemplates' -Method GET
@@ -52,9 +43,11 @@
         if($principalType -eq "group" -and $expandGroups){
             $groupMembers = get-entraGroupMembers -groupId $principal.id        
             foreach($groupMember in $groupMembers){
+                Update-StatisticsObject -category "Entra" -subject "Roles"
                 New-EntraPermissionEntry -path $roleAssignment.directoryScopeId -type "PermanentRole" -principalId $groupMember.id -roleDefinitionId $roleAssignment.roleDefinitionId -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupMember."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName -through "SecurityGroup" -parent $roleAssignment.principal.id
             }
         }else{
+            Update-StatisticsObject -category "Entra" -subject "Roles"
             New-EntraPermissionEntry -path $roleAssignment.directoryScopeId -type "PermanentRole" -principalId $roleAssignment.principal.id -roleDefinitionId $roleAssignment.roleDefinitionId -principalName $roleAssignment.principal.displayName -principalUpn $roleAssignment.principal.userPrincipalName -principalType $principalType -roleDefinitionName $roleDefinition.displayName
         }
     }
@@ -87,31 +80,28 @@
         if($principalType -eq "group" -and $expandGroups){
             $groupMembers = get-entraGroupMembers -groupId $principal.id
             foreach($groupMember in $groupMembers){
+                Update-StatisticsObject -category "Entra" -subject "Roles"
                 New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "Eligible" -principalId $groupMember.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupMember."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.startDateTime -endDateTime $roleEligibility.endDateTime -parent $principal.id -through "SecurityGroup"
             }
         }else{
+            Update-StatisticsObject -category "Entra" -subject "Roles"
             New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "Eligible" -principalId $principal.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $principal.displayName -principalUpn $principal.userPrincipalName -principalType $principalType -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.startDateTime -endDateTime $roleEligibility.endDateTime
         }
     }
+
+    Stop-statisticsObject -category "Entra" -subject "Roles"
+
     Write-Progress -Id 2 -Completed -Activity "Processing flexible assignments"
-    $global:statObjRoles."Scan end time" = Get-Date    
+    
+    New-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
 
-
-    $global:statObjEntities = [PSCustomObject]@{
-        "Module version" = $global:moduleVersion
-        "Category" = "Entra"
-        "Subject" = "Entities"
-        "Total objects scanned" = 0
-        "Scan start time" = Get-Date
-        "Scan end time" = ""
-        "Scan performed by" = $global:currentUser.userPrincipalName
-    }    
     Write-Progress -Id 1 -PercentComplete 45 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
     $groupMemberRows = @()
     $allGroups = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/groups' -Method GET
     $count = 0
     foreach($group in $allGroups){
         $count++
+        Update-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
         Write-Progress -Id 2 -PercentComplete $(try{$count / $allGroups.Count *100}catch{1}) -Activity "Processing groups" -Status "[$count / $($allGroups.Count)] $($group.displayName)"
 
         if($group.groupTypes -contains "Unified"){
@@ -132,7 +122,7 @@
         }
         $groupMembers = $Null; $groupMembers = get-entraGroupMembers -groupId $group.id
         foreach($groupMember in $groupMembers){
-            $global:statObjEntities."Total objects scanned"++
+            Update-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
             $memberRoles = "Member"
             if($groupOwners.id -contains $groupMember.id){
                 $memberRoles = "Member, Owner"
@@ -148,7 +138,7 @@
             }
         }
         foreach($groupOwner in $groupOwners){
-            $global:statObjEntities."Total objects scanned"++
+            Update-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
             if($groupMemberRows.MemberID -notcontains $groupOwner.id){
                 $groupMemberRows += [PSCustomObject]@{
                     "GroupName" = $group.displayName
@@ -164,7 +154,7 @@
     }
     
     Write-Progress -Id 2 -Completed -Activity "Processing groups"
-    $global:statObjEntities."Scan end time" = Get-Date
+    Stop-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
 
     Write-Progress -Id 1 -PercentComplete 90 -Activity "Scanning Entra ID" -Status "Writing report..."
 
@@ -187,8 +177,8 @@
         }
     }
 
-    add-toReport -statistics $global:statObjRoles -formats $outputFormat -permissions $groupMemberRows -category "GroupsAndMembers"
-    add-toReport -statistics $global:statObjEntities -formats $outputFormat -permissions $permissionRows -category "Entra"
+    add-toReport -formats $outputFormat -permissions $groupMemberRows -category "GroupsAndMembers" -subject "Entities"
+    add-toReport -formats $outputFormat -permissions $permissionRows -category "Entra" -subject "Roles"
 
     Write-Progress -Id 1 -Completed -Activity "Scanning Entra ID"
 }

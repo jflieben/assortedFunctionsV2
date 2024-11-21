@@ -61,14 +61,7 @@
         $site = $sites[0]
     }
 
-    if($site.GroupId.Guid -eq "00000000-0000-0000-0000-000000000000"){
-        $groupId = $Null
-        Write-Host "Site is not connected to a group and is likely not a Team site."
-    }else{
-        $groupId = $site.GroupId.Guid
-        Write-Host "Site is connected to a group with ID: $groupId"
-    }
-
+    $groupId = if($site.GroupId.Guid -ne "00000000-0000-0000-0000-000000000000"){$site.GroupId.Guid}else{$null}
     if($groupId){
         try{
             Write-Host "Retrieving channels for this site/team..."
@@ -96,19 +89,21 @@
         }
     }
 
-    $global:SPOPermissions = @{}
-    $statObjects = @()
+    foreach($site in $sites){
+        $global:SPOPermissions = @{}
+        $groupId = if($site.GroupId.Guid -ne "00000000-0000-0000-0000-000000000000"){$site.GroupId.Guid}else{$null}
+        $siteCategory = "SharePoint"
+        if($groupId){
+            $siteCategory = "Teams"
+            Write-Host "Site is connected to a group will be categorized as Teams site"
+        }
+        if($site.Url -like "*-my.sharepoint.com"){
+            $siteCategory = "OneDrive"
+            Write-Host "Site is a OneDrive site"
+        }
 
-    foreach($site in $sites){ 
-        $global:statObj = [PSCustomObject]@{
-            "Module version" = $global:moduleVersion
-            "Category" = "SharePoint"
-            "Subject" = $site.Url
-            "Total objects scanned" = 0
-            "Scan start time" = Get-Date
-            "Scan end time" = ""
-            "Scan performed by" = $global:currentUser.userPrincipalName
-        }              
+        New-StatisticsObject -Category $siteCategory -Subject $site.Url
+           
         $wasOwner = $False
         try{
             if($site.Owners -notcontains $global:currentUser.userPrincipalName){
@@ -122,8 +117,6 @@
             $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
         }catch{        
             Write-Error "Failed to parse site $($site.Url) because $_" -ErrorAction Continue
-            $global:statObj."Scan end time" = "ERROR! $_"
-            $statObjects += $global:statObj
             continue
         }
         
@@ -135,44 +128,43 @@
             if($spoSiteAdmin.PrincipalType -ne "User" -and $expandGroups){
                 $members = $Null; $members = Get-PnPGroupMembers -group $spoSiteAdmin -parentId $spoSiteAdmin.Id -siteConn (Get-SpOConnection -Type User -Url $site.Url) | Where-Object {$_}
                 foreach($member in $members){
+                    Update-StatisticsObject -Category $siteCategory -Subject $site.Url
                     New-SpOPermissionEntry -Path $spoWeb.Url -Permission (get-spopermissionEntry -entity $member -object $spoWeb -permission "Owner" -Through "GroupMembership" -parent $spoSiteAdmin.Title)
                 }
             }else{
+                Update-StatisticsObject -Category $siteCategory -Subject $site.Url
                 New-SpOPermissionEntry -Path $spoWeb.Url -Permission (get-spopermissionEntry -entity $spoSiteAdmin -object $spoWeb -permission "Owner" -Through "DirectAssignment")
             }
         }        
 
-        get-PnPObjectPermissions -Object $spoWeb
+        get-PnPObjectPermissions -Object $spoWeb -Category $siteCategory
 
-        $global:statObj."Scan end time" = Get-Date
-        $statObjects += $global:statObj
+        Stop-StatisticsObject -Category $siteCategory -Subject $site.Url
+
         if(!$wasOwner){
             Write-Host "Cleanup: Removing you as site collection owner of $($site.Url)..."
             Remove-PnPSiteCollectionAdmin -Owners $global:currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
             Write-Host "Cleanup: Owner removed"
-        }          
-    }
-    
-    Write-Host "All permissions retrieved, writing reports..."
-
-    $permissionRows = foreach($row in $global:SPOPermissions.Keys){
-        foreach($permission in $global:SPOPermissions.$row){
-            [PSCustomObject]@{
-                "ID" = $permission.RowId
-                "Path" = $row
-                "Object"    = $permission.Object
-                "Name" = $permission.Name
-                "Identity" = $permission.Identity
-                "Email" = $permission.Email
-                "Type" = $permission.Type
-                "Permission" = $permission.Permission
-                "Through" = $permission.Through
-                "Parent" = $permission.Parent
-                "LinkCreationDate" = $permission.LinkCreationDate
-                "LinkExpirationDate" = $permission.LinkExpirationDate                
+        }       
+        
+        $permissionRows = foreach($row in $global:SPOPermissions.Keys){
+            foreach($permission in $global:SPOPermissions.$row){
+                [PSCustomObject]@{
+                    "Path" = $row
+                    "Object"    = $permission.Object
+                    "Name" = $permission.Name
+                    "Identity" = $permission.Identity
+                    "Email" = $permission.Email
+                    "Type" = $permission.Type
+                    "Permission" = $permission.Permission
+                    "Through" = $permission.Through
+                    "Parent" = $permission.Parent
+                    "LinkCreationDate" = $permission.LinkCreationDate
+                    "LinkExpirationDate" = $permission.LinkExpirationDate                
+                }
             }
         }
+    
+        add-toReport -formats $outputFormat -permissions $permissionRows -category $siteCategory -subject $site.Url         
     }
-
-    add-toReport -statistics $statObjects -formats $outputFormat -permissions $permissionRows -category "SpO"
 }

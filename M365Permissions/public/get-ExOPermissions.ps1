@@ -34,18 +34,15 @@
 
     $recipient = $global:recipients | Where-Object {$_.Identity -eq $recipientIdentity}
 
-    $global:statObj = [PSCustomObject]@{
-        "Module version" = $global:moduleVersion
-        "Category" = "ExoRecipients"
-        "Subject" = $recipient.displayName
-        "Total objects scanned" = 0
-        "Scan start time" = Get-Date
-        "Scan end time" = ""
-        "Scan performed by" = $global:currentUser.userPrincipalName
+    if(!$recipient){
+        Write-Error "Recipient $recipientIdentity not found, skipping..." -ErrorAction Continue
+        return $Null
     }
+    
+    New-StatisticsObject -category "ExoRecipients" -subject $recipient.displayName
 
     $ignoredFolderTypes = @("RecoverableItemsSubstrateHolds","RecoverableItemsPurges","RecoverableItemsVersions","RecoverableItemsDeletions","RecoverableItemsDiscoveryHolds","Audits","CalendarLogging","RecoverableItemsRoot","SyncIssues","Conflicts","LocalFailures","ServerFailures")
-    $global:statObj."Total objects scanned"++
+    Update-StatisticsObject -category "ExoRecipients" -subject $recipient.displayName
     if(!$recipient.PrimarySmtpAddress){
         Write-Warning "skipping $($recipient.identity) as it has no primary smtp address"
         return $Null
@@ -109,7 +106,7 @@
 
             $folderCounter = 0
             foreach($folder in $folders){
-                $global:statObj."Total objects scanned"++
+                Update-StatisticsObject -category "ExoRecipients" -subject $recipient.displayName
                 $folderCounter++
                 Write-Progress -Id 3 -PercentComplete (($folderCounter/$folders.Count)*100) -Activity "Scanning folders" -Status "Examining $($folder.Name) ($($folderCounter) of $($folders.Count))"
                 if($ignoredFolderTypes -contains $folder.FolderType -or $folder.Name -in @("SearchDiscoveryHoldsFolder")){
@@ -183,7 +180,7 @@
     }     
 
     Write-Progress -Id 2 -PercentComplete 95 -Activity "Scanning $($recipient.Identity)" -Status "Writing report..."
-    $global:statObj."Scan end time" = Get-Date
+    Stop-StatisticsObject -category "ExoRecipients" -subject $recipient.displayName
 
     $permissionRows = foreach($row in $global:ExOPermissions.Keys){
         foreach($permission in $global:ExOPermissions.$row){
@@ -200,8 +197,8 @@
             }
         }
     }  
-
-    add-toReport -statistics $global:statObj -formats $outputFormat -permissions $permissionRows -category "ExoRecipients"
+    
+    add-toReport -formats $outputFormat -permissions $permissionRows -category "ExoRecipients" -subject $recipient.displayName
 
     Write-Progress -Id 2 -Completed -Activity "Scanning $($recipient.Identity)"
 }

@@ -27,17 +27,7 @@
     
     Write-Progress -Id 2 -PercentComplete 0 -Activity "Scanning Exchange Roles" -Status "Retrieving all role assignments"
     $global:ExOPermissions = @{}
-    $global:exoStatObjects = @()
-
-    $global:statObj = [PSCustomObject]@{
-        "Module version" = $global:moduleVersion
-        "Category" = "ExORoles"
-        "Subject" = "Roles"
-        "Total objects scanned" = 0
-        "Scan start time" = Get-Date
-        "Scan end time" = ""
-        "Scan performed by" = $global:currentUser.userPrincipalName
-    }
+    New-StatisticsObject -category "ExoRoles" -subject "AdminRoles"
 
     $assignedManagementRoles = $Null;$assignedManagementRoles = (New-ExOQuery -cmdlet "Get-ManagementRoleAssignment" -cmdParams @{GetEffectiveUsers = $True})
 
@@ -48,7 +38,7 @@
     foreach($assignedManagementRole in $assignedManagementRoles){
         $count++
         Write-Progress -Id 3 -PercentComplete (($count/$assignedManagementRoles.Count)*100) -Activity "Scanning Roles" -Status "Examining role $($count) of $($assignedManagementRoles.Count)"
-        $global:statObj."Total objects scanned"++
+        Update-StatisticsObject -category "ExoRoles" -subject "AdminRoles"
         try{
             $mailbox = $Null; $mailbox = $identityCache.$($assignedManagementRole.EffectiveUserName)
             if($Null -eq $mailbox){
@@ -97,8 +87,7 @@
 
     Write-Progress -Id 3 -Completed -Activity "Scanning Roles"
 
-    $global:statObj."Scan end time" = Get-Date  
-    $global:exoStatObjects += $global:statObj
+    Stop-StatisticsObject -category "ExoRoles" -subject "AdminRoles"
 
     Write-Progress -Id 2 -PercentComplete 75 -Activity "Scanning Exchange Roles" -Status "Writing report..."
 
@@ -118,7 +107,7 @@
         }
     }  
 
-    add-toReport -statistics $global:exoStatObjects -formats $outputFormat -permissions $permissionRows -category "ExoRoles"
+    add-toReport -formats $outputFormat -permissions $permissionRows -category "ExoRoles" -subject "AdminRoles"
 
     Write-Progress -Id 2 -Completed -Activity "Scanning Exchange Roles"
 }
