@@ -39,7 +39,7 @@
 
     Write-Host "Starting SpO Scan of $teamName $siteUrl"
 
-    $spoBaseAdmUrl = "https://$($tenantName)-admin.sharepoint.com"
+    $spoBaseAdmUrl = "https://$($global:tenantName)-admin.sharepoint.com"
     Write-Verbose "Using Sharepoint base URL: $spoBaseAdmUrl"
 
     $ignoredSiteTypes = @("REDIRECTSITE#0","SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0")
@@ -61,11 +61,10 @@
         $site = $sites[0]
     }
 
-    $groupId = if($site.GroupId.Guid -ne "00000000-0000-0000-0000-000000000000"){$site.GroupId.Guid}else{$null}
-    if($groupId){
+    if($site.IsTeamsConnected){
         try{
             Write-Host "Retrieving channels for this site/team..."
-            $channels = New-GraphQuery -Uri "https://graph.microsoft.com/beta/teams/$groupId/channels" -Method GET -NoRetry
+            $channels = New-GraphQuery -Uri "https://graph.microsoft.com/beta/teams/$($site.GroupId.Guid)/channels" -Method GET -NoRetry
             Write-Host "Found $($channels.Count) channels"
         }catch{
             Write-Warning "Failed to retrieve channels for this site/team, assuming no additional sub sites to scan"
@@ -73,7 +72,7 @@
         }
         foreach($channel in $channels){
             if($channel.filesFolderWebUrl){
-                $targetUrl = $Null; $targetUrl ="https://$($tenantName).sharepoint.com/$($channel.filesFolderWebUrl.Split("/")[3])/$($channel.filesFolderWebUrl.Split("/")[4])"
+                $targetUrl = $Null; $targetUrl ="https://$($global:tenantName).sharepoint.com/$($channel.filesFolderWebUrl.Split("/")[3])/$($channel.filesFolderWebUrl.Split("/")[4])"
             }
             if($targetUrl -and $sites.Url -notcontains $targetUrl){
                 try{
@@ -91,11 +90,13 @@
 
     foreach($site in $sites){
         $global:SPOPermissions = @{}
-        $groupId = if($site.GroupId.Guid -ne "00000000-0000-0000-0000-000000000000"){$site.GroupId.Guid}else{$null}
         $siteCategory = "SharePoint"
-        if($groupId){
+        if($site.GroupId.Guid -and $site.GroupId.Guid -ne "00000000-0000-0000-0000-000000000000"){
+            $siteCategory = "O365Group"
+        }
+        if($site.IsTeamsConnected -or $site.IsTeamsChannelConnected){
             $siteCategory = "Teams"
-            Write-Host "Site is connected to a group will be categorized as Teams site"
+            Write-Host "Site is connected to a Team will be categorized as Teams site"
         }
         if($site.Url -like "*-my.sharepoint.com*"){
             $siteCategory = "OneDrive"
