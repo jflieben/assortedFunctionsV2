@@ -97,7 +97,7 @@
             $siteCategory = "Teams"
             Write-Host "Site is connected to a group will be categorized as Teams site"
         }
-        if($site.Url -like "*-my.sharepoint.com"){
+        if($site.Url -like "*-my.sharepoint.com*"){
             $siteCategory = "OneDrive"
             Write-Host "Site is a OneDrive site"
         }
