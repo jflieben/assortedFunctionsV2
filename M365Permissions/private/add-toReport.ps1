@@ -1,6 +1,6 @@
 function add-toReport{
     param(
-        [array]$statistics,
+        [string]$subject,
         [parameter(Mandatory=$true)][array]$formats,
         [array]$permissions,
         [parameter(Mandatory=$true)][string]$category
@@ -25,7 +25,7 @@ function add-toReport{
             $attempts++
             try{
                 switch($type){
-                    "XLSX" {$data | Export-Excel -Path $targetPath -WorksheetName $($category) -TableName $($category) -TableStyle Medium10 -Append -AutoSize}
+                    "XLSX" {$data | Export-Excel -NoNumberConversion "Module version" -Path $targetPath -WorksheetName $($category) -TableName $($category) -TableStyle Medium10 -Append -AutoSize}
                     "CSV" {$data | Export-Csv -Path $targetPath -NoTypeInformation -Append}
                 }
                 $attempts = $maxRetries
@@ -48,15 +48,15 @@ function add-toReport{
                 if($permissions){
                     Export-WithRetry -targetPath $targetPath -category $category -data $permissions  
                 }
-                if($statistics){
-                    Export-WithRetry -targetPath $targetPath -category "Statistics" -data $statistics          
+                if($subject){
+                    Export-WithRetry -targetPath $targetPath -category "Statistics" -data @($global:unifiedStatistics.$category.$subject)
                 }
                 Write-Host "$category line written to $targetPath"
             }
             "CSV" { 
                 if($permissions){
                     $targetPath = $basePath.Replace(".@@@","$($category).csv")
-                    Export-WithRetry -targetPath $targetPath -category "Statistics" -data $statistics -type "CSV"
+                    Export-WithRetry -targetPath $targetPath -category "Statistics" -data $permissions -type "CSV"
                     Write-Host "$category line written to $targetPath"
                 }else{
                     Write-Warning "No permissions found to save to CSV"
@@ -64,7 +64,7 @@ function add-toReport{
             }
             "Default" { 
                 if($permissions){
-                    $permissionRows | out-gridview 
+                    $permissions | out-gridview 
                 }else{
                     Write-Warning "No permissions found to display"
                 }

@@ -13,11 +13,6 @@ function get-SpOPermissionEntry{
         $linkCreationDate,
         $linkExpirationDate
     )
-    if(!$global:uniqueId){
-        $global:uniqueId = 1
-    }else{
-        $global:uniqueId++
-    }
     
     $name = $entity.Title
     $type = $entity.PrincipalType 
@@ -36,7 +31,6 @@ function get-SpOPermissionEntry{
     }    
 
     return [PSCustomObject]@{
-        "RowId" = $global:uniqueId
         "Object" = $objectType
         "Name" = $name
         "Identity" = $entity.LoginName

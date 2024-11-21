@@ -19,7 +19,7 @@
     }
 
     $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
-    $spoBaseAdmUrl = "https://$($tenantName)-admin.sharepoint.com"
+    $spoBaseAdmUrl = "https://$($global:tenantName)-admin.sharepoint.com"
 
     $ignoredSiteTypes = @("REDIRECTSITE#0","SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0")
     $sites = @(Get-PnPTenantSite -IncludeOneDriveSites:$includeOnedriveSites.IsPresent -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
@@ -28,7 +28,7 @@
 
     if($excludeOtherSites.IsPresent){
         Write-Host "Only scanning Onedrive for Business sites"
-        $sites = $sites | Where-Object {$_ -and $_.Url -notlike "https://$tenantName.sharepoint.com/*"}
+        $sites = $sites | Where-Object {$_ -and $_.Url -notlike "https://$($global:tenantName).sharepoint.com/*"}
     }
 
     if($sites.Count -eq 0 -or $Null -eq $sites){

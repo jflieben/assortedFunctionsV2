@@ -32,7 +32,7 @@ Function New-EntraPermissionEntry{
     if(!$global:EntraPermissions.$path){
         $global:EntraPermissions.$path = @()
     }
-    $global:statObjRoles."Total objects scanned"++
+    
     $global:EntraPermissions.$path += [PSCustomObject]@{
         scope = $path
         type = $type

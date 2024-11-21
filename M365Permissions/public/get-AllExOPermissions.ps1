@@ -25,7 +25,7 @@
     $global:includeCurrentUser = $includeCurrentUser.IsPresent
 
     if($includeFolderLevelPermissions){
-        Write-Host "Including folder level permissions, this can take a VERY long time to complete." -ForegroundColor Yellow
+        Write-Host "Including folder level permissions, this can take several hours per 1000 users depending on mailbox use" -ForegroundColor Yellow
     }
 
     Write-Progress -Id 1 -PercentComplete 1 -Activity "Scanning Exchange Online" -Status "Scanning roles..."

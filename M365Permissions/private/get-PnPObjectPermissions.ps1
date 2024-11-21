@@ -6,7 +6,8 @@ Function get-PnPObjectPermissions{
     #>        
     Param(
         [Parameter(Mandatory=$true)][Microsoft.SharePoint.Client.SecurableObject]$Object,
-        $siteUrl
+        $siteUrl,
+        $Category
     )
 
     $ignoreablePermissions = @("Guest","RestrictedGuest","None")
@@ -23,7 +24,7 @@ Function get-PnPObjectPermissions{
             $obj.Title = $Object.Title
             $obj.Url = $Object.Url
             $obj.Type = "Site"
-            $global:statObj."Total objects scanned"++
+            Update-StatisticsObject -Category $Category -Subject $siteUrl
         }
         "Microsoft.SharePoint.Client.ListItem"{ 
             If($Object.FileSystemObjectType -eq "Folder"){
@@ -50,7 +51,7 @@ Function get-PnPObjectPermissions{
             $obj.Title = $Object.Title
             $obj.Url = "$($siteUrl.Split(".com")[0]).com$($rootFolder.ServerRelativeUrl)"
             $obj.Type = "List or Library"  
-            $global:statObj."Total objects scanned"++  
+            Update-StatisticsObject -Category $Category -Subject $siteUrl
         }
     }    
 
@@ -135,7 +136,7 @@ Function get-PnPObjectPermissions{
                     continue
                 }                
                 Write-Verbose "Enumerating permissions for sub web $($childObject.Title)..."
-                get-PnPObjectPermissions -Object $childObject
+                get-PnPObjectPermissions -Object $childObject -Category $Category
             }
             $childObjects = $Null; $childObjects = Get-PnPProperty -ClientObject $Object -Property Lists -Connection (Get-SpOConnection -Type User -Url $siteUrl)
             $ExcludedListTitles = @("Access Requests","App Packages","appdata","appfiles","Apps in Testing","Cache Profiles","Composed Looks","Content and Structure Reports","Content type publishing error log","Converted Forms",
@@ -157,12 +158,12 @@ Function get-PnPObjectPermissions{
 
             $counter = 0
             ForEach($List in $childObjects){
-                $global:statObj."Total objects scanned"+=$List.ItemCount
+                Update-StatisticsObject -Category $Category -Subject $siteUrl -Amount $List.ItemCount
                 If($List.Hidden -eq $False -and $ExcludedListTitles -notcontains $List.Title -and $List.ItemCount -gt 0 -and $List.TemplateFeatureId -notin $ExcludedListFeatureIDs){
                     $counter++
                     Write-Progress -Id 2 -PercentComplete ($Counter / ($childObjects.Count) * 100) -Activity "Exporting Permissions from List '$($List.Title)'" -Status "Processing $($List.ItemCount) items from List $counter of $($childObjects.Count)"
                     #grab top level info of the list first
-                    get-PnPObjectPermissions -Object $List -siteUrl $siteUrl
+                    get-PnPObjectPermissions -Object $List -siteUrl $siteUrl -Category $Category
 
                     #check if permissions are unique
                     Get-PnPProperty -ClientObject $List -Property Title, HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
@@ -186,7 +187,7 @@ Function get-PnPObjectPermissions{
                     ForEach($ListItem in $allUniqueListItems){
                         $ItemCounter++
                         Write-Progress -Id 3 -PercentComplete (($ItemCounter / $allUniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItems.Count)" -Status "Searching for Unique Permissions"
-                        get-PnPObjectPermissions -Object $ListItem -siteUrl $siteUrl
+                        get-PnPObjectPermissions -Object $ListItem -siteUrl $siteUrl -Category $Category
                     }
                     Write-Progress -Id 3 -Completed -Activity "Processing Item $ItemCounter of $($allUniqueListItems.Count)"
                 }else{

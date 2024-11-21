@@ -40,11 +40,14 @@ $global:pnpUrlAuthCaches = @{}
 $global:SPOPermissions = @{}
 $global:PnPGroupCache = @{}
 $global:EntraPermissions = @{}
+$global:ExOPermissions = @{}
+$global:unifiedStatistics = @{}
 $global:LCRefreshToken = $Null
 $global:LCCachedTokens = @{}
 $global:performanceDebug = $False
 $global:OnMicrosoft = $Null
 $global:includeCurrentUser = $False
+
 $global:moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
 
 if ($helperFunctions.public) { Export-ModuleMember -Alias * -Function @($helperFunctions.public.BaseName) }
