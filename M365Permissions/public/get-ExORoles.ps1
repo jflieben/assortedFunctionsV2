@@ -21,7 +21,7 @@
         [String[]]$outputFormat="XLSX"
     )
 
-    $global:includeCurrentUser = $includeCurrentUser.IsPresent
+    $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
 
     Write-Host "Starting Exo role scan..."
     
@@ -107,7 +107,7 @@
         }
     }  
 
-    add-toReport -formats $outputFormat -permissions $permissionRows -category "ExoRoles" -subject "AdminRoles"
+    add-toReport -formats $outputFormat -permissions $permissionRows -category "ExoRoles" -subject "AdminRoles"   
 
     Write-Progress -Id 2 -Completed -Activity "Scanning Exchange Roles"
 }

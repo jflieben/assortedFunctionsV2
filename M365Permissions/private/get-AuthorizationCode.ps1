@@ -12,16 +12,16 @@ function get-AuthorizationCode{
 
     $cachedModuleVersion = Join-Path -Path $env:APPDATA -ChildPath "M365Permissions.version"
     if(!(Test-Path $cachedModuleVersion)){
-        Set-Content -Path $cachedModuleVersion -Value $global:moduleVersion -Force
+        Set-Content -Path $cachedModuleVersion -Value $global:octo.moduleVersion -Force
     }else{
-        if(([System.Version]::Parse((Get-Content -Path $cachedModuleVersion -Raw)) -lt [System.Version]::Parse($global:moduleVersion))){
-            Set-Content -Path $cachedModuleVersion -Value $global:moduleVersion -Force
+        if(([System.Version]::Parse((Get-Content -Path $cachedModuleVersion -Raw)) -lt [System.Version]::Parse($global:octo.moduleVersion))){
+            Set-Content -Path $cachedModuleVersion -Value $global:octo.moduleVersion -Force
         }else{
             $adminPrompt = $Null
         }
     }
 
-    $targetUrl = "https://login.microsoftonline.com/common/oauth2/authorize?client_id=$($global:LCClientId)&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1985&response_mode=query&resource=https://graph.microsoft.com$($adminPrompt)"
+    $targetUrl = "https://login.microsoftonline.com/common/oauth2/authorize?client_id=$($global:octo.LCClientId)&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1985&response_mode=query&resource=https://graph.microsoft.com$($adminPrompt)"
 
     try{
         Write-Verbose "Opening $targetUrl in your browser..."
@@ -43,7 +43,7 @@ function get-AuthorizationCode{
         
     #thank the user for authenticating
     Start-Sleep -s 1
-    $writer.Write("HTTP/1.1 200 OK`r`nContent-Type: text/html; charset=UTF-8`r`n`r`n<html><head><title>M365 Permissions by Lieben Consultancy</title></head><body><p>Logged in, thank you! You may now close this window, the scan will continue in your PowerShell terminal :)</p></body></html>");$writer.Flush()
+    $writer.Write("HTTP/1.1 200 OK`r`nContent-Type: text/html; charset=UTF-8`r`n`r`n<html><head><title>M365 Permissions by Lieben Consultancy</title></head><body><p>Logged in, thank you! You may now close this window, the scan will continue in your PowerShell terminal :)<br><br><a href=`"https://www.lieben.nu/liebensraum/m365permissions/`">https://www.lieben.nu/liebensraum/m365permissions/</a></p></body></html>");$writer.Flush()
     Start-Sleep -s 1
     $writer.Close();$reader.Close();$client.Close();$tcpListener.Stop()
 
@@ -53,7 +53,7 @@ function get-AuthorizationCode{
         Body = @{
             scope                 = "offline_access https://graph.microsoft.com/.default"
             code                  = $code
-            client_id             = $global:LCClientId
+            client_id             = $global:octo.LCClientId
             grant_type            = 'authorization_code'
             redirect_uri          = "http://localhost:1985"
         }
@@ -61,6 +61,6 @@ function get-AuthorizationCode{
 
     #retrieve the refresh token
     $authResponse = (Invoke-RestMethod @irmSplat)
-    $global:LCRefreshToken = $authResponse.refresh_token
+    $global:octo.LCRefreshToken = $authResponse.refresh_token
     Write-Verbose "Refresh token cached until next module call :)"
 }

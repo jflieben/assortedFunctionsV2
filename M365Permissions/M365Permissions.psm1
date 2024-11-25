@@ -14,8 +14,8 @@
 
     .ROADMAP
     1.0.x Add support for PowerBI
+    1.0.x Add support for Graph Permissions
     1.0.x Add support for App-Only authentication
-    1.0.x Add multi-threading options for mailbox folder scanning
 #>
 
 $helperFunctions = @{
@@ -35,45 +35,56 @@ ForEach ($helperFunction in (($helperFunctions.private + $helperFunctions.public
     }
 }
 
-$global:LCClientId = "0ee7aa45-310d-4b82-9cb5-11cc01ad38e4"
-$global:pnpUrlAuthCaches = @{}
-$global:SPOPermissions = @{}
-$global:PnPGroupCache = @{}
-$global:EntraPermissions = @{}
-$global:ExOPermissions = @{}
-$global:unifiedStatistics = @{}
-$global:LCRefreshToken = $Null
-$global:LCCachedTokens = @{}
-$global:performanceDebug = $False
-$global:OnMicrosoft = $Null
-$global:includeCurrentUser = $False
-
-$global:moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
-
 if ($helperFunctions.public) { Export-ModuleMember -Alias * -Function @($helperFunctions.public.BaseName) }
 if ($env:username -like "*joslieben*"){Export-ModuleMember -Alias * -Function @($helperFunctions.private.BaseName) }
 
-cls
-write-host "----------------------------------"
-Write-Host "Welcome to M365Permissions v$($global:moduleVersion)!" -ForegroundColor DarkCyan
-Write-Host "Visit https://www.lieben.nu/liebensraum/m365permissions/ for documentation" -ForegroundColor DarkCyan
-write-host "----------------------------------"
-Write-Host ""
-Write-Host "Prompting for delegated (safe/non persistent) AAD auth..."
-Write-Host ""
-$global:currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
-Write-Host "Thank you $($global:currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
-Write-Host ""
-Write-Host ">> Get-AllM365Permissions -expandGroups -includeCurrentUser" -ForegroundColor Magenta
+#variables that need to be cleared for each thread
+$global:SPOPermissions = @{}
+$global:EntraPermissions = @{}
+$global:ExOPermissions = @{}
+$global:unifiedStatistics = @{}
 
-Write-Host ">> Get-AllExOPermissions -includeFolderLevelPermissions" -ForegroundColor Magenta
+#only auth and load objects if this is the parent process
+if(!$global:octo){
+    $maxThreads = 5
+    $global:runspacePool = [runspacefactory]::CreateRunspacePool(1, $maxThreads, ([system.management.automation.runspaces.initialsessionstate]::CreateDefault()), $Host)
+    $global:runspacePool.ApartmentState = "STA"
+    $global:runspacepool.Open() 
+    $global:octo = [Hashtable]::Synchronized(@{})
+    $global:octo.LCClientId = "0ee7aa45-310d-4b82-9cb5-11cc01ad38e4"
+    $global:octo.pnpUrlAuthCaches = @{}
+    $global:octo.PnPGroupCache = @{}
+    $global:octo.LCRefreshToken = $Null
+    $global:octo.LCCachedTokens = @{}
+    $global:octo.includeCurrentUser = $False
+    $global:octo.moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
+    $global:octo.modulePath = $PSScriptRoot
+    $global:octo.ScanJobs = @{}
+    $global:octo.maxThreads = $maxThreads
 
-Write-Host ">> Get-ExOPermissions -recipientIdentity `$mailbox.Identity -includeFolderLevelPermissions" -ForegroundColor Magenta
-
-Write-Host ">> Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default" -ForegroundColor Magenta
-
-Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV" -ForegroundColor Magenta
-
-Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
-
-Write-Host ">> get-AllEntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta
+    cls
+    write-host "----------------------------------"
+    Write-Host "Welcome to M365Permissions v$($global:octo.moduleVersion)!" -ForegroundColor DarkCyan
+    Write-Host "Visit https://www.lieben.nu/liebensraum/m365permissions/ for documentation" -ForegroundColor DarkCyan
+    write-host "----------------------------------"
+    Write-Host ""
+    Write-Host "Prompting for delegated (safe/non persistent) AAD auth..."
+    Write-Host ""
+    $global:octo.currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
+    $global:octo.OnMicrosoft = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' | Where-Object -Property isInitial -EQ $true).id 
+    Write-Host "Thank you $($global:octo.currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
+    Write-Host ""
+    Write-Host ">> Get-AllM365Permissions -expandGroups -includeCurrentUser" -ForegroundColor Magenta
+    
+    Write-Host ">> Get-AllExOPermissions -includeFolderLevelPermissions" -ForegroundColor Magenta
+    
+    Write-Host ">> Get-ExOPermissions -recipientIdentity `$mailbox.Identity -includeFolderLevelPermissions" -ForegroundColor Magenta
+    
+    Write-Host ">> Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default" -ForegroundColor Magenta
+    
+    Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV" -ForegroundColor Magenta
+    
+    Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
+    
+    Write-Host ">> get-AllEntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta    
+}

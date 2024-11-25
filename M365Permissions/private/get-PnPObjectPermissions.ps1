@@ -57,7 +57,7 @@ Function get-PnPObjectPermissions{
 
     #retrieve all permissions for the supplied object
     Get-PnPProperty -ClientObject $Object -Property HasUniqueRoleAssignments, RoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)    
-    if(!$global:performanceDebug -and $Object.HasUniqueRoleAssignments -eq $False){
+    if($Object.HasUniqueRoleAssignments -eq $False){
         Write-Verbose "Skipping $($obj.Title) as it fully inherits permissions from parent"
         continue
     }
@@ -131,7 +131,7 @@ Function get-PnPObjectPermissions{
             foreach($childObject in $childObjects){
                 #check if permissions are unique
                 Get-PnPProperty -ClientObject $childObject -Property HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
-                if(!$global:performanceDebug -and $childObject.HasUniqueRoleAssignments -eq $False){
+                if($childObject.HasUniqueRoleAssignments -eq $False){
                     Write-Verbose "Skipping $($childObject.Title) child web as it fully inherits permissions from parent"
                     continue
                 }                
@@ -167,7 +167,7 @@ Function get-PnPObjectPermissions{
 
                     #check if permissions are unique
                     Get-PnPProperty -ClientObject $List -Property Title, HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
-                    if(!$global:performanceDebug -and $List.HasUniqueRoleAssignments -eq $False){
+                    if($List.HasUniqueRoleAssignments -eq $False){
                         Write-Verbose "Skipping $($List.Title) List as it fully inherits permissions from parent"
                         continue
                     }     

@@ -26,10 +26,6 @@ function New-ExOQuery {
         }
     } 
 
-    if(!$global:OnMicrosoft){
-        $global:OnMicrosoft = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' | Where-Object -Property isInitial -EQ $true).id
-    }
-
     $Headers = @{ 
         Authorization     = "Bearer $token"
         "Accept-Charset"   = "UTF-8"
@@ -39,11 +35,11 @@ function New-ExOQuery {
         "Prefer" = "odata.maxpagesize=1000"
         "X-CmdletName"= $cmdlet
         "X-SerializationLevel" = "Partial"
-        'X-AnchorMailbox' = "UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@$($global:OnMicrosoft)"
+        'X-AnchorMailbox' = "UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@$($global:octo.OnMicrosoft)"
         "Content-Type" = "application/json"
     }
 
-    $nextURL = "https://outlook.office365.com/adminapi/beta/$($global:OnMicrosoft)/InvokeCommand"
+    $nextURL = "https://outlook.office365.com/adminapi/beta/$($global:octo.OnMicrosoft)/InvokeCommand"
 
     $ReturnedData = do {
         try {

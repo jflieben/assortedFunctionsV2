@@ -9,24 +9,24 @@ function get-AccessToken{
         [Switch]$returnHeader
     )   
 
-    if(!$global:LCRefreshToken){
+    if(!$global:octo.LCRefreshToken){
         get-AuthorizationCode
     }
 
-    if(!$global:LCCachedTokens.$resource){
+    if(!$global:octo.LCCachedTokens.$resource){
         $jwtTokenProperties = $Null
     }else{
-        $jwtTokenProperties = Get-JwtTokenProperties -token $global:LCCachedTokens.$resource
+        $jwtTokenProperties = Get-JwtTokenProperties -token $global:octo.LCCachedTokens.$resource
     }
 
-    if(!$global:LCCachedTokens.$resource -or !$jwtTokenProperties -or ($jwtTokenProperties -and ([timezone]::CurrentTimeZone.ToLocalTime('1/1/1970').AddSeconds($jwtTokenProperties.exp) -lt (Get-Date).AddMinutes(25)) -or $jwtTokenProperties.aud -ne $resource)){
+    if(!$global:octo.LCCachedTokens.$resource -or !$jwtTokenProperties -or ($jwtTokenProperties -and ([timezone]::CurrentTimeZone.ToLocalTime('1/1/1970').AddSeconds($jwtTokenProperties.exp) -lt (Get-Date).AddMinutes(25)) -or $jwtTokenProperties.aud -ne $resource)){
         Write-Verbose "Token cache miss, refreshing V1 token for $resource..."
-        $response = (Invoke-RestMethod "https://login.microsoftonline.com/common/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=refresh_token&refresh_token=$($global:LCRefreshToken)&client_id=$($global:LCClientId)&scope=openid" -ErrorAction Stop -Verbose:$false)
+        $response = (Invoke-RestMethod "https://login.microsoftonline.com/common/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=refresh_token&refresh_token=$($global:octo.LCRefreshToken)&client_id=$($global:octo.LCClientId)&scope=openid" -ErrorAction Stop -Verbose:$false)
         if($response.refresh_token -and $response.access_token){
             if($response.refresh_token){ 
-                $global:LCRefreshToken = $response.refresh_token 
+                $global:octo.LCRefreshToken = $response.refresh_token 
             }                
-            $global:LCCachedTokens.$resource = $response.access_token
+            $global:octo.LCCachedTokens.$resource = $response.access_token
         }else{
             Write-Error "Failed to retrieve access and/or refresh token! Please reload PowerShell / this module to refresh or google this error: $_" -ErrorAction Stop
         }
@@ -36,9 +36,9 @@ function get-AccessToken{
 
     if($returnHeader){
         return @{
-            Authorization = "Bearer $($global:LCCachedTokens.$resource)"
+            Authorization = "Bearer $($global:octo.LCCachedTokens.$resource)"
         }
     }else{
-        return $global:LCCachedTokens.$resource
+        return $global:octo.LCCachedTokens.$resource
     }
 }

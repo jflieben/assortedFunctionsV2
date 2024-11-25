@@ -11,7 +11,7 @@
         [String[]]$outputFormat="XLSX"
     )
 
-    Write-Host "Starting FULL M365 Tenant scan as $($global:currentUser.userPrincipalName)"
+    Write-Host "Starting FULL M365 Tenant scan as $($global:octo.currentUser.userPrincipalName)"
     Write-Host "Planned scan order:"
     Write-Host "1. Entra permissions"
     Write-Host "2. Exchange permissions"

@@ -19,7 +19,7 @@ function add-toReport{
             [parameter(Mandatory=$true)][object]$data,
             $type = "XLSX"
         )
-        $maxRetries = 30
+        $maxRetries = 60
         $attempts = 0
         while($attempts -lt $maxRetries){
             $attempts++
@@ -34,7 +34,7 @@ function add-toReport{
                     Throw
                 }else{
                     Write-Verbose "File locked, waiting..."
-                    Start-Sleep -s 1
+                    Start-Sleep -s (Get-Random -Minimum 1 -Maximum 3)
                 }
             }
         }      

@@ -23,16 +23,16 @@
         [String[]]$outputFormat="XLSX"
     )
 
-    $global:includeCurrentUser = $includeCurrentUser.IsPresent
+    $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
 
     $global:ExOPermissions = @{}
 
-    if(!$global:recipients){
+    if(!$global:octo.recipients){
         Write-Progress -Id 2 -PercentComplete 1 -Activity "Scanning Recipient" -Status "Retrieving recipients for cache..."
-        $global:recipients = (New-ExOQuery -cmdlet "Get-Recipient" -cmdParams @{"ResultSize" = "Unlimited"}) | Where-Object{$_ -and !$_.Identity.StartsWith("DiscoverySearchMailbox")}
+        $global:octo.recipients = (New-ExOQuery -cmdlet "Get-Recipient" -cmdParams @{"ResultSize" = "Unlimited"}) | Where-Object{$_ -and !$_.Identity.StartsWith("DiscoverySearchMailbox")}
     }
 
-    $recipient = $global:recipients | Where-Object {$_.Identity -eq $recipientIdentity}
+    $recipient = $global:octo.recipients | Where-Object {$_.Identity -eq $recipientIdentity}
 
     if(!$recipient){
         Write-Error "Recipient $recipientIdentity not found, skipping..." -ErrorAction Continue
@@ -55,7 +55,7 @@
         $mailbox = $Null; $mailbox = New-ExOQuery -cmdlet "Get-Mailbox" -cmdParams @{Identity = $recipient.Guid} -retryCount 2
         if($mailbox.GrantSendOnBehalfTo){
             foreach($sendOnBehalf in $mailbox.GrantSendOnBehalfTo){
-                $entity = $Null; $entity= @($global:recipients | Where-Object {$_.DisplayName -eq $sendOnBehalf})[0]
+                $entity = $Null; $entity= @($global:octo.recipients | Where-Object {$_.DisplayName -eq $sendOnBehalf})[0]
                 $splat = @{
                     path = "/$($recipient.PrimarySmtpAddress)"
                     type = $recipient.RecipientTypeDetails
@@ -76,7 +76,7 @@
             $mailboxPermissions = $Null; $mailboxPermissions = (New-ExOQuery -cmdlet "Get-Mailboxpermission" -cmdParams @{Identity = $mailbox.Guid}) | Where-Object {$_.User -like "*@*"}
             foreach($mailboxPermission in $mailboxPermissions){
                 foreach($AccessRight in $mailboxPermission.AccessRights){
-                    $entity = $Null; $entity= @($global:recipients | Where-Object {$_.PrimarySmtpAddress -eq $mailboxPermission.User -or $_.windowsLiveId -eq $mailboxPermission.User})[0]
+                    $entity = $Null; $entity= @($global:octo.recipients | Where-Object {$_.PrimarySmtpAddress -eq $mailboxPermission.User -or $_.windowsLiveId -eq $mailboxPermission.User})[0]
                     $splat = @{
                         path = "/$($recipient.PrimarySmtpAddress)"
                         type = $recipient.RecipientTypeDetails
@@ -97,7 +97,7 @@
         if($mailbox.UserPrincipalName -and $includeFolderLevelPermissions){
             Write-Progress -Id 2 -PercentComplete 25 -Activity "Scanning $($recipient.Identity)" -Status "Checking recipient for folder permissions..."
 
-            Write-Progress -Id 3 -PercentComplete 1 -Activity "Scanning folders" -Status "Retrieving folder list for $($mailbox.UserPrincipalName)"
+            Write-Progress -Id 3 -PercentComplete 1 -Activity "Scanning folders $($recipient.Identity)" -Status "Retrieving folder list for $($mailbox.UserPrincipalName)"
             try{
                 $folders = $Null; $folders = New-ExOQuery -cmdlet "Get-MailboxFolderStatistics" -cmdParams @{"ResultSize"="unlimited";"Identity"= $mailbox.UserPrincipalName}
             }catch{
@@ -108,7 +108,7 @@
             foreach($folder in $folders){
                 Update-StatisticsObject -category "ExoRecipients" -subject $recipient.displayName
                 $folderCounter++
-                Write-Progress -Id 3 -PercentComplete (($folderCounter/$folders.Count)*100) -Activity "Scanning folders" -Status "Examining $($folder.Name) ($($folderCounter) of $($folders.Count))"
+                Write-Progress -Id 3 -PercentComplete (($folderCounter/$folders.Count)*100) -Activity "Scanning folders $($recipient.Identity)" -Status "Examining $($folder.Name) ($($folderCounter) of $($folders.Count))"
                 if($ignoredFolderTypes -contains $folder.FolderType -or $folder.Name -in @("SearchDiscoveryHoldsFolder")){
                     Write-Verbose "Ignoring folder $($folder.Name) as it is in the ignored list"
                     continue
@@ -116,9 +116,9 @@
                 try{
                     $folderPermissions = $Null; $folderPermissions = New-ExoQuery -cmdlet "Get-MailboxFolderPermission" -cmdParams @{Identity = "$($mailbox.UserPrincipalName):$($folder.FolderId)"}
                     foreach($folderPermission in $folderPermissions){
-                        $entity = $Null; $entity= @($global:recipients | Where-Object {$_.Identity -eq $folderPermission.User})[0]
+                        $entity = $Null; $entity= @($global:octo.recipients | Where-Object {$_.Identity -eq $folderPermission.User})[0]
                         if(!$entity){
-                            $entity = $Null; $entity= @($global:recipients | Where-Object {$_.DisplayName -eq $folderPermission.User})[0] 
+                            $entity = $Null; $entity= @($global:octo.recipients | Where-Object {$_.DisplayName -eq $folderPermission.User})[0] 
                         }
                         if($entity -and $entity.Identity -eq $recipient.Identity){
                             Write-Verbose "Skipping permission $($folderPermission.AccessRights) scoped at $($mailbox.UserPrincipalName)$($folder.FolderPath) for $($recipient.Identity) as it is the owner"
@@ -153,7 +153,7 @@
                     Write-Warning "Failed to retrieve folder permissions for $($mailbox.UserPrincipalName)$($folder.FolderPath)"
                 }
             }
-            Write-Progress -Id 3 -Completed -Activity "Scanning folders"
+            Write-Progress -Id 3 -Completed -Activity "Scanning folders $($recipient.Identity)"
         }
     }
     
@@ -162,7 +162,7 @@
 
     $recipientPermissions = (New-ExOQuery -cmdlet "Get-RecipientPermission" -cmdParams @{"ResultSize" = "Unlimited"; "Identity" = $recipient.Guid}) | Where-Object {$_.Trustee -ne "NT Authority\SELF" }
     foreach($recipientPermission in $recipientPermissions){
-        $entity = $Null; $entity= $global:recipients | Where-Object {$_.PrimarySmtpAddress -eq $recipientPermission.Trustee}
+        $entity = $Null; $entity= $global:octo.recipients | Where-Object {$_.PrimarySmtpAddress -eq $recipientPermission.Trustee}
         foreach($AccessRight in $recipientPermission.AccessRights){
             $splat = @{
                 path = "/$($recipient.PrimarySmtpAddress)"
