@@ -20,7 +20,7 @@
         [String[]]$outputFormat="XLSX"
     )
 
-    $global:includeCurrentUser = $includeCurrentUser.IsPresent
+    $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
 
     Write-Host "Starting Entra scan..."
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Entra ID" -Status "Retrieving role definitions"
@@ -87,6 +87,13 @@
             Update-StatisticsObject -category "Entra" -subject "Roles"
             New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "Eligible" -principalId $principal.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $principal.displayName -principalUpn $principal.userPrincipalName -principalType $principalType -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.startDateTime -endDateTime $roleEligibility.endDateTime
         }
+    }
+
+    Write-Progress -Id 1 -PercentComplete 40 -Activity "Scanning Entra ID" -Status "Getting Graph Subscriptions"
+    $graphSubscriptions = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/subscriptions' -Method GET
+    foreach($graphSubscription in $graphSubscriptions){
+        Update-StatisticsObject -category "Entra" -subject "Roles"
+        New-EntraPermissionEntry -path "/graph/$($graphSubscription.resource)" -type "Subscription" -principalId $graphSubscription.applicationId -roleDefinitionId "ReadAll" -principalName $graphSubscription.applicationId -principalUpn $graphSubscription.applicationId -principalType "ServicePrincipal" -roleDefinitionName $graphSubscription.resource -startDateTime "See audit log" -endDateTime $graphSubscription.expirationDateTime -through "GraphAPI"
     }
 
     Stop-statisticsObject -category "Entra" -subject "Roles"
