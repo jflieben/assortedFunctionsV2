@@ -44,12 +44,8 @@ $global:EntraPermissions = @{}
 $global:ExOPermissions = @{}
 $global:unifiedStatistics = @{}
 
-#only auth and load objects if this is the parent process
+#first load config, subsequent loads will detect global var and skip this section (multi-threading)
 if(!$global:octo){
-    $maxThreads = 5
-    $global:runspacePool = [runspacefactory]::CreateRunspacePool(1, $maxThreads, ([system.management.automation.runspaces.initialsessionstate]::CreateDefault()), $Host)
-    $global:runspacePool.ApartmentState = "STA"
-    $global:runspacepool.Open() 
     $global:octo = [Hashtable]::Synchronized(@{})
     $global:octo.LCClientId = "0ee7aa45-310d-4b82-9cb5-11cc01ad38e4"
     $global:octo.pnpUrlAuthCaches = @{}
@@ -60,9 +56,17 @@ if(!$global:octo){
     $global:octo.moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
     $global:octo.modulePath = $PSScriptRoot
     $global:octo.ScanJobs = @{}
-    $global:octo.maxThreads = $maxThreads
 
     cls
+
+    #sets default config of user-configurable settings, can be overridden by user calls to set-M365PermissionsConfig
+    set-M365PermissionsConfig 
+        
+    $global:runspacePool = [runspacefactory]::CreateRunspacePool(1, $global:octo.maxThreads, ([system.management.automation.runspaces.initialsessionstate]::CreateDefault()), $Host)
+    $global:runspacePool.ApartmentState = "STA"
+    $global:runspacepool.Open() 
+    
+    
     write-host "----------------------------------"
     Write-Host "Welcome to M365Permissions v$($global:octo.moduleVersion)!" -ForegroundColor DarkCyan
     Write-Host "Visit https://www.lieben.nu/liebensraum/m365permissions/ for documentation" -ForegroundColor DarkCyan
