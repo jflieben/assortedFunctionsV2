@@ -19,7 +19,7 @@ Function New-EntraPermissionEntry{
         [Parameter(Mandatory=$false)]$endDateTime
     )
 
-    if($global:currentUser.userPrincipalName -eq $principalUpn -and !$global:includeCurrentUser){
+    if($global:octo.currentUser.userPrincipalName -eq $principalUpn -and !$global:octo.includeCurrentUser){
         Write-Verbose "Skipping permission $($roleDefinitionName) scoped at $path for $($principalUpn) as it is the auditor account"
         return $Null
     }

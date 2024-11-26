@@ -22,20 +22,26 @@
         [String[]]$outputFormat="XLSX"
     )
 
-    $global:includeCurrentUser = $includeCurrentUser.IsPresent
+    $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
+
+    $activity = "Scanning Exchange Online"
 
     if($includeFolderLevelPermissions){
-        Write-Host "Including folder level permissions, this can take several hours per 1000 users depending on mailbox use" -ForegroundColor Yellow
+        Write-Host "Including folder level permissions, this will lengthen the scan duration significantly" -ForegroundColor Yellow
     }
 
-    Write-Progress -Id 1 -PercentComplete 1 -Activity "Scanning Exchange Online" -Status "Scanning roles..."
+    Write-Progress -Id 1 -PercentComplete 1 -Activity $activity -Status "Scanning roles..."
     get-ExORoles -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent
-    Write-Progress -Id 1 -PercentComplete 1 -Activity "Scanning Exchange Online" -Status "Retrieving all recipients..."
-    $global:recipients = (New-ExOQuery -cmdlet "Get-Recipient" -cmdParams @{"ResultSize" = "Unlimited"}) | Where-Object{$_ -and !$_.Identity.StartsWith("DiscoverySearchMailbox")}
-    $count = 0
-    foreach($recipient in $recipients){
-        $count++
-        Write-Progress -Id 1 -PercentComplete (($count/$recipients.Count)*100) -Activity "Scanning Exchange Online" -Status "Examining $($recipient.displayName) ($($count) of $($recipients.Count))"
-        get-ExOPermissions -recipientIdentity $recipient.Identity -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeFolderLevelPermissions:$includeFolderLevelPermissions.IsPresent
+    Write-Progress -Id 1 -PercentComplete 1 -Activity $activity -Status "Retrieving all recipients..."
+    $global:octo.recipients = (New-ExOQuery -cmdlet "Get-Recipient" -cmdParams @{"ResultSize" = "Unlimited"}) | Where-Object{$_ -and !$_.Identity.StartsWith("DiscoverySearchMailbox")}
+    foreach($recipient in $global:octo.recipients){
+        New-ScanJob -Title $activity -Target $recipient.displayName -FunctionToRun "get-ExOPermissions" -FunctionArguments @{
+            "recipientIdentity" = $recipient.Identity
+            "outputFormat" = $outputFormat
+            "expandGroups" = $expandGroups.IsPresent
+            "includeFolderLevelPermissions" = $includeFolderLevelPermissions.IsPresent
+        }
     }
+    Start-ScanJobs -Title $activity
+    Write-Progress -Id 1 -Completed -Activity $activity
 }

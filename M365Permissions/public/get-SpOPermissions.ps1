@@ -32,19 +32,16 @@
         [Switch]$includeCurrentUser
     )
 
-    $global:includeCurrentUser = $includeCurrentUser.IsPresent
-    if(!$global:tenantName){
-        $global:tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
-    }
+    $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
 
     Write-Host "Starting SpO Scan of $teamName $siteUrl"
 
-    $spoBaseAdmUrl = "https://$($global:tenantName)-admin.sharepoint.com"
+    $spoBaseAdmUrl = "https://$($global:octo.tenantName)-admin.sharepoint.com"
     Write-Verbose "Using Sharepoint base URL: $spoBaseAdmUrl"
 
     $ignoredSiteTypes = @("REDIRECTSITE#0","SRCHCEN#0", "SPSMSITEHOST#0", "APPCATALOG#0", "POINTPUBLISHINGHUB#0", "EDISC#0", "STS#-1","EHS#1","POINTPUBLISHINGTOPIC#0")
     if($siteUrl){
-        $sites = Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $siteUrl
+        $sites = @(Get-PnPTenantSite -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -Identity $siteUrl)
     }
     if(!$sites){
         $sites = @(Get-PnPTenantSite -IncludeOneDriveSites -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) | Where-Object {`
@@ -72,7 +69,7 @@
         }
         foreach($channel in $channels){
             if($channel.filesFolderWebUrl){
-                $targetUrl = $Null; $targetUrl ="https://$($global:tenantName).sharepoint.com/$($channel.filesFolderWebUrl.Split("/")[3])/$($channel.filesFolderWebUrl.Split("/")[4])"
+                $targetUrl = $Null; $targetUrl ="https://$($global:octo.tenantName).sharepoint.com/$($channel.filesFolderWebUrl.Split("/")[3])/$($channel.filesFolderWebUrl.Split("/")[4])"
             }
             if($targetUrl -and $sites.Url -notcontains $targetUrl){
                 try{
@@ -107,9 +104,9 @@
            
         $wasOwner = $False
         try{
-            if($site.Owners -notcontains $global:currentUser.userPrincipalName){
+            if($site.Owners -notcontains $global:octo.currentUser.userPrincipalName){
                 Write-Host "Adding you as site collection owner to ensure all permissions can be read from $($site.Url)..."
-                Set-PnPTenantSite -Identity $site.Url -Owners $global:currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
+                Set-PnPTenantSite -Identity $site.Url -Owners $global:octo.currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
                 Write-Host "Owner added and marked for removal upon scan completion"
             }else{
                 $wasOwner = $True
@@ -144,7 +141,7 @@
 
         if(!$wasOwner){
             Write-Host "Cleanup: Removing you as site collection owner of $($site.Url)..."
-            Remove-PnPSiteCollectionAdmin -Owners $global:currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
+            Remove-PnPSiteCollectionAdmin -Owners $global:octo.currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
             Write-Host "Cleanup: Owner removed"
         }       
         
