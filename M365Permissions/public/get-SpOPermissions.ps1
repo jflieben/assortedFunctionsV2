@@ -33,9 +33,6 @@
     )
 
     $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
-    if(!$global:octo.tenantName){
-        $global:octo.tenantName = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' -NoPagination | Where-Object -Property isInitial -EQ $true).id.Split(".")[0]
-    }
 
     Write-Host "Starting SpO Scan of $teamName $siteUrl"
 
