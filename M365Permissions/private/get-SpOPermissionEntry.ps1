@@ -15,7 +15,16 @@ function get-SpOPermissionEntry{
     )
     
     $name = $entity.Title
-    $type = $entity.PrincipalType 
+    $type = $entity.PrincipalType
+
+    if($type -eq "User"){
+        if($name -eq "External User" -or $entity.LoginName -like "*#EXT#*"){
+            $type = "Guest User"
+        }else{
+            $type = "Internal User"
+        }
+    }
+
     $objectType = $object.Type ? $object.Type : "root"
     
     if([string]::IsNullOrEmpty($parent)){

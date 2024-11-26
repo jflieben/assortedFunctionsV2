@@ -12,7 +12,7 @@ function get-SpOInvitee{
     $retVal = @{}
 
     #type 1 = internal user
-    #type 2 = group -> enumerate in later version
+    #type 2 = group -> still used at all? enumerate in later version if reproducible
     #type 3 = external user
     if($invitee.Type -in @(1,2)){
         try{
@@ -23,16 +23,16 @@ function get-SpOInvitee{
         if($usr){
             return $usr
         }else{
-            $retVal.Title = "Internal User"
+            $retVal.Title = "Unknown (deleted?)"
             $retVal.LoginName = "Unknown (deleted?)"
             $retVal.Email = "Unknown (deleted?)"
-            $retVal.PrincipalType = "User"        
+            $retVal.PrincipalType = "Internal User"        
         }
     }else{
-        $retVal.Title = "External User"
+        $retVal.Title = $invitee.Email.Split("@")[0]
         $retVal.Email = $invitee.Email
         $retVal.LoginName = $invitee.Email
-        $retVal.PrincipalType = "User" 
+        $retVal.PrincipalType = "Guest User" 
     }
 
     return $retVal
