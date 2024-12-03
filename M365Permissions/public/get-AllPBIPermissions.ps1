@@ -76,10 +76,10 @@
                 if($user.principalType -eq "Group" -and $expandGroups.IsPresent){
                     $groupMembers = get-EntraGroupMembers -groupId $user.graphId
                     foreach($groupMember in $groupMembers){
-                        New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/reports/$($report.name)" -type "Report" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.reportUserAccessRight -through "Group" -parent $user.graphId
+                        New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/reports/$($report.name)" -type "Report" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.reportUserAccessRight -through "Group" -parent $user.graphId -created $report.createdDateTime -modified $report.modifiedDateTime
                     }
                 }else{
-                    New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/reports/$($report.name)" -type "Report" -principalId $user.graphId -principalName $user.displayName -principalUpn $user.identifier -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.reportUserAccessRight
+                    New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/reports/$($report.name)" -type "Report" -principalId $user.graphId -principalName $user.displayName -principalUpn $user.identifier -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.reportUserAccessRight -created $report.createdDateTime -modified $report.modifiedDateTime
                 }
             }
         }
@@ -89,10 +89,10 @@
                 if($user.principalType -eq "Group" -and $expandGroups.IsPresent){
                     $groupMembers = get-EntraGroupMembers -groupId $user.graphId
                     foreach($groupMember in $groupMembers){
-                        New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/datasets/$($dataset.name)" -type "Dataset" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.datasetUserAccessRight -through "Group" -parent $user.graphId
+                        New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/datasets/$($dataset.name)" -type "Dataset" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.datasetUserAccessRight -through "Group" -parent $user.graphId -created $dataset.createdDate
                     }
                 }else{
-                    New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/datasets/$($dataset.name)" -type "Dataset" -principalId $user.graphId -principalName $user.displayName -principalUpn $user.identifier -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.datasetUserAccessRight
+                    New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/datasets/$($dataset.name)" -type "Dataset" -principalId $user.graphId -principalName $user.displayName -principalUpn $user.identifier -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.datasetUserAccessRight -created $dataset.createdDate
                 }
             }
         }        
@@ -115,7 +115,9 @@
                 "principalType" = $permission.principalType
                 "through" = $permission.through
                 "parent" = $permission.parent
-                "principalId"    = $permission.principalId         
+                "principalId"    = $permission.principalId  
+                "created" = $permission.created
+                "modified" = $permission.modified       
             }
         }
     }

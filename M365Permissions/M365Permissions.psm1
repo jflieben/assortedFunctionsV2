@@ -13,10 +13,10 @@
     https://www.lieben.nu/liebensraum/m365permissions
 
     .ROADMAP
-    1.0.7 Add support for PowerBI
-    1.0.x Add support for Graph Permissions (apps/spns)
-    1.0.x Add support for App-Only authentication
-    1.0.x Add change detection/marking/sorting
+    1.0.8 Add support for Graph Permissions (apps/spns)
+    1.0.9 Add support for App-Only authentication
+    1.1.0 Add change detection/marking/sorting
+    1.1.1 Staging of permissions for tenants without all resource categories
 #>
 
 $helperFunctions = @{

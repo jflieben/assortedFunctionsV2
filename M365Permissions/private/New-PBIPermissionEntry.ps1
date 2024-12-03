@@ -13,7 +13,9 @@ Function New-PBIPermissionEntry{
         [Parameter(Mandatory=$false)]$principalType="Unknown",
         [Parameter(Mandatory=$false)]$through="Direct",
         [Parameter(Mandatory=$false)]$parent = "N/A",
-        [Parameter(Mandatory=$false)]$roleDefinitionName="Unknown"
+        [Parameter(Mandatory=$false)]$roleDefinitionName="Unknown",
+        [Parameter(Mandatory=$false)]$created="Unknown",
+        [Parameter(Mandatory=$false)]$modified="Unknown"
     )
 
     if($global:octo.currentUser.userPrincipalName -eq $principalUpn -and !$global:octo.includeCurrentUser){
@@ -37,6 +39,8 @@ Function New-PBIPermissionEntry{
         principalType = $principalType        
         principalId = $principalId
         through = $through
-        parent = $parent        
+        parent = $parent      
+        created = $created
+        modified = $modified  
     }
 }
