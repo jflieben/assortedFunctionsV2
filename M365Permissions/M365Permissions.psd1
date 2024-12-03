@@ -49,6 +49,8 @@
 
     Get-ExOPermissions -recipientIdentity `$mailbox.Identity -includeFolderLevelPermissions
 
+    get-AllPBIPermissions
+
     Please note that this module is provided AS-IS, no guarantees or warranties provided. Use at your own risk."
 
     # Minimum version of the Windows PowerShell engine required by this module

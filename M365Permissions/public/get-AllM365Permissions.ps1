@@ -14,10 +14,12 @@
     Write-Host "Starting FULL M365 Tenant scan as $($global:octo.currentUser.userPrincipalName)"
     Write-Host "Planned scan order:"
     Write-Host "1. Entra permissions"
-    Write-Host "2. Exchange permissions"
-    Write-Host "3. Onedrive permissions"
-    Write-Host "4. Teams and Sharepoint permissions"
+    Write-Host "2. PowerBI permissions"
+    Write-Host "3. Exchange permissions"
+    Write-Host "4. Onedrive permissions"
+    Write-Host "5. Teams and Sharepoint permissions"
 
+    get-AllPBIPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent
     get-AllEntraPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent
     get-AllExOPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent -includeFolderLevelPermissions
     get-AllSpOPermissions -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent -includeOnedriveSites

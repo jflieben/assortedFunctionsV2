@@ -13,9 +13,10 @@
     https://www.lieben.nu/liebensraum/m365permissions
 
     .ROADMAP
-    1.0.x Add support for PowerBI
-    1.0.x Add support for Graph Permissions
+    1.0.7 Add support for PowerBI
+    1.0.x Add support for Graph Permissions (apps/spns)
     1.0.x Add support for App-Only authentication
+    1.0.x Add change detection/marking/sorting
 #>
 
 $helperFunctions = @{
@@ -92,4 +93,6 @@ if(!$global:octo){
     Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
     
     Write-Host ">> get-AllEntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta    
+
+    Write-Host ">> get-AllPBIPermissions" -ForegroundColor Magenta   
 }
