@@ -13,8 +13,8 @@
 
     Write-Host "Starting FULL M365 Tenant scan as $($global:octo.currentUser.userPrincipalName)"
     Write-Host "Planned scan order:"
-    Write-Host "1. Entra permissions"
-    Write-Host "2. PowerBI permissions"
+    Write-Host "1. PowerBI permissions"
+    Write-Host "2. Entra permissions"
     Write-Host "3. Exchange permissions"
     Write-Host "4. Onedrive permissions"
     Write-Host "5. Teams and Sharepoint permissions"
