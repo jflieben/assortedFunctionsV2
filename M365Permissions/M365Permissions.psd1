@@ -3,7 +3,7 @@
     RootModule           = 'M365Permissions.psm1'
 
     # Version number of this module.
-    ModuleVersion        = "1.0.6"
+    ModuleVersion        = "1.0.7"
     
     # Supported PSEditions
     CompatiblePSEditions = @('Core')
@@ -48,6 +48,8 @@
     Get-AllExOPermissions -includeFolderLevelPermissions
 
     Get-ExOPermissions -recipientIdentity `$mailbox.Identity -includeFolderLevelPermissions
+
+    get-AllPBIPermissions
 
     Please note that this module is provided AS-IS, no guarantees or warranties provided. Use at your own risk."
 

@@ -46,7 +46,7 @@
             $groupMembers = get-entraGroupMembers -groupId $principal.id        
             foreach($groupMember in $groupMembers){
                 Update-StatisticsObject -category "Entra" -subject "Roles"
-                New-EntraPermissionEntry -path $roleAssignment.directoryScopeId -type "PermanentRole" -principalId $groupMember.id -roleDefinitionId $roleAssignment.roleDefinitionId -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupMember."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName -through "SecurityGroup" -parent $roleAssignment.principal.id
+                New-EntraPermissionEntry -path $roleAssignment.directoryScopeId -type "PermanentRole" -principalId $groupMember.id -roleDefinitionId $roleAssignment.roleDefinitionId -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupMember.principalType -roleDefinitionName $roleDefinition.displayName -through "SecurityGroup" -parent $roleAssignment.principal.id
             }
         }else{
             Update-StatisticsObject -category "Entra" -subject "Roles"
@@ -83,7 +83,7 @@
             $groupMembers = get-entraGroupMembers -groupId $principal.id
             foreach($groupMember in $groupMembers){
                 Update-StatisticsObject -category "Entra" -subject "Roles"
-                New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $groupMember.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupMember."@odata.type".Split(".")[2] -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.startDateTime -endDateTime $roleEligibility.endDateTime -parent $principal.id -through "SecurityGroup"
+                New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $groupMember.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupMember.principalType -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.startDateTime -endDateTime $roleEligibility.endDateTime -parent $principal.id -through "SecurityGroup"
             }
         }else{
             Update-StatisticsObject -category "Entra" -subject "Roles"
@@ -161,7 +161,7 @@
                     "GroupID" = $group.id
                     "MemberName" = $groupMember.displayName
                     "MemberID" = $groupMember.id
-                    "MemberType" = $groupMember."@odata.type".Split(".")[2]
+                    "MemberType" = $groupMember.principalType
                     "Roles" = $memberRoles
                 }
             }
@@ -174,7 +174,7 @@
                         "GroupID" = $group.id
                         "MemberName" = $groupOwner.displayName
                         "MemberID" = $groupOwner.id
-                        "MemberType" = $groupOwner."@odata.type".Split(".")[2]
+                        "MemberType" = $groupOwner.principalType
                         "Roles" = "Owner"
                     }
                 }

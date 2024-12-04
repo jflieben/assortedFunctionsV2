@@ -59,6 +59,8 @@ function New-GraphQuery {
         $MaxAttempts = 1
     }
 
+    $powerBiSkip = 0
+
     if($Method -in ('POST', 'PATCH')){
         try {
             $attempts = 0
@@ -124,6 +126,17 @@ function New-GraphQuery {
                     $nextURL = $Data.'@odata.nextLink'  
                 }elseif($Data.'odata.nextLink'){
                     $nextURL = $Data.'odata.nextLink'  
+                }elseif($Data.psobject.properties.name -icontains '@odata.count' -or $Data.Keys -icontains '@odata.count'){
+                    if($Data.Count -ge 5000){
+                        $powerBiSkip += 5000
+                        if($nextUrl.Contains("skip=")){
+                            $nextUrl = $nextUrl -replace "skip=\d+","skip=$powerBiSkip"
+                        }else{
+                            $nextUrl = $nextUrl + "&`$skip=$powerBiSkip"
+                        }
+                    }else{
+                        $nextURL = $null
+                    }
                 }else{
                     $nextURL = $null
                 }
