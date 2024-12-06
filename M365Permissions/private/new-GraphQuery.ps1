@@ -108,7 +108,10 @@ function New-GraphQuery {
                     $Data = $Data | ConvertFrom-Json -AsHashtable
                 }
 
-                if($Data.psobject.properties.name -icontains 'value' -or $Data.Keys -icontains 'value'){
+                if($NoPagination){
+                    $totalResults+=$Data.count                
+                    ($Data)
+                }elseif($Data.psobject.properties.name -icontains 'value' -or $Data.Keys -icontains 'value'){
                     $totalResults+=$Data.value.count
                     ($Data.value)
                 }else{
@@ -116,7 +119,7 @@ function New-GraphQuery {
                     ($Data)
                 }
                 if($expectedTotalResults -gt 0){
-                    Try {$percentComplete = ($totalResults / $expectedTotalResults * 100)}Catch{$percentComplete = 0}
+                    Try {$percentComplete = [math]::Min(100,($totalResults / $expectedTotalResults * 100))}Catch{$percentComplete = 0}
                     Write-Progress -Id 10 -Activity "Querying $resource API" -Status "Retrieved $totalResults of $expectedTotalResults items" -PercentComplete $percentComplete
                 }                
                 
@@ -148,6 +151,7 @@ function New-GraphQuery {
         Write-Progress -Id 10 -Completed -Activity "Querying $resource API"
         if ($ReturnedData -and !$ReturnedData.value -and $ReturnedData.PSObject.Properties["value"]) { return $null }
         [System.GC]::Collect()
+
         return $ReturnedData
     }
 }
