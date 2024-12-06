@@ -71,4 +71,5 @@ function add-toReport{
             }
         }
     }
+    [System.GC]::Collect()
 }

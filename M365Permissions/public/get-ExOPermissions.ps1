@@ -199,6 +199,7 @@
     }  
     
     add-toReport -formats $outputFormat -permissions $permissionRows -category "ExoRecipients" -subject $recipient.displayName
-
+    Remove-Variable -Name permissionRows -Force
+    [System.GC]::Collect()
     Write-Progress -Id 2 -Completed -Activity "Scanning $($recipient.Identity)"
 }

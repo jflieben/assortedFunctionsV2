@@ -163,6 +163,8 @@
             }
         }
     
-        add-toReport -formats $outputFormat -permissions $permissionRows -category $siteCategory -subject $site.Url         
+        add-toReport -formats $outputFormat -permissions $permissionRows -category $siteCategory -subject $site.Url      
+        Remove-Variable -Name permissionRows -Force
+        [System.GC]::Collect()           
     }
 }
