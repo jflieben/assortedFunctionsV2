@@ -92,12 +92,27 @@
         Write-Progress -Id 2 -Completed -Activity "Processing flexible assignments"
     }
 
-    Write-Progress -Id 1 -PercentComplete 40 -Activity "Scanning Entra ID" -Status "Getting Graph Subscriptions"
-    $graphSubscriptions = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/subscriptions' -Method GET
-    if($graphSubscriptions){
-        Write-Progress -Id 1 -PercentComplete 40 -Activity "Scanning Entra ID" -Status "Getting Service Principals"
-        $servicePrincipals = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/servicePrincipals' -Method GET
+    Write-Progress -Id 1 -PercentComplete 40 -Activity "Scanning Entra ID" -Status "Getting Service Principals"
+    $servicePrincipals = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/servicePrincipals' -Method GET
+    
+    foreach($servicePrincipal in $servicePrincipals){
+        Update-StatisticsObject -category "Entra" -subject "Roles"
+        #skip disabled SPN's
+        if($servicePrincipal.accountEnabled -eq $false){
+            continue
+        }
+
+        foreach($appRole in @($servicePrincipal.appRoles | Where-Object { $_.allowedMemberTypes -contains "Application" })){
+            #skip disabled roles
+            if($appRole.isEnabled -eq $false){
+                continue
+            }
+            New-EntraPermissionEntry -path "\" -type "APIPermission" -principalId $servicePrincipal.appId -roleDefinitionId $appRole.value -principalName $servicePrincipal.displayName -principalUpn "N/A" -principalType "ServicePrincipal" -roleDefinitionName $appRole.displayName
+        }
     }
+
+    Write-Progress -Id 1 -PercentComplete 45 -Activity "Scanning Entra ID" -Status "Getting Graph Subscriptions"
+    $graphSubscriptions = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/subscriptions' -Method GET
     foreach($graphSubscription in $graphSubscriptions){
         Update-StatisticsObject -category "Entra" -subject "Roles"
         $spn = $null; $spn = $servicePrincipals | Where-Object { $_.appId -eq $graphSubscription.applicationId }
@@ -122,15 +137,14 @@
     
     if(!$excludeGroupsAndUsers){
         New-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
-
-        Write-Progress -Id 1 -PercentComplete 45 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
+        Write-Progress -Id 1 -PercentComplete 50 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
         $groupMemberRows = @()
-        $allGroups = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/groups' -Method GET
+        $allGroups = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/groups?$select=id,mailEnabled,groupTypes,securityEnabled,membershipRule,displayName' -Method GET
         $count = 0
         foreach($group in $allGroups){
             $count++
             Update-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
-            Write-Progress -Id 2 -PercentComplete $(try{$count / $allGroups.Count *100}catch{1}) -Activity "Processing groups" -Status "[$count / $($allGroups.Count)] $($group.displayName)"
+            Write-Progress -Id 2 -PercentComplete $(try{$count / $allGroups.Count *100}catch{1}) -Activity "Processing groups" -Status "$count / $($allGroups.Count) $($group.displayName)"
 
             if($group.groupTypes -contains "Unified"){
                 $groupType = "Microsoft 365 Group"
@@ -207,7 +221,9 @@
     }
 
     add-toReport -formats $outputFormat -permissions $groupMemberRows -category "GroupsAndMembers" -subject "Entities"
+    Remove-Variable -Name groupMemberRows -Force
     add-toReport -formats $outputFormat -permissions $permissionRows -category "Entra" -subject "Roles"
-
+    Remove-Variable -Name permissionRows -Force
+    [System.GC]::Collect()
     Write-Progress -Id 1 -Completed -Activity "Scanning Entra ID"
 }
