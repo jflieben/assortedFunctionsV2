@@ -89,9 +89,9 @@ if(!$global:octo){
     
     Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV" -ForegroundColor Magenta
     
-    Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
+    Write-Host ">> get-AllSPOPermissions -ExpandGroups -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
     
-    Write-Host ">> get-AllEntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta    
+    Write-Host ">> get-AllEntraPermissions -excludeGroupsAndUsers" -ForegroundColor Magenta    
 
     Write-Host ">> get-AllPBIPermissions" -ForegroundColor Magenta   
 }

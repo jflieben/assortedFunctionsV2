@@ -146,7 +146,7 @@
 
         $allUsersAndOwnedObjects = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/users?$expand=ownedObjects' -Method GET
         Write-Host "Got ownership metadata"
-        $allUsersAndTheirGroups = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/users?$expand=transitiveMemberOf' -Method GET
+        $allUsersAndTheirGroups = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users?`$expand=transitiveMemberOf" -Method GET
         Write-Host "Got group membership metadata"
 
         #get over the expand limit of 20 objects
@@ -161,7 +161,7 @@
         for($i=0;$i -lt $allUsersAndTheirGroups.Count;$i++){
             Write-Progress -Id 2 -PercentComplete $(try{($i+1) / $allUsersAndTheirGroups.Count *100}catch{1}) -Activity "Getting membership for users in > 20 groups" -Status "$($i+1) / $($allUsersAndTheirGroups.Count) $($allUsersAndTheirGroups[$i].displayName)"
             if($allUsersAndTheirGroups[$i].transitiveMemberOf.Count -ge 20){
-                $allUsersAndTheirGroups[$i].transitiveMemberOf = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users/$($allUsersAndTheirGroups[$i].id)/transitiveMemberOf" -Method GET
+                $allUsersAndTheirGroups[$i].transitiveMemberOf = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users/$($allUsersAndTheirGroups[$i].id)/transitiveMemberOf/microsoft.graph.group?`$select=id,displayName,groupTypes,mailEnabled,securityEnabled,membershipRule&`$top=999" -Method GET
             }
         }
         Write-Progress -Id 2 -Completed -Activity "Getting membership for users in > 20 groups"        
