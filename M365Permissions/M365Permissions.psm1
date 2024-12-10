@@ -49,7 +49,6 @@ $global:unifiedStatistics = @{}
 if(!$global:octo){
     $global:octo = [Hashtable]::Synchronized(@{})
     $global:octo.LCClientId = "0ee7aa45-310d-4b82-9cb5-11cc01ad38e4"
-    $global:octo.pnpUrlAuthCaches = @{}
     $global:octo.PnPGroupCache = @{}
     $global:octo.LCRefreshToken = $Null
     $global:octo.LCCachedTokens = @{}

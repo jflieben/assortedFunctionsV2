@@ -9,8 +9,8 @@ Function Get-SpOConnection{
         [Parameter(Mandatory=$true)][string]$Url
     )
 
-    if(!$global:octo.pnpUrlAuthCaches){
-        $global:octo.pnpUrlAuthCaches = @{}
+    if(!$global:pnpUrlAuthCaches){
+        $global:pnpUrlAuthCaches = @{}
     }
 
     if($Type -eq "Admin"){
@@ -19,19 +19,19 @@ Function Get-SpOConnection{
         $resource = "https://$($global:octo.tenantName).sharepoint.com"
     }
 
-    if(!$global:octo.pnpUrlAuthCaches.$Url){
-        $global:octo.pnpUrlAuthCaches.$Url = @{}
+    if(!$global:pnpUrlAuthCaches.$Url){
+        $global:pnpUrlAuthCaches.$Url = @{}
     }
 
-    if(!$global:octo.pnpUrlAuthCaches.$Url.$resource){
-        $global:octo.pnpUrlAuthCaches.$Url.$resource = @{
+    if(!$global:pnpUrlAuthCaches.$Url.$resource){
+        $global:pnpUrlAuthCaches.$Url.$resource = @{
             PnPConnObj = Connect-PnPOnline -Url $Url -ReturnConnection -AccessToken (get-AccessToken -resource $resource) -ErrorAction Stop
             LastUpdated = Get-Date
         }
-    }elseif($global:octo.pnpUrlAuthCaches.$Url.$resource.LastUpdated -lt (Get-Date).AddMinutes(-15)){
-        $global:octo.pnpUrlAuthCaches.$Url.$resource.PnPConnObj = Connect-PnPOnline -Url $Url -ReturnConnection -AccessToken (get-AccessToken -resource $resource) -ErrorAction Stop
-        $global:octo.pnpUrlAuthCaches.$Url.$resource.LastUpdated = Get-Date
+    }elseif($global:pnpUrlAuthCaches.$Url.$resource.LastUpdated -lt (Get-Date).AddMinutes(-15)){
+        $global:pnpUrlAuthCaches.$Url.$resource.PnPConnObj = Connect-PnPOnline -Url $Url -ReturnConnection -AccessToken (get-AccessToken -resource $resource) -ErrorAction Stop
+        $global:pnpUrlAuthCaches.$Url.$resource.LastUpdated = Get-Date
     }
 
-    return $global:octo.pnpUrlAuthCaches.$Url.$resource.PnPConnObj
+    return $global:pnpUrlAuthCaches.$Url.$resource.PnPConnObj
 }
