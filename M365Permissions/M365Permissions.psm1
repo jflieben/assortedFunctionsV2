@@ -5,7 +5,7 @@
 
     .NOTES
     AUTHOR              : Jos Lieben (jos@lieben.nu)
-    Copyright/License   : https://www.lieben.nu/liebensraum/commercial-use/ (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+    Copyright/License   : https://www.lieben.nu/liebensraum/commercial-use/
     CREATED             : 04/11/2024
     UPDATED             : See GitHub
 
@@ -49,7 +49,6 @@ $global:unifiedStatistics = @{}
 if(!$global:octo){
     $global:octo = [Hashtable]::Synchronized(@{})
     $global:octo.LCClientId = "0ee7aa45-310d-4b82-9cb5-11cc01ad38e4"
-    $global:octo.pnpUrlAuthCaches = @{}
     $global:octo.PnPGroupCache = @{}
     $global:octo.LCRefreshToken = $Null
     $global:octo.LCCachedTokens = @{}
@@ -90,9 +89,9 @@ if(!$global:octo){
     
     Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV" -ForegroundColor Magenta
     
-    Write-Host ">> get-AllSPOPermissions -ExpandGroups -OutputFormat XLSX -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
+    Write-Host ">> get-AllSPOPermissions -ExpandGroups -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
     
-    Write-Host ">> get-AllEntraPermissions -OutputFormat XLSX -expandGroups" -ForegroundColor Magenta    
+    Write-Host ">> get-AllEntraPermissions -excludeGroupsAndUsers" -ForegroundColor Magenta    
 
     Write-Host ">> get-AllPBIPermissions" -ForegroundColor Magenta   
 }

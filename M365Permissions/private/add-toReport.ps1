@@ -6,11 +6,11 @@ function add-toReport{
         [parameter(Mandatory=$true)][string]$category
     )
 
-    if((get-location).Path){
-        $basePath = Join-Path -Path (get-location).Path -ChildPath "M365Permissions.@@@"
+    if($global:octo.outputFolder -ne "CURRENTFOLDER"){
+        $basePath = Join-Path -Path $global:octo.outputFolder -ChildPath "M365Permissions.@@@"
     }else{
-        $basePath = Join-Path -Path (Split-Path -Path $MyInvocation.MyCommand.Definition -Parent) -ChildPath "M365Permissions.@@@"
-    }
+        $basePath = Join-Path -Path $env:appdata -ChildPath "LiebenConsultancy\M365Permissions.@@@"
+    }   
 
     function Export-WithRetry{
         Param(
@@ -71,4 +71,5 @@ function add-toReport{
             }
         }
     }
+    [System.GC]::Collect()
 }

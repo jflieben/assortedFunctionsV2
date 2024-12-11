@@ -92,12 +92,27 @@
         Write-Progress -Id 2 -Completed -Activity "Processing flexible assignments"
     }
 
-    Write-Progress -Id 1 -PercentComplete 40 -Activity "Scanning Entra ID" -Status "Getting Graph Subscriptions"
-    $graphSubscriptions = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/subscriptions' -Method GET
-    if($graphSubscriptions){
-        Write-Progress -Id 1 -PercentComplete 40 -Activity "Scanning Entra ID" -Status "Getting Service Principals"
-        $servicePrincipals = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/servicePrincipals' -Method GET
+    Write-Progress -Id 1 -PercentComplete 40 -Activity "Scanning Entra ID" -Status "Getting Service Principals"
+    $servicePrincipals = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/servicePrincipals?$expand=transitiveMemberOf' -Method GET
+    
+    foreach($servicePrincipal in $servicePrincipals){
+        Update-StatisticsObject -category "Entra" -subject "Roles"
+        #skip disabled SPN's
+        if($servicePrincipal.accountEnabled -eq $false){
+            continue
+        }
+
+        foreach($appRole in @($servicePrincipal.appRoles | Where-Object { $_.allowedMemberTypes -contains "Application" })){
+            #skip disabled roles
+            if($appRole.isEnabled -eq $false){
+                continue
+            }
+            New-EntraPermissionEntry -path "\" -type "APIPermission" -principalId $servicePrincipal.appId -roleDefinitionId $appRole.value -principalName $servicePrincipal.displayName -principalUpn "N/A" -principalType "ServicePrincipal" -roleDefinitionName $appRole.displayName
+        }
     }
+
+    Write-Progress -Id 1 -PercentComplete 45 -Activity "Scanning Entra ID" -Status "Getting Graph Subscriptions"
+    $graphSubscriptions = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/subscriptions' -Method GET
     foreach($graphSubscription in $graphSubscriptions){
         Update-StatisticsObject -category "Entra" -subject "Roles"
         $spn = $null; $spn = $servicePrincipals | Where-Object { $_.appId -eq $graphSubscription.applicationId }
@@ -122,66 +137,85 @@
     
     if(!$excludeGroupsAndUsers){
         New-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
-
-        Write-Progress -Id 1 -PercentComplete 45 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
+        Write-Progress -Id 1 -PercentComplete 50 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
         $groupMemberRows = @()
-        $allGroups = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/groups' -Method GET
-        $count = 0
-        foreach($group in $allGroups){
-            $count++
-            Update-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
-            Write-Progress -Id 2 -PercentComplete $(try{$count / $allGroups.Count *100}catch{1}) -Activity "Processing groups" -Status "[$count / $($allGroups.Count)] $($group.displayName)"
 
-            if($group.groupTypes -contains "Unified"){
-                $groupType = "Microsoft 365 Group"
-            }elseif($group.mailEnabled -and $group.securityEnabled){
-                $groupType = "Mail-enabled Security Group"
-            }elseif($group.mailEnabled -and -not $group.securityEnabled){
-                $groupType = "Distribution Group"
-            }elseif($group.membershipRule){
-                $groupType = "Dynamic Security Group"
+        $userCount = (New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/users?$top=1' -Method GET -ComplexFilter -nopagination)."@odata.count"
+        Write-Host "Retrieving metadata for $userCount users..."
+        Write-Progress -Id 1 -PercentComplete 50 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
+
+        $allUsersAndOwnedObjects = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/users?$expand=ownedObjects' -Method GET
+        Write-Host "Got ownership metadata"
+        $allUsersAndTheirGroups = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users?`$expand=transitiveMemberOf" -Method GET
+        Write-Host "Got group membership metadata"
+
+        #get over the expand limit of 20 objects
+        for($i=0;$i -lt $allUsersAndOwnedObjects.Count;$i++){
+            Write-Progress -Id 2 -PercentComplete $(try{($i+1) / $allUsersAndOwnedObjects.Count *100}catch{1}) -Activity "Getting ownership for users with > 20 owned groups" -Status "$($i+1) / $($allUsersAndOwnedObjects.Count) $($allUsersAndOwnedObjects[$i].displayName)"
+            if($allUsersAndOwnedObjects[$i].ownedObjects.Count -ge 20){
+                $allUsersAndOwnedObjects[$i].ownedObjects = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users/$($allUsersAndOwnedObjects[$i].id)/ownedObjects" -Method GET
+            }
+        }
+        Write-Progress -Id 2 -Completed -Activity "Getting ownership for users with > 20 owned groups"
+   
+        for($i=0;$i -lt $allUsersAndTheirGroups.Count;$i++){
+            Write-Progress -Id 2 -PercentComplete $(try{($i+1) / $allUsersAndTheirGroups.Count *100}catch{1}) -Activity "Getting membership for users in > 20 groups" -Status "$($i+1) / $($allUsersAndTheirGroups.Count) $($allUsersAndTheirGroups[$i].displayName)"
+            if($allUsersAndTheirGroups[$i].transitiveMemberOf.Count -ge 20){
+                $allUsersAndTheirGroups[$i].transitiveMemberOf = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users/$($allUsersAndTheirGroups[$i].id)/transitiveMemberOf/microsoft.graph.group?`$select=id,displayName,groupTypes,mailEnabled,securityEnabled,membershipRule&`$top=999" -Method GET
+            }
+        }
+        Write-Progress -Id 2 -Completed -Activity "Getting membership for users in > 20 groups"        
+
+        $count = 0
+        foreach($user in $allUsersAndTheirGroups){
+            $count++
+            $ownerInfo = $Null; $ownerInfo = $allUsersAndOwnedObjects | Where-Object { $_.id -eq $user.id }
+            if($user.userPrincipalName -like "*#EXT#@*"){
+                $principalType = "External User"
             }else{
-                $groupType = "Security Group"
+                $principalType = "Internal User"
             }
-            try{
-                $groupOwners = $Null; $groupOwners = get-entraGroupOwners -groupId $group.id
-            }catch{
-                Write-Verbose "Failed to get owners for $($group.displayName) because $_"
-            }
-            $groupMembers = $Null; $groupMembers = get-entraGroupMembers -groupId $group.id
-            foreach($groupMember in $groupMembers){
-                Update-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
-                $memberRoles = "Member"
-                if($groupOwners.id -contains $groupMember.id){
-                    $memberRoles = "Member, Owner"
+            
+            Update-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
+            Write-Progress -Id 2 -PercentComplete $(try{$count / $allUsersAndTheirGroups.Count *100}catch{1}) -Activity "Processing users and groups" -Status "$count / $($allUsersAndTheirGroups.Count) $($user.displayName)"
+            foreach($groupMembership in @($user.transitiveMemberOf | Where-Object{$_."@odata.type" -eq "#microsoft.graph.group"})){
+                $groupType = Get-EntraGroupType -group $groupMembership
+
+                if($ownerInfo.ownedObjects.id -contains $groupMembership.id){
+                    $memberRoles = "Member,Owner"
+                }else{
+                    $memberRoles = "Member"
                 }
+
                 $groupMemberRows += [PSCustomObject]@{
-                    "GroupName" = $group.displayName
+                    "GroupName" = $groupMembership.displayName
                     "GroupType" = $groupType
-                    "GroupID" = $group.id
-                    "MemberName" = $groupMember.displayName
-                    "MemberID" = $groupMember.id
-                    "MemberType" = $groupMember.principalType
+                    "GroupID" = $groupMembership.id
+                    "MemberName" = $user.displayName
+                    "MemberID" = $user.id
+                    "MemberType" = $principalType
                     "Roles" = $memberRoles
-                }
+                }                
             }
-            foreach($groupOwner in $groupOwners){
-                Update-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
-                if($groupMemberRows.MemberID -notcontains $groupOwner.id){
-                    $groupMemberRows += [PSCustomObject]@{
-                        "GroupName" = $group.displayName
-                        "GroupType" = $groupType
-                        "GroupID" = $group.id
-                        "MemberName" = $groupOwner.displayName
-                        "MemberID" = $groupOwner.id
-                        "MemberType" = $groupOwner.principalType
-                        "Roles" = "Owner"
-                    }
+
+            foreach($ownedGroup in @($ownerInfo.ownedObjects | Where-Object{$_."@odata.type" -eq "#microsoft.graph.group"})){
+                #skip those groups a user is also member of (already processed above)
+                if($user.transitiveMemberOf.id -contains $ownedGroup.id){
+                    continue
+                }
+                $groupType = Get-EntraGroupType -group $ownedGroup
+                $groupMemberRows += [PSCustomObject]@{
+                    "GroupName" = $ownedGroup.displayName
+                    "GroupType" = $groupType
+                    "GroupID" = $ownedGroup.id
+                    "MemberName" = $user.displayName
+                    "MemberID" = $user.id
+                    "MemberType" = $principalType
+                    "Roles" = "Owner"
                 }
             }
         }
-        
-        Write-Progress -Id 2 -Completed -Activity "Processing groups"
+        Write-Progress -Id 2 -Completed -Activity "Processing users and groups"
         Stop-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
     }
 
@@ -207,7 +241,9 @@
     }
 
     add-toReport -formats $outputFormat -permissions $groupMemberRows -category "GroupsAndMembers" -subject "Entities"
+    Remove-Variable -Name groupMemberRows -Force
     add-toReport -formats $outputFormat -permissions $permissionRows -category "Entra" -subject "Roles"
-
+    Remove-Variable -Name permissionRows -Force
+    [System.GC]::Collect()
     Write-Progress -Id 1 -Completed -Activity "Scanning Entra ID"
 }
