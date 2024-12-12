@@ -13,7 +13,6 @@
     https://www.lieben.nu/liebensraum/m365permissions
 
     .ROADMAP
-    1.0.8 Add support for Graph Permissions (apps/spns)
     1.0.9 Add support for App-Only authentication
     1.1.0 Add change detection/marking/sorting
     1.1.1 Staging of permissions for tenants without all resource categories
@@ -54,7 +53,7 @@ if(!$global:octo){
     $global:octo.LCCachedTokens = @{}
     $global:octo.includeCurrentUser = $False
     $global:octo.moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
-    $global:octo.modulePath = $PSScriptRoot
+    $global:octo.modulePath = (Split-Path -Path $PSScriptRoot -Parent)
     $global:octo.ScanJobs = @{}
 
     cls
