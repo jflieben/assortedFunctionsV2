@@ -39,9 +39,6 @@ if ($helperFunctions.public) { Export-ModuleMember -Alias * -Function @($helperF
 if ($env:username -like "*joslieben*"){Export-ModuleMember -Alias * -Function @($helperFunctions.private.BaseName) }
 
 #variables that need to be cleared for each thread
-$global:SPOPermissions = @{}
-$global:EntraPermissions = @{}
-$global:ExOPermissions = @{}
 $global:unifiedStatistics = @{}
 
 #first load config, subsequent loads will detect global var and skip this section (multi-threading)
