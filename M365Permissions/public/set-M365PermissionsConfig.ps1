@@ -30,16 +30,18 @@
     foreach($passedParam in $PSBoundParameters.GetEnumerator()){
         if($defaultConfig.ContainsKey($passedParam.Key)){
             $preferredConfig.$($passedParam.Key) = $passedParam.Value
+            Write-Verbose "Persisted $($passedParam.Key) to $($passedParam.Value) for your account"
             $updateConfigFile = $true
         }
     }
 
     #set global vars based on customization and/or defaults
     foreach($configurable in $defaultConfig.GetEnumerator()){
-        if($preferredConfig.$($configurable.Key)){
-            $global:octo.$($configurable.Key) = $configurable.Value
+        if($preferredConfig.$($configurable.Name)){
+            Write-Verbose "Loaded $($configurable.Key) ($($preferredConfig.$($configurable.Name))) from persisted settings in $configLocation"
+            $global:octo.$($configurable.Name) = $preferredConfig.$($configurable.Name)
         }else{
-            $global:octo.$($configurable.Key) = $configurable.Value
+            $global:octo.$($configurable.Name) = $configurable.Value
         }
     }
 
