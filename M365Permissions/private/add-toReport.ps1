@@ -37,7 +37,7 @@ function add-toReport{
     }
 
     if($formats -contains "XLSX"){
-        New-ReportFileLock
+        $lock = New-ReportFileLock
     }
 
     try{
@@ -75,7 +75,7 @@ function add-toReport{
         Write-Error "Failed to write to file: $($_.Exception.Message)" -ErrorAction Stop
     }finally{
         if($formats -contains "XLSX"){
-            Remove-ReportFileLock
+            Remove-ReportFileLock -lock $lock
         }
     }
     [System.GC]::Collect()

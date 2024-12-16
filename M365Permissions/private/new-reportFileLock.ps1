@@ -6,11 +6,20 @@ function New-ReportFileLock {
     #>     
 
     $lockFilePath = Join-Path -Path $global:octo.outputFolder -ChildPath "M365Permissions.lock"
-    while((Test-Path -Path $lockFilePath)){
-        Write-Verbose "Waiting for file lock to clear..."
-        Start-Sleep -Seconds 1
+    if(!(Test-Path -Path $lockFilePath)){
+        Write-Verbose "Creating lock file..."  
+        $Null = New-Item -Path $lockFilePath -ItemType File | Out-Null
+        Write-Verbose "Lock file created!"
     }
-    Write-Verbose "Creating file lock..."    
-    New-Item -Path $lockFilePath -ItemType File
+    Write-Verbose "Creating lock..."
+    while($True){
+        try{
+            $lock = [System.IO.File]::Open($lockFilePath, 'OpenOrCreate', 'ReadWrite', 'None')
+            break
+        }catch{
+            Write-Verbose "Could not lock file, waiting for other process..."
+        }
+    }
     Write-Verbose "Lock created!"
+    return $lock
 }

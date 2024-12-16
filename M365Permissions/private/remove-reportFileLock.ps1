@@ -5,10 +5,13 @@ function Remove-ReportFileLock {
         Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
     #>     
 
-    $lockFilePath = Join-Path -Path $global:octo.outputFolder -ChildPath "M365Permissions.lock"
-    Write-Verbose "Waiting for XLSX Module..."
+    Param(
+        [parameter(Mandatory=$true)]$lock
+    )
+
+    Write-Verbose "Removing lock in 10 seconds...."
     Start-Sleep -s 10
-    Write-Verbose "Removing file lock..."
-    Remove-Item -Path $lockFilePath -Force
+    $lock.Close()
+    $lock.Dispose()
     Write-Verbose "Lock removed!"
 }
