@@ -147,6 +147,28 @@
     }
 
     Stop-statisticsObject -category "Entra" -subject "Roles"
+
+    $permissionRows = foreach($row in $global:EntraPermissions.Keys){
+        foreach($permission in $global:EntraPermissions.$row){
+            [PSCustomObject]@{
+                "Path" = $row
+                "Type" = $permission.Type
+                "principalName" = $permission.principalName
+                "roleDefinitionName" = $permission.roleDefinitionName               
+                "principalUpn" = $permission.principalUpn
+                "principalType" = $permission.principalType
+                "through" = $permission.through
+                "parent" = $permission.parent
+                "startDateTime" = $permission.startDateTime
+                "endDateTime" = $permission.endDateTime
+                "principalId"    = $permission.principalId                
+                "roleDefinitionId" = $permission.roleDefinitionId
+            }
+        }
+    }
+
+    add-toReport -formats $outputFormat -permissions $permissionRows -category "Entra" -subject "Roles"
+    Remove-Variable -Name permissionRows -Force    
     
     if(!$excludeGroupsAndUsers){
         New-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
@@ -232,31 +254,9 @@
         Stop-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
     }
 
-    Write-Progress -Id 1 -PercentComplete 90 -Activity "Scanning Entra ID" -Status "Writing report..."
-
-    $permissionRows = foreach($row in $global:EntraPermissions.Keys){
-        foreach($permission in $global:EntraPermissions.$row){
-            [PSCustomObject]@{
-                "Path" = $row
-                "Type" = $permission.Type
-                "principalName" = $permission.principalName
-                "roleDefinitionName" = $permission.roleDefinitionName               
-                "principalUpn" = $permission.principalUpn
-                "principalType" = $permission.principalType
-                "through" = $permission.through
-                "parent" = $permission.parent
-                "startDateTime" = $permission.startDateTime
-                "endDateTime" = $permission.endDateTime
-                "principalId"    = $permission.principalId                
-                "roleDefinitionId" = $permission.roleDefinitionId
-            }
-        }
-    }
-
     add-toReport -formats $outputFormat -permissions $groupMemberRows -category "GroupsAndMembers" -subject "Entities"
     Remove-Variable -Name groupMemberRows -Force
-    add-toReport -formats $outputFormat -permissions $permissionRows -category "Entra" -subject "Roles"
-    Remove-Variable -Name permissionRows -Force
+
     [System.GC]::Collect()
     Write-Progress -Id 1 -Completed -Activity "Scanning Entra ID"
 }

@@ -32,7 +32,8 @@
 
     Write-Progress -Id 1 -PercentComplete 1 -Activity $activity -Status "Scanning roles..."
     get-ExORoles -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent
-    Write-Progress -Id 1 -PercentComplete 1 -Activity $activity -Status "Retrieving all recipients..."
+    Write-Progress -Id 1 -PercentComplete 2 -Activity $activity -Status "Retrieving all recipients..."
+    Write-Host "Getting all recipients..."
     $global:octo.recipients = (New-ExOQuery -cmdlet "Get-Recipient" -cmdParams @{"ResultSize" = "Unlimited"}) | Where-Object{$_ -and !$_.Identity.StartsWith("DiscoverySearchMailbox")}
     foreach($recipient in $global:octo.recipients){
         New-ScanJob -Title $activity -Target $recipient.displayName -FunctionToRun "get-ExOPermissions" -FunctionArguments @{

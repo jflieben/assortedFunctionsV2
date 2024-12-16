@@ -36,35 +36,46 @@ function add-toReport{
         }      
     }
 
-    
-    foreach($format in $formats){
-        switch($format){
-            "XLSX" { 
-                $targetPath = $basePath.Replace("@@@","xlsx")
-                if($permissions){
-                    Export-WithRetry -targetPath $targetPath -category $category -data $permissions  
-                }
-                if($subject){
-                    Export-WithRetry -targetPath $targetPath -category "Statistics" -data @($global:unifiedStatistics.$category.$subject)
-                }
-                Write-Host "$category line written to $targetPath"
-            }
-            "CSV" { 
-                if($permissions){
-                    $targetPath = $basePath.Replace(".@@@","$($category).csv")
-                    Export-WithRetry -targetPath $targetPath -category "Statistics" -data $permissions -type "CSV"
+    if($formats -contains "XLSX"){
+        New-ReportFileLock
+    }
+
+    try{
+        foreach($format in $formats){
+            switch($format){
+                "XLSX" { 
+                    $targetPath = $basePath.Replace("@@@","xlsx")
+                    if($permissions){
+                        Export-WithRetry -targetPath $targetPath -category $category -data $permissions
+                    }
+                    if($subject){
+                        Export-WithRetry -targetPath $targetPath -category "Statistics" -data @($global:unifiedStatistics.$category.$subject)
+                    }
                     Write-Host "$category line written to $targetPath"
-                }else{
-                    Write-Warning "No permissions found to save to CSV"
+                }
+                "CSV" { 
+                    if($permissions){
+                        $targetPath = $basePath.Replace(".@@@","$($category).csv")
+                        Export-WithRetry -targetPath $targetPath -category "Statistics" -data $permissions -type "CSV"
+                        Write-Host "$category line written to $targetPath"
+                    }else{
+                        Write-Warning "No permissions found to save to CSV"
+                    }
+                }
+                "Default" { 
+                    if($permissions){
+                        $permissions | out-gridview 
+                    }else{
+                        Write-Warning "No permissions found to display"
+                    }
                 }
             }
-            "Default" { 
-                if($permissions){
-                    $permissions | out-gridview 
-                }else{
-                    Write-Warning "No permissions found to display"
-                }
-            }
+        }
+    }catch{
+        Write-Error "Failed to write to file: $($_.Exception.Message)" -ErrorAction Stop
+    }finally{
+        if($formats -contains "XLSX"){
+            Remove-ReportFileLock
         }
     }
     [System.GC]::Collect()
