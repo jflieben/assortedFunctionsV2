@@ -6,7 +6,7 @@ function add-toReport{
         [parameter(Mandatory=$true)][string]$category
     )
 
-    $basePath = Join-Path -Path $global:octo.outputFolder -ChildPath "M365Permissions_$($global:octo.fileIdentifier).@@@"
+    $basePath = Join-Path -Path $global:octo.outputFolder -ChildPath "M365Permissions_$((Get-Date).ToString("yyyyMMdd")).@@@"
 
     function Export-WithRetry{
         Param(

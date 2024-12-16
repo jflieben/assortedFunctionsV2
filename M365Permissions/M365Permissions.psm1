@@ -13,7 +13,6 @@
     https://www.lieben.nu/liebensraum/m365permissions
 
     .ROADMAP
-    1.0.9 Add change detection/marking/sorting
     1.1.0 Add support for App-Only authentication (cert based)
     1.1.1 Staging of permissions for tenants without all resource categories
     1.1.x check defender xdr options                                                                                                                                                                                                                                                
@@ -50,7 +49,6 @@ if(!$global:octo){
     $global:octo.LCRefreshToken = $Null
     $global:octo.LCCachedTokens = @{}
     $global:octo.includeCurrentUser = $False
-    $global:octo.fileIdentifier = [Int](Get-Date).ToString("yyyyMMdd1")
 
     $global:octo.moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
     if((Split-Path $PSScriptRoot -Leaf) -eq "M365Permissions"){
@@ -111,7 +109,7 @@ if(!$global:octo){
     
     Write-Host ">> get-AllEntraPermissions -excludeGroupsAndUsers" -ForegroundColor Magenta    
 
-    Write-Host ">> get-AllPBIPermissions" -ForegroundColor Magenta   
-}else{
-    $global:octo.fileIdentifier++
+    Write-Host ">> get-AllPBIPermissions" -ForegroundColor Magenta 
+    
+    Write-Host ">> Get-ChangedPermissions" -ForegroundColor Magenta 
 }

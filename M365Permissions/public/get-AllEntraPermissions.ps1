@@ -107,7 +107,7 @@
             if($appRole.isEnabled -eq $false){
                 continue
             }
-            New-EntraPermissionEntry -path "\" -type "APIPermission" -principalId $servicePrincipal.appId -roleDefinitionId $appRole.value -principalName $servicePrincipal.displayName -principalUpn "N/A" -principalType "ServicePrincipal" -roleDefinitionName $appRole.displayName
+            New-EntraPermissionEntry -path "/" -type "APIPermission" -principalId $servicePrincipal.appId -roleDefinitionId $appRole.value -principalName $servicePrincipal.displayName -principalUpn "N/A" -principalType "ServicePrincipal" -roleDefinitionName $appRole.displayName
         }
     }
 
