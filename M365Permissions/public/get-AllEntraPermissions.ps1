@@ -42,13 +42,20 @@
     foreach($roleAssignment in $roleAssignments){
         $roleDefinition = $roleDefinitions | Where-Object { $_.id -eq $roleAssignment.roleDefinitionId }
         $principalType = $roleAssignment.principal."@odata.type".Split(".")[2]
+        $groupMembers = $Null
         if($principalType -eq "group" -and $expandGroups){
-            $groupMembers = get-entraGroupMembers -groupId $principal.id        
+            try{
+                $groupMembers = get-entraGroupMembers -groupId $roleAssignment.principal.id    
+            }catch{
+                Write-Warning "Failed to retrieve group members for $($roleAssignment.principal.displayName), adding as group principal type instead"
+            }
             foreach($groupMember in $groupMembers){
                 Update-StatisticsObject -category "Entra" -subject "Roles"
                 New-EntraPermissionEntry -path $roleAssignment.directoryScopeId -type "PermanentRole" -principalId $groupMember.id -roleDefinitionId $roleAssignment.roleDefinitionId -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupMember.principalType -roleDefinitionName $roleDefinition.displayName -through "SecurityGroup" -parent $roleAssignment.principal.id
             }
-        }else{
+        }
+        
+        if(!$groupMembers){
             Update-StatisticsObject -category "Entra" -subject "Roles"
             New-EntraPermissionEntry -path $roleAssignment.directoryScopeId -type "PermanentRole" -principalId $roleAssignment.principal.id -roleDefinitionId $roleAssignment.roleDefinitionId -principalName $roleAssignment.principal.displayName -principalUpn $roleAssignment.principal.userPrincipalName -principalType $principalType -roleDefinitionName $roleDefinition.displayName
         }
@@ -72,6 +79,7 @@
         Write-Progress -Id 2 -PercentComplete $(try{$count / $roleEligibilities.Count *100}catch{1}) -Activity "Processing flexible assignments" -Status "[$count / $($roleEligibilities.Count)]"
         $roleDefinition = $roleDefinitions | Where-Object { $_.id -eq $roleEligibility.roleDefinitionId }
         $principalType = "Unknown"
+        $groupMembers = $Null
         try{
             $principal = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/directoryObjects/$($roleEligibility.principalId)" -Method GET
             $principalType = $principal."@odata.type".Split(".")[2]
@@ -80,12 +88,17 @@
             $principal = $Null
         }
         if($principalType -eq "group" -and $expandGroups){
-            $groupMembers = get-entraGroupMembers -groupId $principal.id
+            try{
+                $groupMembers = get-entraGroupMembers -groupId $principal.id
+            }catch{
+                Write-Warning "Failed to retrieve group members for $($principal.displayName), adding as group principal type instead"
+            }
             foreach($groupMember in $groupMembers){
                 Update-StatisticsObject -category "Entra" -subject "Roles"
                 New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $groupMember.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupMember.principalType -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.startDateTime -endDateTime $roleEligibility.endDateTime -parent $principal.id -through "SecurityGroup"
             }
-        }else{
+        }
+        if(!$groupMembers){
             Update-StatisticsObject -category "Entra" -subject "Roles"
             New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $principal.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $principal.displayName -principalUpn $principal.userPrincipalName -principalType $principalType -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.startDateTime -endDateTime $roleEligibility.endDateTime
         }
