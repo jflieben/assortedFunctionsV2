@@ -16,7 +16,8 @@
     1.0.9 Add support for App-Only authentication
     1.1.0 Add change detection/marking/sorting
     1.1.1 Staging of permissions for tenants without all resource categories
-#>
+    1.1.x check defender xdr options                                                                                                                                                                                                                                                
+#>                                                                                                                                              
 
 $helperFunctions = @{
     private = @( Get-ChildItem -Path "$($PSScriptRoot)\private" -Filter '*.ps*1' -ErrorAction SilentlyContinue )
@@ -44,14 +45,27 @@ $global:unifiedStatistics = @{}
 #first load config, subsequent loads will detect global var and skip this section (multi-threading)
 if(!$global:octo){
     $global:octo = [Hashtable]::Synchronized(@{})
-    $global:octo.LCClientId = "0ee7aa45-310d-4b82-9cb5-11cc01ad38e4"
     $global:octo.PnPGroupCache = @{}
     $global:octo.LCRefreshToken = $Null
     $global:octo.LCCachedTokens = @{}
     $global:octo.includeCurrentUser = $False
     $global:octo.moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
-    $global:octo.modulePath = (Split-Path -Path $PSScriptRoot -Parent)
+    if((Split-Path "C:\git\assortedFunctionsV2\M365Permissions" -Leaf) -eq "M365Permissions"){
+        $global:octo.modulePath = $PSScriptRoot
+    }else{
+        $global:octo.modulePath = (Split-Path -Path $PSScriptRoot -Parent)
+    }
     $global:octo.ScanJobs = @{}
+    #check if we are running in a headless environment, if so, do not use delegated auth and use env variables for auth
+    if($Env:LCAUTHMODE -and $Env:LCAUTHMODE -ne "Delegated"){
+        $global:octo.authMode = $Env:LCAUTHMODE
+        $global:octo.LCClientId = $Env:LCCLIENTID
+        $global:octo.LCClientSecret = $Env:LCCLIENTSECRET
+        $global:octo.LCTenantId = $Env:LCTENANTID
+    }else{
+        $global:octo.authMode = "Delegated"
+        $global:octo.LCClientId = "0ee7aa45-310d-4b82-9cb5-11cc01ad38e4"
+    }
 
     cls
 
@@ -68,9 +82,13 @@ if(!$global:octo){
     Write-Host "Visit https://www.lieben.nu/liebensraum/m365permissions/ for documentation" -ForegroundColor DarkCyan
     write-host "----------------------------------"
     Write-Host ""
-    Write-Host "Prompting for delegated (safe/non persistent) AAD auth..."
+    if($global:octo.authMode -eq "Delegated"){
+        Write-Host "Prompting for delegated (safe/non persistent) AAD auth..."
+    }else{
+        Write-Host "Using $($global:octo.authMode) authentication..."
+    }
     Write-Host ""
-    $global:octo.currentUser = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/me' -NoPagination -Method GET
+    $global:octo.currentUser = Get-CurrentUser
     $global:octo.OnMicrosoft = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' | Where-Object -Property isInitial -EQ $true).id 
     $global:octo.tenantName = $($global:octo.OnMicrosoft).Split(".")[0]
     Write-Host "Thank you $($global:octo.currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"

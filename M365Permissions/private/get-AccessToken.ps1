@@ -10,7 +10,9 @@ function get-AccessToken{
     )   
 
     if(!$global:octo.LCRefreshToken){
-        get-AuthorizationCode
+        if($global:octo.authMode -eq "Delegated"){
+            get-AuthorizationCode
+        }        
     }
 
     if(!$global:octo.LCCachedTokens.$resource){
@@ -20,10 +22,16 @@ function get-AccessToken{
     }
 
     if(!$global:octo.LCCachedTokens.$resource -or !$jwtTokenProperties -or ($jwtTokenProperties -and ([timezone]::CurrentTimeZone.ToLocalTime('1/1/1970').AddSeconds($jwtTokenProperties.exp) -lt (Get-Date).AddMinutes(25)) -or $jwtTokenProperties.aud -ne $resource)){
-        Write-Verbose "Token cache miss, refreshing V1 token for $resource..."
-        $response = (Invoke-RestMethod "https://login.microsoftonline.com/common/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=refresh_token&refresh_token=$($global:octo.LCRefreshToken)&client_id=$($global:octo.LCClientId)&scope=openid" -ErrorAction Stop -Verbose:$false)
-        if($response.refresh_token -and $response.access_token){
+        Write-Verbose "Token cache miss, refreshing $($global:octo.authMode) V1 token for $resource..."
+        if($global:octo.authMode -eq "ServicePrincipal"){
+            $response = (Invoke-RestMethod "https://login.microsoftonline.com/$($global:octo.LCTenantId)/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=client_credentials&client_id=$([System.Web.HttpUtility]::UrlEncode($global:octo.LCClientId))&client_secret=$([System.Web.HttpUtility]::UrlEncode($global:octo.LCClientSecret))" -ErrorAction Stop -Verbose:$false)
+        }else{
+            $response = (Invoke-RestMethod "https://login.microsoftonline.com/common/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=refresh_token&refresh_token=$($global:octo.LCRefreshToken)&client_id=$($global:octo.LCClientId)&scope=openid" -ErrorAction Stop -Verbose:$false)
+        }
+        
+        if($response.access_token){
             if($response.refresh_token){ 
+                Write-Verbose "Refresh token received, updating cache..."
                 $global:octo.LCRefreshToken = $response.refresh_token 
             }                
             $global:octo.LCCachedTokens.$resource = $response.access_token
