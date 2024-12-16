@@ -6,12 +6,52 @@
         
         Parameters:
         -maxThreads: the maximum amount of threads to use for parallel processing, by default 5. Ensure you've read my blog before increasing this.
-        -outputFolder: the path to the folder where you want to save permissions. By default it'll create the file in whatever folder you're running from
+        -outputFolder: the path to the folder where you want to save permissions. By default it'll create the file in AppData\Roaming\LiebenConsultancy\M365Permissions
     #>        
     Param(
-        [Int]$maxThreads = 5,
-        [String]$outputFolder = "CURRENTFOLDER"
+        [Int]$maxThreads,
+        [String]$outputFolder
     )
-    $global:octo.maxThreads = $maxThreads
-    $global:octo.outputFolder = $outputFolder
+
+    $defaultConfig = @{
+        "maxThreads" = [Int]5
+        "outputFolder" = [String]"CURRENTFOLDER"
+    }
+
+    $configLocation = Join-Path -Path $env:appdata -ChildPath "LiebenConsultancy\M365Permissions.conf"
+    if(!(Test-Path $configLocation)){
+        $preferredConfig = @{}
+    }else{
+        $preferredConfig = Get-Content -Path $configLocation | ConvertFrom-Json
+    }
+
+    #override cached config with any passed in parameters (and only those we explicitly defined in the default config options)
+    $updateConfigFile = $false
+    foreach($passedParam in $PSBoundParameters.GetEnumerator()){
+        if($defaultConfig.ContainsKey($passedParam.Key)){
+            $preferredConfig.$($passedParam.Key) = $passedParam.Value
+            Write-Verbose "Persisted $($passedParam.Key) to $($passedParam.Value) for your account"
+            $updateConfigFile = $true
+        }
+    }
+
+    #set global vars based on customization and/or defaults
+    foreach($configurable in $defaultConfig.GetEnumerator()){
+        if($preferredConfig.$($configurable.Name)){
+            Write-Verbose "Loaded $($configurable.Key) ($($preferredConfig.$($configurable.Name))) from persisted settings in $configLocation"
+            $global:octo.$($configurable.Name) = $preferredConfig.$($configurable.Name)
+        }else{
+            $global:octo.$($configurable.Name) = $configurable.Value
+        }
+    }
+
+    #update config file if needed
+    if($updateConfigFile){
+        Set-Content -Path $configLocation -Value $($preferredConfig | ConvertTo-Json) -Force
+    }
+
+    #override output folder with actual path
+    if($global:octo.outputFolder -eq "CURRENTFOLDER"){
+        $global:octo.outputFolder = Join-Path -Path $env:appdata -ChildPath "LiebenConsultancy"
+    }
 }

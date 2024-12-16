@@ -10,7 +10,7 @@ function get-AuthorizationCode{
 
     $adminPrompt = "&prompt=admin_consent"
 
-    $cachedModuleVersion = Join-Path -Path $env:APPDATA -ChildPath "M365Permissions.version"
+    $cachedModuleVersion = Join-Path -Path $env:APPDATA -ChildPath "LiebenConsultancy\M365Permissions.version"
     if(!(Test-Path $cachedModuleVersion)){
         Set-Content -Path $cachedModuleVersion -Value $global:octo.moduleVersion -Force
     }else{
