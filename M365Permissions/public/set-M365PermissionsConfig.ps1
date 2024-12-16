@@ -45,7 +45,13 @@
         }
     }
 
+    #update config file if needed
     if($updateConfigFile){
         Set-Content -Path $configLocation -Value $($preferredConfig | ConvertTo-Json) -Force
+    }
+
+    #override output folder with actual path
+    if($global:octo.outputFolder -eq "CURRENTFOLDER"){
+        $global:octo.outputFolder = Join-Path -Path $env:appdata -ChildPath "LiebenConsultancy"
     }
 }

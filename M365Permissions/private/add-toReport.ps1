@@ -6,11 +6,7 @@ function add-toReport{
         [parameter(Mandatory=$true)][string]$category
     )
 
-    if($global:octo.outputFolder -ne "CURRENTFOLDER"){
-        $basePath = Join-Path -Path $global:octo.outputFolder -ChildPath "M365Permissions.@@@"
-    }else{
-        $basePath = Join-Path -Path $env:appdata -ChildPath "LiebenConsultancy\M365Permissions.@@@"
-    }   
+    $basePath = Join-Path -Path $global:octo.outputFolder -ChildPath "M365Permissions_$($global:octo.fileIdentifier).@@@"
 
     function Export-WithRetry{
         Param(

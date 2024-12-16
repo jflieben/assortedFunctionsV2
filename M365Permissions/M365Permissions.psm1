@@ -13,8 +13,8 @@
     https://www.lieben.nu/liebensraum/m365permissions
 
     .ROADMAP
-    1.0.9 Add support for App-Only authentication
-    1.1.0 Add change detection/marking/sorting
+    1.0.9 Add change detection/marking/sorting
+    1.1.0 Add support for App-Only authentication (cert based)
     1.1.1 Staging of permissions for tenants without all resource categories
     1.1.x check defender xdr options                                                                                                                                                                                                                                                
 #>                                                                                                                                              
@@ -45,18 +45,22 @@ $global:unifiedStatistics = @{}
 #first load config, subsequent loads will detect global var and skip this section (multi-threading)
 if(!$global:octo){
     $global:octo = [Hashtable]::Synchronized(@{})
+    $global:octo.ScanJobs = @{}
     $global:octo.PnPGroupCache = @{}
     $global:octo.LCRefreshToken = $Null
     $global:octo.LCCachedTokens = @{}
     $global:octo.includeCurrentUser = $False
+    $global:octo.fileIdentifier = [Int](Get-Date).ToString("yyyyMMdd1")
+
     $global:octo.moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
-    if((Split-Path "C:\git\assortedFunctionsV2\M365Permissions" -Leaf) -eq "M365Permissions"){
+    if((Split-Path $PSScriptRoot -Leaf) -eq "M365Permissions"){
         $global:octo.modulePath = $PSScriptRoot
     }else{
         $global:octo.modulePath = (Split-Path -Path $PSScriptRoot -Parent)
     }
-    $global:octo.ScanJobs = @{}
+
     #check if we are running in a headless environment, if so, do not use delegated auth and use env variables for auth
+    #EXPERIMENTAL, DOES NOT WORK FOR SPO UNTIL CBA IS IMPLEMENTED
     if($Env:LCAUTHMODE -and $Env:LCAUTHMODE -ne "Delegated"){
         $global:octo.authMode = $Env:LCAUTHMODE
         $global:octo.LCClientId = $Env:LCCLIENTID
@@ -108,4 +112,6 @@ if(!$global:octo){
     Write-Host ">> get-AllEntraPermissions -excludeGroupsAndUsers" -ForegroundColor Magenta    
 
     Write-Host ">> get-AllPBIPermissions" -ForegroundColor Magenta   
+}else{
+    $global:octo.fileIdentifier++
 }
