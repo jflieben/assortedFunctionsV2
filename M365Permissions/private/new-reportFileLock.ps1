@@ -18,6 +18,7 @@ function New-ReportFileLock {
             break
         }catch{
             Write-Verbose "Could not lock file, waiting for other process..."
+            Start-Sleep -Seconds 1
         }
     }
     Write-Verbose "Lock created!"

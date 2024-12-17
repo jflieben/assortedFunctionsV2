@@ -34,6 +34,7 @@
             "recipientIdentity" = $recipient.Identity
             "expandGroups" = $expandGroups.IsPresent
             "includeFolderLevelPermissions" = $includeFolderLevelPermissions.IsPresent
+            "isParallel" = $True
         }
     }
     Start-ScanJobs -Title $activity

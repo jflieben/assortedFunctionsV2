@@ -26,18 +26,25 @@ function Start-ScanJobs{
     Write-Verbose "Start multithreading $Title $($global:octo.ScanJobs.$($Title).Jobs.Count) jobs $($global:octo.maxThreads) at a time using $($global:octo.ScanJobs.$($Title).FunctionToRun)"
 
     Write-Progress -Id 1 -Activity $Title -Status "Starting initial threads" -PercentComplete 0
-
+    
+    [Int]$batchSize = 25
+    [Int]$doneUntil = $batchSize
     while($true){
-        $queuedJobs = ($global:octo.ScanJobs.$($Title).Jobs | Where-Object {$_.Status -eq "Queued"}).Count
-        $runningJobs = ($global:octo.ScanJobs.$($Title).Jobs | Where-Object {$_.Status -eq "Running"}).Count
-        $totalJobs = $global:octo.ScanJobs.$($Title).Jobs.Count
-        $completedJobs = $totalJobs - $queuedJobs - $runningJobs
+        [Int]$queuedJobs = ($global:octo.ScanJobs.$($Title).Jobs | Where-Object {$_.Status -eq "Queued"}).Count
+        [Int]$runningJobs = ($global:octo.ScanJobs.$($Title).Jobs | Where-Object {$_.Status -eq "Running"}).Count
+        [Int]$totalJobs = $global:octo.ScanJobs.$($Title).Jobs.Count
+        [Int]$completedJobs = $totalJobs - $queuedJobs - $runningJobs
         try{$percentComplete = (($completedJobs / $totalJobs) * 100)}catch{$percentComplete = 0}
         Write-Progress -Id 1 -Activity $Title -Status "$completedJobs/$totalJobs Processing targets" -PercentComplete $percentComplete
         
         if($queuedJobs -eq 0 -and $runningJobs -eq 0){
             Write-Verbose "All jobs for $Title have finished"
             break
+        }
+
+        if($doneUntil -le $completedJobs){
+            $doneUntil += $batchSize
+            Reset-ReportQueue
         }
 
         #cycle over all jobs
@@ -68,7 +75,12 @@ function Start-ScanJobs{
                         Write-Host "---------OUTPUT START---------" -ForegroundColor DarkYellow
                         $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.EndInvoke($global:octo.ScanJobs.$($Title).Jobs[$i].Handle)
                         $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Error
+                        $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Warning
                         $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Information
+                        if($VerbosePreference -eq "Continue"){
+                            $global:octo.ScanJobs.$($Title).Jobs.Thread.Streams.Debug
+                            $global:octo.ScanJobs.$($Title).Jobs.Thread.Streams.Verbose
+                        }
                         Write-Host "---------OUTPUT END-----------" -ForegroundColor DarkYellow
 
                     }catch{}                    
@@ -98,4 +110,6 @@ function Start-ScanJobs{
 
         Start-Sleep -Milliseconds 500
     }
+
+    Reset-ReportQueue
 }        

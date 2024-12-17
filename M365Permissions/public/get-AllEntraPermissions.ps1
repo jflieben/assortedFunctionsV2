@@ -6,20 +6,13 @@
         
         Parameters:
         -expandGroups: if set, group memberships will be expanded to individual users
-        -outputFormat: 
-            XLSX
-            CSV
-            Default (output to Out-GridView)
-            Any combination of above is possible
         -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
         -excludeGroupsAndUsers: exclude group and user memberships from the report, only show role assignments
     #>        
     Param(
         [Switch]$expandGroups,
         [Switch]$includeCurrentUser,
-        [Switch]$excludeGroupsAndUsers,
-        [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat="XLSX"
+        [Switch]$excludeGroupsAndUsers
     )
 
     $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
@@ -167,7 +160,8 @@
         }
     }
 
-    add-toReport -formats $outputFormat -permissions $permissionRows -category "Entra" -subject "Roles"
+    Add-ToReportQueue -permissions $permissionRows -category "Entra" -statistics @($global:unifiedStatistics."Entra"."Roles")
+    Reset-ReportQueue
     Remove-Variable -Name permissionRows -Force    
     
     if(!$excludeGroupsAndUsers){
@@ -252,11 +246,10 @@
         }
         Write-Progress -Id 2 -Completed -Activity "Processing users and groups"
         Stop-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
+        Add-ToReportQueue -permissions $groupMemberRows -category "GroupsAndMembers" -statistics @($global:unifiedStatistics."GroupsAndMembers"."Entities")
+        Remove-Variable -Name groupMemberRows -Force
+        Reset-ReportQueue        
     }
 
-    add-toReport -formats $outputFormat -permissions $groupMemberRows -category "GroupsAndMembers" -subject "Entities"
-    Remove-Variable -Name groupMemberRows -Force
-
-    [System.GC]::Collect()
     Write-Progress -Id 1 -Completed -Activity "Scanning Entra ID"
 }

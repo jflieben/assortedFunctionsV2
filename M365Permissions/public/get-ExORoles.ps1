@@ -7,18 +7,11 @@
         Parameters:
         -expandGroups: if set, group memberships will be expanded to individual users
         -includeFolderLevelPermissions: if set, folder level permissions for each mailbox will be retrieved. This can be (very) slow
-        -outputFormat: 
-            XLSX
-            CSV
-            Default (output to Out-GridView)
-            Any combination of above is possible
         -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
         [Switch]$expandGroups,
-        [Switch]$includeCurrentUser,
-        [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat="XLSX"
+        [Switch]$includeCurrentUser
     )
 
     $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
@@ -107,7 +100,8 @@
         }
     }  
 
-    add-toReport -formats $outputFormat -permissions $permissionRows -category "ExoRoles" -subject "AdminRoles"   
-
+    Add-ToReportQueue -permissions $permissionRows -category "ExoRoles" -statistics @($global:unifiedStatistics."ExoRoles"."AdminRoles") 
+    Remove-Variable -Name permissionRows -Force  
+    Reset-ReportQueue
     Write-Progress -Id 2 -Completed -Activity "Scanning Exchange Roles"
 }

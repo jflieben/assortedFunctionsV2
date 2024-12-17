@@ -6,19 +6,12 @@
         
         Parameters:
         -expandGroups: if set, group memberships will be expanded to individual users
-        -outputFormat: 
-            XLSX
-            CSV
-            Default (output to Out-GridView)
-            Any combination of above is possible
         -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
         -excludeGroupsAndUsers: exclude group and user memberships from the report, only show role assignments
     #>        
     Param(
         [Switch]$expandGroups,
-        [Switch]$includeCurrentUser,
-        [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat="XLSX"
+        [Switch]$includeCurrentUser
     )
 
     $activity = "Scanning PowerBI"
@@ -134,7 +127,7 @@
         }
     }
 
-    add-toReport -formats $outputFormat -permissions $permissionRows -category "PowerBI" -subject "Securables"
-
+    Add-ToReportQueue -permissions $permissionRows -category "PowerBI" -statistics @($global:unifiedStatistics."PowerBI"."Securables")
+    Reset-ReportQueue
     Write-Progress -Id 1 -Completed -Activity $activity
 }

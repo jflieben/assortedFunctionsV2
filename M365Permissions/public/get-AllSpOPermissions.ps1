@@ -37,6 +37,7 @@
             "siteUrl" = $site.Url
             "expandGroups" = $expandGroups.IsPresent
             "includeCurrentUser" = $includeCurrentUser.IsPresent
+            "isParallel" = $True
         }
     }
 

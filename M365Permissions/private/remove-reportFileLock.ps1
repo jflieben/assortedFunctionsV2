@@ -9,8 +9,8 @@ function Remove-ReportFileLock {
         [parameter(Mandatory=$true)]$lock
     )
 
-    Write-Verbose "Removing lock in 10 seconds...."
-    Start-Sleep -s 10
+    Write-Verbose "Waiting for 5 additional seconds to remove lock...."
+    Start-Sleep -s 5
     $lock.Close()
     $lock.Dispose()
     Write-Verbose "Lock removed!"
