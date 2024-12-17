@@ -7,19 +7,12 @@
         Parameters:
         -expandGroups: if set, group memberships will be expanded to individual users
         -includeFolderLevelPermissions: if set, folder level permissions for each mailbox will be retrieved. This can be (very) slow
-        -outputFormat: 
-            XLSX
-            CSV
-            Default (output to Out-GridView)
-            Any combination of above is possible
         -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
         [Switch]$expandGroups,
         [Switch]$includeCurrentUser,
-        [Switch]$includeFolderLevelPermissions,
-        [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat="XLSX"
+        [Switch]$includeFolderLevelPermissions
     )
 
     $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
@@ -31,14 +24,14 @@
     }
 
     Write-Progress -Id 1 -PercentComplete 1 -Activity $activity -Status "Scanning roles..."
-    get-ExORoles -outputFormat $outputFormat -expandGroups:$expandGroups.IsPresent
-    Write-Progress -Id 1 -PercentComplete 2 -Activity $activity -Status "Retrieving all recipients..."
+    get-ExORoles -expandGroups:$expandGroups.IsPresent
+    Write-Progress -Id 1 -PercentComplete 1 -Activity $activity -Status "Retrieving all recipients..."
     Write-Host "Getting all recipients..."
+    Write-Progress -Id 1 -PercentComplete 2 -Activity $activity -Status "Retrieving all recipients..."
     $global:octo.recipients = (New-ExOQuery -cmdlet "Get-Recipient" -cmdParams @{"ResultSize" = "Unlimited"}) | Where-Object{$_ -and !$_.Identity.StartsWith("DiscoverySearchMailbox")}
     foreach($recipient in $global:octo.recipients){
         New-ScanJob -Title $activity -Target $recipient.displayName -FunctionToRun "get-ExOPermissions" -FunctionArguments @{
             "recipientIdentity" = $recipient.Identity
-            "outputFormat" = $outputFormat
             "expandGroups" = $expandGroups.IsPresent
             "includeFolderLevelPermissions" = $includeFolderLevelPermissions.IsPresent
         }

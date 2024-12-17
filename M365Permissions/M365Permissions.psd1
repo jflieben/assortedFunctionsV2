@@ -39,7 +39,7 @@
     
     Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups
     
-    Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV
+    Get-SpOPermissions -teamName `"INT-Finance Department`"
     
     get-AllSPOPermissions -ExpandGroups -IncludeOneDriveSites -ExcludeOtherSites
     
