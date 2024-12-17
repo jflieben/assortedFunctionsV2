@@ -8,7 +8,6 @@
         -teamName: the name of the Team to scan
         -siteUrl: the URL of the Team (or any sharepoint location) to scan (e.g. if name is not unique)
         -expandGroups: if set, group memberships will be expanded to individual users
-        -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
         [parameter(Mandatory=$true,
@@ -22,11 +21,8 @@
         $siteUrl, 
 
         [Switch]$expandGroups,
-        [Switch]$includeCurrentUser,
         [Boolean]$isParallel=$False
     )
-
-    $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
 
     Write-Host "Starting SpO Scan of $teamName $siteUrl"
 

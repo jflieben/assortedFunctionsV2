@@ -5,8 +5,7 @@
         Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
     #>         
     Param(
-        [Switch]$expandGroups,
-        [Switch]$includeCurrentUser
+        [Switch]$expandGroups
     )
 
     Write-Host "Starting FULL M365 Tenant scan as $($global:octo.currentUser.userPrincipalName)"
@@ -17,8 +16,8 @@
     Write-Host "4. Onedrive permissions"
     Write-Host "5. Teams and Sharepoint permissions"
 
-    get-AllPBIPermissions -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent
-    get-AllEntraPermissions -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent
-    get-AllExOPermissions -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent -includeFolderLevelPermissions
-    get-AllSpOPermissions -expandGroups:$expandGroups.IsPresent -includeCurrentUser:$includeCurrentUser.IsPresent -includeOnedriveSites
+    get-AllPBIPermissions -expandGroups:$expandGroups.IsPresent
+    get-AllEntraPermissions -expandGroups:$expandGroups.IsPresent
+    get-AllExOPermissions -expandGroups:$expandGroups.IsPresent -includeFolderLevelPermissions
+    get-AllSpOPermissions -expandGroups:$expandGroups.IsPresent -includeOnedriveSites
 }

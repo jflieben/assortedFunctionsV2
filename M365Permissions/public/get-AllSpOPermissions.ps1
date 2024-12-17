@@ -7,8 +7,7 @@
     Param(
         [Switch]$includeOnedriveSites,
         [Switch]$excludeOtherSites,
-        [Switch]$expandGroups,
-        [Switch]$includeCurrentUser
+        [Switch]$expandGroups
     )
 
     if(!$includeOnedriveSites -and $excludeOtherSites){
@@ -36,7 +35,6 @@
         New-ScanJob -Title "Scanning Sharepoint Online" -Target $site.Url -FunctionToRun "get-SpOPermissions" -FunctionArguments @{
             "siteUrl" = $site.Url
             "expandGroups" = $expandGroups.IsPresent
-            "includeCurrentUser" = $includeCurrentUser.IsPresent
             "isParallel" = $True
         }
     }

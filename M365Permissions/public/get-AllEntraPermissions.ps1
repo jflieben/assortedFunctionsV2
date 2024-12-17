@@ -6,16 +6,12 @@
         
         Parameters:
         -expandGroups: if set, group memberships will be expanded to individual users
-        -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
         -excludeGroupsAndUsers: exclude group and user memberships from the report, only show role assignments
     #>        
     Param(
         [Switch]$expandGroups,
-        [Switch]$includeCurrentUser,
         [Switch]$excludeGroupsAndUsers
     )
-
-    $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
 
     Write-Host "Starting Entra scan..."
     Write-Progress -Id 1 -PercentComplete 0 -Activity "Scanning Entra ID" -Status "Retrieving role definitions"

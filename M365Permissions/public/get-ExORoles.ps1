@@ -7,14 +7,10 @@
         Parameters:
         -expandGroups: if set, group memberships will be expanded to individual users
         -includeFolderLevelPermissions: if set, folder level permissions for each mailbox will be retrieved. This can be (very) slow
-        -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
-        [Switch]$expandGroups,
-        [Switch]$includeCurrentUser
+        [Switch]$expandGroups
     )
-
-    $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
 
     Write-Host "Starting Exo role scan..."
     

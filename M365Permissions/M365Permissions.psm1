@@ -49,7 +49,6 @@ if(!$global:octo){
     $global:octo.PnPGroupCache = @{}
     $global:octo.LCRefreshToken = $Null
     $global:octo.LCCachedTokens = @{}
-    $global:octo.includeCurrentUser = $False
     $global:octo.reportWriteQueue = @()
 
     $global:octo.moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
@@ -97,7 +96,7 @@ if(!$global:octo){
     $global:octo.tenantName = $($global:octo.OnMicrosoft).Split(".")[0]
     Write-Host "Thank you $($global:octo.currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
     Write-Host ""
-    Write-Host ">> Get-AllM365Permissions -expandGroups -includeCurrentUser" -ForegroundColor Magenta
+    Write-Host ">> Get-AllM365Permissions -expandGroups" -ForegroundColor Magenta
     
     Write-Host ">> Get-AllExOPermissions -includeFolderLevelPermissions" -ForegroundColor Magenta
     
