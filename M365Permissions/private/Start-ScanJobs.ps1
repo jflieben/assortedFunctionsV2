@@ -66,10 +66,10 @@ function Start-ScanJobs{
                 if($global:octo.ScanJobs.$($Title).Jobs[$i].Handle.IsCompleted -eq $True){
                     try{
                         if($global:octo.ScanJobs.$($Title).Jobs[$i].Thread.HadErrors){
-                            Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed with errors" -ForegroundColor DarkRed
+                            Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed with errors :(" -ForegroundColor DarkRed
                             $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Failed"
                         }else{
-                            Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed with no errors :)" -ForegroundColor Green
+                            Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed without errors :)" -ForegroundColor Green
                             $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Succeeded"
                         }
                         Write-Host "---------OUTPUT START---------" -ForegroundColor DarkYellow
