@@ -169,9 +169,9 @@
         Write-Host "Retrieving metadata for $userCount users..."
         Write-Progress -Id 1 -PercentComplete 50 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
 
-        $allUsersAndOwnedObjects = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/users?$expand=ownedObjects' -Method GET
+        $allUsersAndOwnedObjects = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/users?$expand=ownedObjects/microsoft.graph.group' -Method GET
         Write-Host "Got ownership metadata"
-        $allUsersAndTheirGroups = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users?`$expand=transitiveMemberOf" -Method GET
+        $allUsersAndTheirGroups = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users?`$expand=transitiveMemberOf/microsoft.graph.group" -Method GET
         Write-Host "Got group membership metadata"
 
         #get over the expand limit of 20 objects
@@ -203,7 +203,7 @@
             
             Update-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
             Write-Progress -Id 2 -PercentComplete $(try{$count / $allUsersAndTheirGroups.Count *100}catch{1}) -Activity "Processing users and groups" -Status "$count / $($allUsersAndTheirGroups.Count) $($user.displayName)"
-            foreach($groupMembership in @($user.transitiveMemberOf | Where-Object{$_."@odata.type" -eq "#microsoft.graph.group"})){
+            foreach($groupMembership in $user.transitiveMemberOf){
                 $groupType = Get-EntraGroupType -group $groupMembership
 
                 if($ownerInfo.ownedObjects.id -contains $groupMembership.id){
@@ -223,7 +223,7 @@
                 }                
             }
 
-            foreach($ownedGroup in @($ownerInfo.ownedObjects | Where-Object{$_."@odata.type" -eq "#microsoft.graph.group"})){
+            foreach($ownedGroup in $ownerInfo.ownedObjects){
                 #skip those groups a user is also member of (already processed above)
                 if($user.transitiveMemberOf.id -contains $ownedGroup.id){
                     continue
