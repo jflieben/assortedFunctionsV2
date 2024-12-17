@@ -126,7 +126,7 @@ Function get-PnPObjectPermissions{
     #retrieve permissions for any (if present) child objects
     Switch($Object.TypedObject.ToString()){
         "Microsoft.SharePoint.Client.Web"  {     
-            Write-Progress -Id 2 -PercentComplete 0 -Activity "Site child objects" -Status "Getting child objects..."
+            Write-Progress -Id 2 -PercentComplete 0 -Activity $($siteUrl.Split("/")[4]) -Status "Getting child objects..."
             $Null = Get-PnPProperty -ClientObject $Object -Property Webs -Connection (Get-SpOConnection -Type User -Url $siteUrl)
             $childObjects = $Null; $childObjects = $Object.Webs
             foreach($childObject in $childObjects){
@@ -162,7 +162,7 @@ Function get-PnPObjectPermissions{
                 Update-StatisticsObject -Category $Category -Subject $siteUrl -Amount $List.ItemCount
                 If($List.Hidden -eq $False -and $ExcludedListTitles -notcontains $List.Title -and $List.ItemCount -gt 0 -and $List.TemplateFeatureId -notin $ExcludedListFeatureIDs){
                     $counter++
-                    Write-Progress -Id 2 -PercentComplete ($Counter / ($childObjects.Count) * 100) -Activity "Site child objects" -Status "'$($List.Title)': $($List.ItemCount) items (List $counter of $($childObjects.Count))"
+                    Write-Progress -Id 2 -PercentComplete ($Counter / ($childObjects.Count) * 100) -Activity $($siteUrl.Split("/")[4]) -Status "'$($List.Title)': $($List.ItemCount) items (List $counter of $($childObjects.Count))"
                     #grab top level info of the list first
                     get-PnPObjectPermissions -Object $List -siteUrl $siteUrl -Category $Category
 
@@ -191,7 +191,7 @@ Function get-PnPObjectPermissions{
                     Write-Verbose "Skipping $($List.Title) as it is hidden, empty or excluded"
                 }
             }
-            Write-Progress -Id 2 -Completed -Activity "Site child objects"            
+            Write-Progress -Id 2 -Completed -Activity $($siteUrl.Split("/")[4])            
         }  
     }      
 }
