@@ -6,21 +6,23 @@ Install-PSResource -Name M365Permissions -Repository PSGallery
 
 EXAMPLES:
 
-Get-AllM365Permissions -expandGroups -includeCurrentUser
+Get-AllM365Permissions -expandGroups
     
-Get-SpOPermissions -siteUrl "https://tenant.sharepoint.com/sites/site" -ExpandGroups -OutputFormat Default
+Get-SpOPermissions -siteUrl "https://tenant.sharepoint.com/sites/site" -ExpandGroups
 
-Get-SpOPermissions -teamName "INT-Finance Department" -OutputFormat XLSX,CSV
+Get-SpOPermissions -teamName "INT-Finance Department"
 
 get-AllSPOPermissions -expandGroups -IncludeOneDriveSites -ExcludeOtherSites
 
-get-AllEntraPermissions -OutputFormat CSV -expandGroups -excludeGroupsAndUsers
+get-AllEntraPermissions -expandGroups -excludeGroupsAndUsers
 
 Get-AllExOPermissions -includeFolderLevelPermissions
 
 get-AllPBIPermissions
 
 Get-ChangedPermissions
+
+Set-M365PermissionsConfig -includeCurrentUser $True -maxThreads 1 -Verbose $True
 
 WARNING:
 Please note that this module is provided AS-IS, no guarantees or warranties provided. Use at your own risk.

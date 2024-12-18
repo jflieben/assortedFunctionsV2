@@ -7,10 +7,7 @@
     Param(
         [Switch]$includeOnedriveSites,
         [Switch]$excludeOtherSites,
-        [Switch]$expandGroups,
-        [Switch]$includeCurrentUser,
-        [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat="XLSX"
+        [Switch]$expandGroups
     )
 
     if(!$includeOnedriveSites -and $excludeOtherSites){
@@ -37,9 +34,8 @@
     foreach($site in $sites){
         New-ScanJob -Title "Scanning Sharepoint Online" -Target $site.Url -FunctionToRun "get-SpOPermissions" -FunctionArguments @{
             "siteUrl" = $site.Url
-            "outputFormat" = $outputFormat
             "expandGroups" = $expandGroups.IsPresent
-            "includeCurrentUser" = $includeCurrentUser.IsPresent
+            "isParallel" = $True
         }
     }
 

@@ -3,7 +3,7 @@
     RootModule           = 'M365Permissions.psm1'
 
     # Version number of this module.
-    ModuleVersion        = "1.0.9"
+    ModuleVersion        = "1.1.0"
     
     # Supported PSEditions
     CompatiblePSEditions = @('Core')
@@ -39,7 +39,7 @@
     
     Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups
     
-    Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV
+    Get-SpOPermissions -teamName `"INT-Finance Department`"
     
     get-AllSPOPermissions -ExpandGroups -IncludeOneDriveSites -ExcludeOtherSites
     

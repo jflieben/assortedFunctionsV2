@@ -13,9 +13,12 @@
     https://www.lieben.nu/liebensraum/m365permissions
 
     .ROADMAP
-    1.1.0 Add support for App-Only authentication (cert based)
-    1.1.1 Staging of permissions for tenants without all resource categories
-    1.1.x check defender xdr options                                                                                                                                                                                                                                                
+    1.1.0 Add faster report writing (by batching XLSX exports through the add-toReport function / octo param)
+    1.1.1 Add support for App-Only authentication (cert based)
+    1.1.2 Staging of permissions for tenants without all resource categories
+    1.1.3 check defender xdr options 
+    1.1.4 Assess if Azure RM should be added or if a good open source tool already exists
+    1.1.5 Assess SQL or PBI as data destinations                                                                                                                                                                                                                                            
 #>                                                                                                                                              
 
 $helperFunctions = @{
@@ -48,7 +51,7 @@ if(!$global:octo){
     $global:octo.PnPGroupCache = @{}
     $global:octo.LCRefreshToken = $Null
     $global:octo.LCCachedTokens = @{}
-    $global:octo.includeCurrentUser = $False
+    $global:octo.reportWriteQueue = @()
 
     $global:octo.moduleVersion = (Get-Content -Path (Join-Path -Path $($PSScriptRoot) -ChildPath "M365Permissions.psd1") | Out-String | Invoke-Expression).ModuleVersion
     if((Split-Path $PSScriptRoot -Leaf) -eq "M365Permissions"){
@@ -95,15 +98,15 @@ if(!$global:octo){
     $global:octo.tenantName = $($global:octo.OnMicrosoft).Split(".")[0]
     Write-Host "Thank you $($global:octo.currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
     Write-Host ""
-    Write-Host ">> Get-AllM365Permissions -expandGroups -includeCurrentUser" -ForegroundColor Magenta
+    Write-Host ">> Get-AllM365Permissions -expandGroups" -ForegroundColor Magenta
     
     Write-Host ">> Get-AllExOPermissions -includeFolderLevelPermissions" -ForegroundColor Magenta
     
     Write-Host ">> Get-ExOPermissions -recipientIdentity `$mailbox.Identity -includeFolderLevelPermissions" -ForegroundColor Magenta
     
-    Write-Host ">> Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups -OutputFormat Default" -ForegroundColor Magenta
+    Write-Host ">> Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups" -ForegroundColor Magenta
     
-    Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`" -OutputFormat XLSX,CSV" -ForegroundColor Magenta
+    Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`"" -ForegroundColor Magenta
     
     Write-Host ">> get-AllSPOPermissions -ExpandGroups -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
     

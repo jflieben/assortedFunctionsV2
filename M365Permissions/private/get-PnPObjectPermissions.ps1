@@ -126,7 +126,7 @@ Function get-PnPObjectPermissions{
     #retrieve permissions for any (if present) child objects
     Switch($Object.TypedObject.ToString()){
         "Microsoft.SharePoint.Client.Web"  {     
-            Write-Progress -Id 2 -PercentComplete 0 -Activity "Site child objects" -Status "Getting child objects..."
+            Write-Progress -Id 2 -PercentComplete 0 -Activity $($siteUrl.Split("/")[4]) -Status "Getting child objects..."
             $Null = Get-PnPProperty -ClientObject $Object -Property Webs -Connection (Get-SpOConnection -Type User -Url $siteUrl)
             $childObjects = $Null; $childObjects = $Object.Webs
             foreach($childObject in $childObjects){
@@ -162,7 +162,7 @@ Function get-PnPObjectPermissions{
                 Update-StatisticsObject -Category $Category -Subject $siteUrl -Amount $List.ItemCount
                 If($List.Hidden -eq $False -and $ExcludedListTitles -notcontains $List.Title -and $List.ItemCount -gt 0 -and $List.TemplateFeatureId -notin $ExcludedListFeatureIDs){
                     $counter++
-                    Write-Progress -Id 2 -PercentComplete ($Counter / ($childObjects.Count) * 100) -Activity "Site child objects" -Status "'$($List.Title)': $($List.ItemCount) items (List $counter of $($childObjects.Count))"
+                    Write-Progress -Id 2 -PercentComplete ($Counter / ($childObjects.Count) * 100) -Activity $($siteUrl.Split("/")[4]) -Status "'$($List.Title)': $($List.ItemCount) items (List $counter of $($childObjects.Count))"
                     #grab top level info of the list first
                     get-PnPObjectPermissions -Object $List -siteUrl $siteUrl -Category $Category
 
@@ -177,25 +177,21 @@ Function get-PnPObjectPermissions{
                     Write-Verbose "List contains $($List.ItemCount) items"
                     $allListItems = $Null; $allListItems = New-GraphQuery -resource "https://www.sharepoint.com" -Uri "$($Object.Url)/_api/web/lists/getbyid('$($List.Id.Guid)')/items?`$select=ID,HasUniqueRoleAssignments&`$top=5000&`$format=json" -Method GET -expectedTotalResults $List.ItemCount
                     $allUniqueListItemIDs = $Null; $allUniqueListItemIDs = @($allListItems | Where-Object { $_.HasUniqueRoleAssignments -eq $True }) | select -ExpandProperty Id
-                    $ItemCounter = 0
-                    foreach($allUniqueListItemID in $allUniqueListItemIDs){
-                        $ItemCounter++
-                        Write-Progress -Id 3 -PercentComplete (($ItemCounter / $allUniqueListItemIDs.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItemIDs.Count)" -Status "Getting Metadata for each Unique Item"
-                        $allUniqueListItems += Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemID
+                    for($a=0;$a -lt $allUniqueListItemIDs.Count;$a++){
+                        Write-Progress -Id 3 -PercentComplete ((($a+1) / $allUniqueListItemIDs.Count) * 100) -Activity "Processing Item $($a+1) of $($allUniqueListItemIDs.Count)" -Status "Getting Metadata for each Unique Item"
+                        $allUniqueListItems += Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemIDs[$a]
                     }
 
-                    $ItemCounter = 0
-                    ForEach($ListItem in $allUniqueListItems){
-                        $ItemCounter++
-                        Write-Progress -Id 3 -PercentComplete (($ItemCounter / $allUniqueListItems.Count) * 100) -Activity "Processing Item $ItemCounter of $($allUniqueListItems.Count)" -Status "Searching for Unique Permissions"
-                        get-PnPObjectPermissions -Object $ListItem -siteUrl $siteUrl -Category $Category
+                    for($l=0;$l -lt $allUniqueListItems.Count;$l++){
+                        Write-Progress -Id 3 -PercentComplete (($($l+1) / $allUniqueListItems.Count) * 100) -Activity "Processing Item $($l+1) of $($allUniqueListItems.Count)" -Status "Searching for Unique Permissions"
+                        get-PnPObjectPermissions -Object $allUniqueListItems[$l] -siteUrl $siteUrl -Category $Category
                     }
                     Write-Progress -Id 3 -Completed -Activity "Processing Item $ItemCounter of $($allUniqueListItems.Count)"
                 }else{
                     Write-Verbose "Skipping $($List.Title) as it is hidden, empty or excluded"
                 }
             }
-            Write-Progress -Id 2 -Completed -Activity "Site child objects"            
+            Write-Progress -Id 2 -Completed -Activity $($siteUrl.Split("/")[4])            
         }  
     }      
 }

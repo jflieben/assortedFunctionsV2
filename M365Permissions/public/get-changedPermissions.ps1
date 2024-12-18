@@ -118,8 +118,8 @@
 
     Write-Progress -Id 1 -Activity "Comparing data between $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Status "Saving data" -PercentComplete 99
 
-    Remove-Variable -Name newTabs -Force
-    Remove-Variable -Name oldTabs -Force
+    Remove-Variable -Name newTabs -Force -Confirm:$False
+    Remove-Variable -Name oldTabs -Force -Confirm:$False
 
     Write-Host ""
 
@@ -147,7 +147,7 @@
         }   
     }
 
-    Remove-Variable -Name diffResults -Force
+    Remove-Variable -Name diffResults -Force -Confirm:$False
     [System.GC]::Collect() 
     
     Write-Progress -Id 1 -Activity "Comparing data between $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Completed

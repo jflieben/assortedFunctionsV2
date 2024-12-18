@@ -6,23 +6,13 @@
         
         Parameters:
         -expandGroups: if set, group memberships will be expanded to individual users
-        -outputFormat: 
-            XLSX
-            CSV
-            Default (output to Out-GridView)
-            Any combination of above is possible
-        -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
         -excludeGroupsAndUsers: exclude group and user memberships from the report, only show role assignments
     #>        
     Param(
-        [Switch]$expandGroups,
-        [Switch]$includeCurrentUser,
-        [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat="XLSX"
+        [Switch]$expandGroups
     )
 
     $activity = "Scanning PowerBI"
-    $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
 
     Write-Host "Starting PowerBI scan..."
     Write-Progress -Id 1 -PercentComplete 0 -Activity $activity -Status "Retrieving workspaces..."
@@ -69,16 +59,22 @@
     
     Write-Progress -Id 1 -PercentComplete 45 -Activity $activity -Status "Processing PowerBI securables..."
     for($s=0;$s -lt $scanResults.count; $s++){
-        Write-Progress -Id 2 -PercentComplete $(Try{ ($s/$scanResults.count)*100 } catch {0}) -Activity "Analyzing securables..." -Status "$($s+1)/$($scanResults.count) $($workspaces[$i].name)"
+        Write-Progress -Id 2 -PercentComplete $(Try{ ($s/$scanResults.count)*100 } catch {0}) -Activity "Analyzing securables..." -Status "$($s+1)/$($scanResults.count) $($scanResults[$s].name)"
         foreach($report in $scanResults[$s].reports){
             Update-StatisticsObject -category "PowerBI" -subject "Securables"
             foreach($user in $report.users){
+                $groupMembers = $null
                 if($user.principalType -eq "Group" -and $expandGroups.IsPresent){
-                    $groupMembers = get-EntraGroupMembers -groupId $user.graphId
+                    try{
+                        $groupMembers = get-entraGroupMembers -groupId $user.graphId
+                    }catch{
+                        Write-Warning "Failed to retrieve group members for $($user.displayName), adding as group principal type instead"
+                    }
                     foreach($groupMember in $groupMembers){
                         New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/reports/$($report.name)" -type "Report" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.reportUserAccessRight -through "Group" -parent $user.graphId -created $report.createdDateTime -modified $report.modifiedDateTime
                     }
-                }else{
+                }
+                if(!$groupMembers){
                     New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/reports/$($report.name)" -type "Report" -principalId $user.graphId -principalName $user.displayName -principalUpn $user.identifier -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.reportUserAccessRight -created $report.createdDateTime -modified $report.modifiedDateTime
                 }
             }
@@ -86,12 +82,18 @@
         foreach($dataset in $scanResults[$s].datasets){
             Update-StatisticsObject -category "PowerBI" -subject "Securables"
             foreach($user in $dataset.users){
+                $groupMembers = $Null
                 if($user.principalType -eq "Group" -and $expandGroups.IsPresent){
-                    $groupMembers = get-EntraGroupMembers -groupId $user.graphId
+                    try{
+                        $groupMembers = get-entraGroupMembers -groupId $user.graphId
+                    }catch{
+                        Write-Warning "Failed to retrieve group members for $($user.displayName), adding as group principal type instead"
+                    }
                     foreach($groupMember in $groupMembers){
                         New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/datasets/$($dataset.name)" -type "Dataset" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.datasetUserAccessRight -through "Group" -parent $user.graphId -created $dataset.createdDate
                     }
-                }else{
+                }
+                if(!$groupMembers){
                     New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/datasets/$($dataset.name)" -type "Dataset" -principalId $user.graphId -principalName $user.displayName -principalUpn $user.identifier -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.datasetUserAccessRight -created $dataset.createdDate
                 }
             }
@@ -122,7 +124,7 @@
         }
     }
 
-    add-toReport -formats $outputFormat -permissions $permissionRows -category "PowerBI" -subject "Securables"
-
+    Add-ToReportQueue -permissions $permissionRows -category "PowerBI" -statistics @($global:unifiedStatistics."PowerBI"."Securables")
+    Reset-ReportQueue
     Write-Progress -Id 1 -Completed -Activity $activity
 }

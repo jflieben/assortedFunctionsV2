@@ -8,12 +8,6 @@
         -teamName: the name of the Team to scan
         -siteUrl: the URL of the Team (or any sharepoint location) to scan (e.g. if name is not unique)
         -expandGroups: if set, group memberships will be expanded to individual users
-        -outputFormat: 
-            XLSX
-            CSV
-            Default (output to Out-GridView)
-            Any combination of above is possible
-        -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
     #>        
     Param(
         [parameter(Mandatory=$true,
@@ -27,12 +21,8 @@
         $siteUrl, 
 
         [Switch]$expandGroups,
-        [ValidateSet('XLSX','CSV','Default')]
-        [String[]]$outputFormat="XLSX",
-        [Switch]$includeCurrentUser
+        [Boolean]$isParallel=$False
     )
-
-    $global:octo.includeCurrentUser = $includeCurrentUser.IsPresent
 
     Write-Host "Starting SpO Scan of $teamName $siteUrl"
 
@@ -163,8 +153,12 @@
             }
         }
     
-        add-toReport -formats $outputFormat -permissions $permissionRows -category $siteCategory -subject $site.Url      
-        Remove-Variable -Name permissionRows -Force
-        [System.GC]::Collect()           
+        Add-ToReportQueue -permissions $permissionRows -category $siteCategory -statistics @($global:unifiedStatistics.$($siteCategory).$($site.Url))
+        Remove-Variable -Name permissionRows -Force -Confirm:$False
+        if(!$isParallel){
+            Reset-ReportQueue          
+        }else{
+            [System.GC]::Collect()           
+        }         
     }
 }
