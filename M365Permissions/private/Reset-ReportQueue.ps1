@@ -7,6 +7,7 @@ function Reset-ReportQueue{
         $dataBatch =$global:octo.reportWriteQueue | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
         #reset the original queue
         $global:octo.reportWriteQueue = @()
+        [System.GC]::Collect()  
     }
 
     if($dataBatch){

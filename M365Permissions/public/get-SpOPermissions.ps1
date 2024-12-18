@@ -154,7 +154,7 @@
         }
     
         Add-ToReportQueue -permissions $permissionRows -category $siteCategory -statistics @($global:unifiedStatistics.$($siteCategory).$($site.Url))
-        Remove-Variable -Name permissionRows -Force
+        Remove-Variable -Name permissionRows -Force -Confirm:$False
         if(!$isParallel){
             Reset-ReportQueue          
         }else{

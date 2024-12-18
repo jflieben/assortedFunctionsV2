@@ -189,7 +189,7 @@
     }  
     
     Add-ToReportQueue -permissions $permissionRows -category "ExoRecipients" -statistics @($global:unifiedStatistics."ExoRecipients".$($recipient.displayName)) 
-    Remove-Variable -Name permissionRows -Force
+    Remove-Variable -Name permissionRows -Force -Confirm:$False
     if(!$isParallel){
         Reset-ReportQueue          
     }else{

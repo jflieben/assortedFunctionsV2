@@ -94,6 +94,10 @@
         Write-Progress -Id 2 -Completed -Activity "Processing flexible assignments"
     }
 
+    Remove-Variable roleDefinitions -Force -Confirm:$False
+    Remove-Variable roleAssignments -Force -Confirm:$False
+    Remove-Variable roleEligibilities -Force -Confirm:$False
+
     Write-Progress -Id 1 -PercentComplete 40 -Activity "Scanning Entra ID" -Status "Getting Service Principals"
     $servicePrincipals = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/servicePrincipals?$expand=transitiveMemberOf' -Method GET
     
@@ -135,6 +139,9 @@
         New-EntraPermissionEntry -path "/graph/$($graphSubscription.resource)" -type "Subscription/Webhook" -principalId $graphSubscription.applicationId -roleDefinitionId "N/A" -principalName $spn.displayName -principalUpn "N/A" -principalType "ServicePrincipal" -roleDefinitionName "Get $($graphSubscription.changeType) events" -startDateTime "See audit log" -endDateTime $graphSubscription.expirationDateTime -through "GraphAPI" -parent "$($parent.displayName) ($($parent.'@odata.type'.Split(".")[2]))"
     }
 
+    Remove-Variable graphSubscriptions -Force -Confirm:$False
+    Remove-Variable servicePrincipals -Force -Confirm:$False
+
     Stop-statisticsObject -category "Entra" -subject "Roles"
 
     $permissionRows = foreach($row in $global:EntraPermissions.Keys){
@@ -158,27 +165,29 @@
 
     Add-ToReportQueue -permissions $permissionRows -category "Entra" -statistics @($global:unifiedStatistics."Entra"."Roles")
     Reset-ReportQueue
-    Remove-Variable -Name permissionRows -Force    
+    Remove-Variable -Name permissionRows -Force -Confirm:$False    
+    [System.GC]::Collect() 
     
     if(!$excludeGroupsAndUsers){
         New-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
         Write-Progress -Id 1 -PercentComplete 50 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
-        $groupMemberRows = @()
 
         $userCount = (New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/users?$top=1' -Method GET -ComplexFilter -nopagination)."@odata.count"
         Write-Host "Retrieving metadata for $userCount users..."
         Write-Progress -Id 1 -PercentComplete 50 -Activity "Scanning Entra ID" -Status "Getting users and groups" 
 
-        $allUsersAndOwnedObjects = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/users?$expand=ownedObjects/microsoft.graph.group' -Method GET
+        $allUsersAndOwnedObjects = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/users?$select=id,userPrincipalName,displayName&$expand=ownedObjects/microsoft.graph.group' -Method GET
         Write-Host "Got ownership metadata"
-        $allUsersAndTheirGroups = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users?`$expand=transitiveMemberOf/microsoft.graph.group" -Method GET
+        $allUsersAndTheirGroups = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/users?$select=id,userPrincipalName,displayName&$expand=transitiveMemberOf/microsoft.graph.group' -Method GET
         Write-Host "Got group membership metadata"
+
+        [System.GC]::Collect() 
 
         #get over the expand limit of 20 objects
         for($i=0;$i -lt $allUsersAndOwnedObjects.Count;$i++){
             Write-Progress -Id 2 -PercentComplete $(try{($i+1) / $allUsersAndOwnedObjects.Count *100}catch{1}) -Activity "Getting ownership for users with > 20 owned groups" -Status "$($i+1) / $($allUsersAndOwnedObjects.Count) $($allUsersAndOwnedObjects[$i].displayName)"
             if($allUsersAndOwnedObjects[$i].ownedObjects.Count -ge 20){
-                $allUsersAndOwnedObjects[$i].ownedObjects = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users/$($allUsersAndOwnedObjects[$i].id)/ownedObjects" -Method GET
+                $allUsersAndOwnedObjects[$i].ownedObjects = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users/$($allUsersAndOwnedObjects[$i].id)/ownedObjects/microsoft.graph.group?`$select=id,displayName,groupTypes,mailEnabled,securityEnabled,membershipRule&`$top=999" -Method GET
             }
         }
         Write-Progress -Id 2 -Completed -Activity "Getting ownership for users with > 20 owned groups"
@@ -191,6 +200,9 @@
         }
         Write-Progress -Id 2 -Completed -Activity "Getting membership for users in > 20 groups"        
 
+        [System.GC]::Collect() 
+
+        [System.Collections.ArrayList]$groupMemberRows = @()
         $count = 0
         foreach($user in $allUsersAndTheirGroups){
             $count++
@@ -212,7 +224,7 @@
                     $memberRoles = "Member"
                 }
 
-                $groupMemberRows += [PSCustomObject]@{
+                $groupMemberRows.Add([PSCustomObject]@{
                     "GroupName" = $groupMembership.displayName
                     "GroupType" = $groupType
                     "GroupID" = $groupMembership.id
@@ -220,7 +232,7 @@
                     "MemberID" = $user.id
                     "MemberType" = $principalType
                     "Roles" = $memberRoles
-                }                
+                }) > $Null
             }
 
             foreach($ownedGroup in $ownerInfo.ownedObjects){
@@ -229,7 +241,7 @@
                     continue
                 }
                 $groupType = Get-EntraGroupType -group $ownedGroup
-                $groupMemberRows += [PSCustomObject]@{
+                $groupMemberRows.Add([PSCustomObject]@{
                     "GroupName" = $ownedGroup.displayName
                     "GroupType" = $groupType
                     "GroupID" = $ownedGroup.id
@@ -237,13 +249,14 @@
                     "MemberID" = $user.id
                     "MemberType" = $principalType
                     "Roles" = "Owner"
-                }
+                }) > $Null
             }
         }
         Write-Progress -Id 2 -Completed -Activity "Processing users and groups"
         Stop-StatisticsObject -category "GroupsAndMembers" -subject "Entities"
         Add-ToReportQueue -permissions $groupMemberRows -category "GroupsAndMembers" -statistics @($global:unifiedStatistics."GroupsAndMembers"."Entities")
-        Remove-Variable -Name groupMemberRows -Force
+        Remove-Variable -Name groupMemberRows -Force -Confirm:$False
+        [System.GC]::Collect()
         Reset-ReportQueue        
     }
 
