@@ -44,14 +44,12 @@
         Throw "Failed to find a single Team using $teamName. Found: $($sites.Url -join ","). Please use the Url to specify the correct Team"
     }elseif($sites.Count -eq 0 -or $Null -eq $sites){
         Throw "Failed to find a Team using $teamName $siteUrl. Please check the name and try again"
-    }else{
-        $site = $sites[0]
     }
 
-    if($site.IsTeamsConnected){
+    if($sites[0].IsTeamsConnected){
         try{
             Write-Host "Retrieving channels for this site/team..."
-            $channels = New-GraphQuery -Uri "https://graph.microsoft.com/beta/teams/$($site.GroupId.Guid)/channels" -Method GET -NoRetry
+            $channels = New-GraphQuery -Uri "https://graph.microsoft.com/beta/teams/$($sites[0].GroupId.Guid)/channels" -Method GET -NoRetry
             Write-Host "Found $($channels.Count) channels"
         }catch{
             Write-Warning "Failed to retrieve channels for this site/team, assuming no additional sub sites to scan"

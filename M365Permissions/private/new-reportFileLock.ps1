@@ -8,7 +8,7 @@ function New-ReportFileLock {
     $lockFilePath = Join-Path -Path $global:octo.outputFolder -ChildPath "M365Permissions.lock"
     if(!(Test-Path -Path $lockFilePath)){
         Write-Verbose "Creating lock file..."  
-        $Null = New-Item -Path $lockFilePath -ItemType File | Out-Null
+        $Null = New-Item -Path $lockFilePath -ItemType File -Force | Out-Null
         Write-Verbose "Lock file created!"
     }
     Write-Verbose "Creating lock..."
