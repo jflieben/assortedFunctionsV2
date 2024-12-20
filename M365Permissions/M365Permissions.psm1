@@ -13,12 +13,11 @@
     https://www.lieben.nu/liebensraum/m365permissions
 
     .ROADMAP
-    1.1.0 Add faster report writing (by batching XLSX exports through the add-toReport function / octo param)
-    1.1.1 Add support for App-Only authentication (cert based)
-    1.1.2 Staging of permissions for tenants without all resource categories
-    1.1.3 check defender xdr options 
-    1.1.4 Assess if Azure RM should be added or if a good open source tool already exists
-    1.1.5 Assess SQL or PBI as data destinations                                                                                                                                                                                                                                            
+    1.1.2 Add support for App-Only authentication (cert based)
+    1.1.3 Staging of permissions for tenants without all resource categories
+    1.1.x check defender xdr options 
+    1.1.x Assess if Azure RM should be added or if a good open source tool already exists
+    1.1.x Assess SQL or PBI as data destinations                                                                                                                                                                                                                                            
 #>                                                                                                                                              
 
 $helperFunctions = @{
