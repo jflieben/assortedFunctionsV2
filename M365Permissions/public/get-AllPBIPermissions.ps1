@@ -14,6 +14,26 @@
 
     $activity = "Scanning PowerBI"
 
+    #check if user has a powerbi license or this function will fail
+    if($global:octo.authMode -eq "Delegated"){
+        $powerBIServicePlans = @("PBI_PREMIUM_EM1_ADDON","PBI_PREMIUM_EM2_ADDON","BI_AZURE_P_2_GOV","PBI_PREMIUM_P1_ADDON_GCC","PBI_PREMIUM_P1_ADDON","BI_AZURE_P3","BI_AZURE_P2","BI_AZURE_P1")
+        $hasPowerBI = $False
+        $licenses = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users/$($global:octo.currentUser.userPrincipalName)/licenseDetails" -Method GET
+        if($licenses){
+            foreach($servicePlan in $licenses.servicePlans.servicePlanName){
+                if($powerBIServicePlans -contains $servicePlan){
+                    $hasPowerBI = $True
+                    break
+                }
+            }
+        }
+    }
+
+    if(!$hasPowerBI){
+        Write-Error "You do not have a PowerBI license, this function requires a PowerBI license assigned to the user you're logged in with" -ErrorAction Continue
+        return $Null
+    }
+
     Write-Host "Starting PowerBI scan..."
     Write-Progress -Id 1 -PercentComplete 0 -Activity $activity -Status "Retrieving workspaces..."
 
