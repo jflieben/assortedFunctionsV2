@@ -14,6 +14,7 @@
 
     .ROADMAP
     1.1.2 Add support for App-Only authentication (cert based)
+    1.1.2 Add license check for running user where applicable (e.g. powerbi)
     1.1.3 Staging of permissions for tenants without all resource categories
     1.1.x check defender xdr options 
     1.1.x Assess if Azure RM should be added or if a good open source tool already exists
