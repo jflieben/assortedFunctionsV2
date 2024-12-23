@@ -12,6 +12,7 @@ function get-AuthorizationCode{
 
     $cachedModuleVersion = Join-Path -Path $env:APPDATA -ChildPath "LiebenConsultancy\M365Permissions.version"
     if(!(Test-Path $cachedModuleVersion)){
+        New-Item -Path (Split-Path $cachedModuleVersion) -ItemType Directory -Force
         Set-Content -Path $cachedModuleVersion -Value $global:octo.moduleVersion -Force
     }else{
         if(([System.Version]::Parse((Get-Content -Path $cachedModuleVersion -Raw)) -lt [System.Version]::Parse($global:octo.moduleVersion))){
