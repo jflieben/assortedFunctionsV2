@@ -69,4 +69,9 @@
     if($global:octo.outputFolder -eq "CURRENTFOLDER"){
         $global:octo.outputFolder = Join-Path -Path $env:appdata -ChildPath "LiebenConsultancy"
     }
+
+    #run verbose log to file if verbose is on
+    if($global:VerbosePreference -eq "Continue"){
+        try{Start-Transcript -Path $(Join-Path -Path $global:octo.outputFolder -ChildPath "M365PermissionsVerbose.log") -Force -Confirm:$False}catch{}
+    }
 }
