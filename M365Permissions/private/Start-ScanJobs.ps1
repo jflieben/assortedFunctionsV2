@@ -29,6 +29,7 @@ function Start-ScanJobs{
     
     [Int]$batchSize = 25
     [Int]$doneUntil = $batchSize
+    $failedJobs = @()
     while($true){
         [Int]$queuedJobs = ($global:octo.ScanJobs.$($Title).Jobs | Where-Object {$_.Status -eq "Queued"}).Count
         [Int]$runningJobs = ($global:octo.ScanJobs.$($Title).Jobs | Where-Object {$_.Status -eq "Running"}).Count
@@ -64,6 +65,7 @@ function Start-ScanJobs{
                     }
                 }
                 if((Get-Date) -gt $global:octo.ScanJobs.$($Title).Jobs[$i].StartTime.AddMinutes(120)){
+                    $failedJobs += $global:octo.ScanJobs.$($Title).Jobs[$i].Target
                     Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has been running for more than 120 minutes, killing it :(" -ForegroundColor DarkRed
                     Write-Host "---------OUTPUT START---------" -ForegroundColor DarkYellow
                     try{
@@ -85,6 +87,7 @@ function Start-ScanJobs{
                 if($global:octo.ScanJobs.$($Title).Jobs[$i].Handle.IsCompleted -eq $True){
                     try{
                         if($global:octo.ScanJobs.$($Title).Jobs[$i].Thread.HadErrors){
+                            $failedJobs += $global:octo.ScanJobs.$($Title).Jobs[$i].Target
                             Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed with errors :(" -ForegroundColor DarkRed
                             $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Failed"
                         }else{
@@ -131,5 +134,8 @@ function Start-ScanJobs{
         Start-Sleep -Milliseconds 500
     }
 
+    if($failedJobs){
+        Write-Host "The following targets failed: $($failedJobs -join ', '). Try running these individually, if issues persist log an Issue in Github with verbose logs" -ForegroundColor DarkRed
+    }
     Reset-ReportQueue
 }        
