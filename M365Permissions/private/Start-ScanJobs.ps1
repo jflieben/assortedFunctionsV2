@@ -63,6 +63,25 @@ function Start-ScanJobs{
                         }
                     }
                 }
+                if((Get-Date) -gt $global:octo.ScanJobs.$($Title).Jobs[$i].StartTime.AddMinutes(120)){
+                    Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has been running for more than 120 minutes, killing it :(" -ForegroundColor DarkRed
+                    Write-Host "---------OUTPUT START---------" -ForegroundColor DarkYellow
+                    try{
+                        $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.EndInvoke($global:octo.ScanJobs.$($Title).Jobs[$i].Handle)
+                        $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Error
+                        $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Warning
+                        $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Information
+                        if($VerbosePreference -eq "Continue"){
+                            $global:octo.ScanJobs.$($Title).Jobs.Thread.Streams.Debug
+                            $global:octo.ScanJobs.$($Title).Jobs.Thread.Streams.Verbose
+                        }
+                        Write-Host "---------OUTPUT END-----------" -ForegroundColor DarkYellow
+                    }catch{}                    
+
+                    $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Dispose()
+                    $global:octo.ScanJobs.$($Title).Jobs[$i].Thread = $Null
+                    $global:octo.ScanJobs.$($Title).Jobs[$i].Handle = $Null                     
+                }
                 if($global:octo.ScanJobs.$($Title).Jobs[$i].Handle.IsCompleted -eq $True){
                     try{
                         if($global:octo.ScanJobs.$($Title).Jobs[$i].Thread.HadErrors){
@@ -102,6 +121,7 @@ function Start-ScanJobs{
                     $Null = $thread.AddParameter('octo', $global:octo)
                     $handle = $thread.BeginInvoke()
                     $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Running"
+                    $global:octo.ScanJobs.$($Title).Jobs[$i].StartTime = Get-Date
                     $global:octo.ScanJobs.$($Title).Jobs[$i].Handle = $handle
                     $global:octo.ScanJobs.$($Title).Jobs[$i].Thread = $thread
                 }
