@@ -21,7 +21,12 @@ function get-AccessToken{
         $jwtTokenProperties = Get-JwtTokenProperties -token $global:octo.LCCachedTokens.$resource
     }
 
-    if(!$global:octo.LCCachedTokens.$resource -or !$jwtTokenProperties -or ($jwtTokenProperties -and ([timezone]::CurrentTimeZone.ToLocalTime('1/1/1970').AddSeconds($jwtTokenProperties.exp) -lt (Get-Date).AddMinutes(25)) -or $jwtTokenProperties.aud -ne $resource)){
+    $tokenResourceComparison = $resource
+    if($resource -eq "https://www.sharepoint.com"){
+        $tokenResourceComparison = "00000003-0000-0ff1-ce00-000000000000"
+    }
+
+    if(!$global:octo.LCCachedTokens.$resource -or !$jwtTokenProperties -or ($jwtTokenProperties -and ([timezone]::CurrentTimeZone.ToLocalTime('1/1/1970').AddSeconds($jwtTokenProperties.exp) -lt (Get-Date).AddMinutes(25) -or $jwtTokenProperties.aud -ne $tokenResourceComparison))){
         Write-Verbose "Token cache miss, refreshing $($global:octo.authMode) V1 token for $resource..."
         if($global:octo.authMode -eq "ServicePrincipal"){
             $response = (Invoke-RestMethod "https://login.microsoftonline.com/$($global:octo.LCTenantId)/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=client_credentials&client_id=$([System.Web.HttpUtility]::UrlEncode($global:octo.LCClientId))&client_secret=$([System.Web.HttpUtility]::UrlEncode($global:octo.LCClientSecret))" -ErrorAction Stop -Verbose:$false)
