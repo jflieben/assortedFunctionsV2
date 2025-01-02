@@ -17,7 +17,7 @@ function get-SpOPermissionEntry{
     $name = $entity.Title
     $type = $entity.PrincipalType
 
-    if($type -eq "User"){
+    if($type -eq 1 -or $type -eq "User"){
         if($name -eq "External User" -or $entity.LoginName -like "*#EXT#*"){
             $type = "Guest User"
         }else{

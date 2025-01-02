@@ -70,7 +70,12 @@ Function Get-PnPGroupMembers{
             }
         }
     }else{
-        $members = Get-PnPGroupMember -Group $group.Id -Connection (Get-SpOConnection -Type User -Url $site.Url)
+        try{
+            $members = Get-PnPGroupMember -Group $group.Title -Connection (Get-SpOConnection -Type User -Url $site.Url)
+        }catch{
+            Write-Error "Failed to get members for $($group.Title) because $_" -ErrorAction Continue
+            $members = $Null
+        }
         foreach($member in $members){   
             $groupGuid = $Null; try{$groupGuid = $member.LoginName.Split("|")[2].Split("_")[0]}catch{$groupGuid = $Null}
             if($member.LoginName -like "*spo-grid-all-users*" -or $member.LoginName -eq "c:0(.s|true"){
