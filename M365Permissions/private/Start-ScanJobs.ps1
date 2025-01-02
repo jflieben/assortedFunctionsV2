@@ -136,7 +136,12 @@ function Start-ScanJobs{
 
     if($failedJobs){
         Write-Host "The following targets failed: $($failedJobs -join ', '). Try running these individually, if issues persist log an Issue in Github with verbose logs" -ForegroundColor DarkRed
-        Write-Host "To run in Verbose mode, use set-M365PermissionsConfig -Verbose `$True before starting a scan."
+        if($global:VerbosePreference -ne "Continue"){
+            Write-Host "To run in Verbose mode, use set-M365PermissionsConfig -Verbose `$True before starting a scan."
+        }else{
+            Write-Host "Verbose log path: $($global:octo.outputFolder)\M365PermissionsVerbose.log"
+        }
+        
     }
     Reset-ReportQueue
 }        
