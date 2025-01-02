@@ -36,7 +36,7 @@ function Start-ScanJobs{
         [Int]$totalJobs = $global:octo.ScanJobs.$($Title).Jobs.Count
         [Int]$completedJobs = $totalJobs - $queuedJobs - $runningJobs
         try{$percentComplete = (($completedJobs / $totalJobs) * 100)}catch{$percentComplete = 0}
-        Write-Progress -Id 1 -Activity $Title -Status "$completedJobs/$totalJobs Processing targets" -PercentComplete $percentComplete
+        Write-Progress -Id 1 -Activity $Title -Status "$completedJobs/$totalJobs done, $runningJobs active and $queuedJobs queued" -PercentComplete $percentComplete
         
         if($queuedJobs -eq 0 -and $runningJobs -eq 0){
             Write-Verbose "All jobs for $Title have finished"
