@@ -77,7 +77,12 @@ Function get-PnPObjectPermissions{
     }
     
     Foreach($roleAssignment in $Object.RoleAssignments){
-        Get-PnPProperty -ClientObject $roleAssignment -Property RoleDefinitionBindings, Member -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+        try{
+            Get-PnPProperty -ClientObject $roleAssignment -Property RoleDefinitionBindings, Member -Connection (Get-SpOConnection -Type User -Url $siteUrl) -ErrorAction Stop
+        }catch{
+            Write-Error "Failed to retrieve permissions for $($roleAssignment.Member.Title) on $($obj.Title) - $($Error[0].Exception.Message)" -ErrorAction Continue
+            continue
+        }
         
         foreach($permissionLevel in $roleAssignment.RoleDefinitionBindings){
             Write-Verbose "Detected: $($roleAssignment.Member.Title) $($permissionLevel.Name) ($($permissionLevel.RoleTypeKind))"
@@ -179,7 +184,13 @@ Function get-PnPObjectPermissions{
                     $allUniqueListItemIDs = $Null; $allUniqueListItemIDs = @($allListItems | Where-Object { $_.HasUniqueRoleAssignments -eq $True }) | select -ExpandProperty Id
                     for($a=0;$a -lt $allUniqueListItemIDs.Count;$a++){
                         Write-Progress -Id 3 -PercentComplete ((($a+1) / $allUniqueListItemIDs.Count) * 100) -Activity "Processing Item $($a+1) of $($allUniqueListItemIDs.Count)" -Status "Getting Metadata for each Unique Item"
-                        $allUniqueListItems += Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemIDs[$a]
+                        try{
+                            $allUniqueListItems += Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemIDs[$a] -ErrorAction Stop
+                        }catch{
+                            Write-Error "Failed to retrieve metadata for $($List.Title) item $($allUniqueListItemIDs[$a]) - $($Error[0].Exception.Message). Retrying...." -ErrorAction Continue
+                            Start-Sleep -Seconds 5
+                            $allUniqueListItems += Get-PnPListItem -List $List.Id -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Id $allUniqueListItemIDs[$a] -ErrorAction Continue
+                        }
                     }
 
                     for($l=0;$l -lt $allUniqueListItems.Count;$l++){
