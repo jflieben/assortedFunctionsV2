@@ -64,9 +64,9 @@ function Start-ScanJobs{
                         }
                     }
                 }
-                if((Get-Date) -gt $global:octo.ScanJobs.$($Title).Jobs[$i].StartTime.AddMinutes(120)){
+                if((Get-Date) -gt $global:octo.ScanJobs.$($Title).Jobs[$i].StartTime.AddMinutes($global:octo.defaultTimeoutMinutes)){
                     $failedJobs += $global:octo.ScanJobs.$($Title).Jobs[$i].Target
-                    Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has been running for more than 120 minutes, killing it :(" -ForegroundColor DarkRed
+                    Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has been running for more than $($global:octo.defaultTimeoutMinutes) minutes, killing it :(" -ForegroundColor DarkRed
                     Write-Host "---------OUTPUT START---------" -ForegroundColor DarkYellow
                     try{
                         $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.EndInvoke($global:octo.ScanJobs.$($Title).Jobs[$i].Handle)

@@ -10,6 +10,7 @@
         -outputFormat: XLSX or CSV
         -Verbose: if set, verbose output will be shown everywhere (=very chatty)
         -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
+        -defaultTimeoutMinutes: the default timeout in minutes for all parallelized jobs, by default 120 minutes
     #>        
     Param(
         [Int]$maxThreads,
@@ -17,7 +18,8 @@
         [ValidateSet('XLSX','CSV')]
         [String]$outputFormat,
         [Boolean]$Verbose,
-        [Boolean]$includeCurrentUser
+        [Boolean]$includeCurrentUser,
+        [Int]$defaultTimeoutMinutes
     )
 
     $defaultConfig = @{
@@ -26,6 +28,7 @@
         "outputFormat" = [String]"XLSX"
         "Verbose" = [Boolean]$false
         "includeCurrentUser" = [Boolean]$false
+        "defaultTimeoutMinutes" = [Int]120
     }
 
     $configLocation = Join-Path -Path $env:appdata -ChildPath "LiebenConsultancy\M365Permissions.conf"
