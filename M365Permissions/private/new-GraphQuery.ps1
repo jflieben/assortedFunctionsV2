@@ -36,7 +36,10 @@ function New-GraphQuery {
         [String]$resource = "https://graph.microsoft.com",
 
         [Parameter(Mandatory = $false)]
-        [Int]$expectedTotalResults = 0
+        [Int]$expectedTotalResults = 0,
+
+        [Parameter(Mandatory = $false)]
+        [String]$ContentType = 'application/json; charset=utf-8'   
 
     )
 
@@ -71,7 +74,7 @@ function New-GraphQuery {
                 $attempts ++
                 try {
                     [System.GC]::Collect()        
-                    $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -Body $Body -ContentType 'application/json; charset=utf-8' -ErrorAction Stop -Verbose:$False)
+                    $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -Body $Body -ContentType $ContentType -ErrorAction Stop -Verbose:$False)
                     $attempts = $MaxAttempts
                 }
                 catch {
@@ -96,7 +99,7 @@ function New-GraphQuery {
                     $attempts ++
                     try {
                         [System.GC]::Collect()
-                        $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -ContentType 'application/json; charset=utf-8' -ErrorAction Stop -Verbose:$false)
+                        $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -ContentType $ContentType -ErrorAction Stop -Verbose:$false)
                         $attempts = $MaxAttempts
                     }
                     catch {
