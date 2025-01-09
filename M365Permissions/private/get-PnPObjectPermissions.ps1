@@ -175,7 +175,6 @@ Function get-PnPObjectPermissions{
                     continue
                 }     
 
-                $allUniqueListItems = @()
                 Write-Verbose "List contains $($List.ItemCount) items"
                 $allListItems = $Null; $allListItems = New-GraphQuery -resource "https://www.sharepoint.com" -Uri "$($Object.Url)/_api/web/lists/getbyid('$($List.Id.Guid)')/items?`$select=ID,HasUniqueRoleAssignments&`$top=5000&`$format=json" -Method GET -expectedTotalResults $List.ItemCount
                 $allUniqueListItemIDs = $Null; $allUniqueListItemIDs = @($allListItems | Where-Object { $_.HasUniqueRoleAssignments -eq $True }) | select -ExpandProperty Id

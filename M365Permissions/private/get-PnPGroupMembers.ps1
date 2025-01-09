@@ -15,10 +15,11 @@ Function Get-PnPGroupMembers{
     if($Null -eq $global:octo.PnPGroupCache){
         $global:octo.PnPGroupCache = @{}
     }
+
     if($global:octo.PnPGroupCache.Keys -contains $($group.Title)){
         return $global:octo.PnPGroupCache.$($group.Title)
     }else{
-        $global:octo.PnPGroupCache.$($group.Title) = @()
+        [Array]$global:octo.PnPGroupCache.$($group.Title) = @()
     }
 
     $groupGuid = $Null; try{$groupGuid = $group.LoginName.Split("|")[2].Split("_")[0]}catch{$groupGuid = $Null}

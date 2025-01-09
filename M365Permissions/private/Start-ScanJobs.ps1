@@ -87,9 +87,16 @@ function Start-ScanJobs{
                 if($global:octo.ScanJobs.$($Title).Jobs[$i].Handle.IsCompleted -eq $True){
                     try{
                         if($global:octo.ScanJobs.$($Title).Jobs[$i].Thread.HadErrors){
-                            $failedJobs += $global:octo.ScanJobs.$($Title).Jobs[$i].Target
                             Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed with errors :(" -ForegroundColor DarkRed
                             $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Failed"
+                            $global:octo.ScanJobs.$($Title).Jobs[$i].Attempts++
+                            if($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts -lt $global:octo.maxJobRetries){
+                                Write-Host "Retrying $($global:octo.ScanJobs.$($Title).Jobs[$i].Target) after $($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts) failure(s)" -ForegroundColor Green
+                                $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Queued"
+                            }else{
+                                $failedJobs += $global:octo.ScanJobs.$($Title).Jobs[$i].Target
+                                Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) failed $($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts) times, abandoning Job..." -ForegroundColor DarkRed
+                            }
                         }else{
                             Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed without errors :)" -ForegroundColor Green
                             $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Succeeded"
@@ -135,7 +142,7 @@ function Start-ScanJobs{
     }
 
     if($failedJobs){
-        Write-Host "The following targets failed: $($failedJobs -join ', '). Try running these individually, if issues persist log an Issue in Github with verbose logs" -ForegroundColor DarkRed
+        Write-Host "The following targets failed: $($failedJobs -join ', ') even after retries. Try running these individually, if issues persist log an Issue in Github with verbose logs" -ForegroundColor DarkRed
         if($global:VerbosePreference -ne "Continue"){
             Write-Host "To run in Verbose mode, use set-M365PermissionsConfig -Verbose `$True before starting a scan."
         }else{
