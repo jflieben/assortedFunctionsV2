@@ -71,11 +71,20 @@ Function Get-PnPGroupMembers{
             }
         }
     }else{
-        try{
-            $members = Get-PnPGroupMember -Group $group.Title -Connection (Get-SpOConnection -Type User -Url $site.Url)
-        }catch{
-            Write-Error "Failed to get members for $($group.Title) because $_" -ErrorAction Continue
-            $members = $Null
+        $attempts = 0
+        $maxAttempts = 5
+        while ($attempts -lt $maxAttempts) {
+            $attempts++
+            try{
+                $members = Get-PnPGroupMember -Group $group.Title -Connection (Get-SpOConnection -Type User -Url $site.Url)
+                $attempts = $maxAttempts
+            }catch{
+                if ($attempts -ge $maxAttempts) { 
+                    Write-Error "Failed to get members for $($group.Title) because $_" -ErrorAction Continue
+                    $members = $Null
+                }
+                Start-Sleep -Seconds (1 + (6 * $attempts))                
+            }
         }
         foreach($member in $members){   
             $groupGuid = $Null; try{$groupGuid = $member.LoginName.Split("|")[2].Split("_")[0]}catch{$groupGuid = $Null}
