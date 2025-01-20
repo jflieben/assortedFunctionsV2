@@ -24,7 +24,7 @@
         [Boolean]$isParallel=$False
     )
 
-    Write-Host "Starting SpO Scan of $teamName $siteUrl"
+    Write-Host "Starting SpO Scan of $($teamName)$($siteUrl)"
 
     $spoBaseAdmUrl = "https://$($global:octo.tenantName)-admin.sharepoint.com"
     Write-Verbose "Using Sharepoint base URL: $spoBaseAdmUrl"

@@ -110,7 +110,7 @@ Function get-PnPObjectPermissions{
                             }
                         }
                     }else{
-                        New-SpOPermissionEntry -Path $obj.Url -Permission (get-spopermissionEntry -entity $member.Member -object $obj -permission $permissions.Name -Through "SharingLink")
+                        New-SpOPermissionEntry -Path $obj.Url -Permission (get-spopermissionEntry -entity $member.Member -object $obj -permission $permission.Name -Through "SharingLink")
                     }                    
                 }else{
                     if($expandGroups){

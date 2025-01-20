@@ -84,6 +84,9 @@ function Start-ScanJobs{
                             $global:octo.ScanJobs.$($Title).Jobs[$i].Attempts++
                             if($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts -lt $global:octo.maxJobRetries){
                                 Write-Host "Retrying $($global:octo.ScanJobs.$($Title).Jobs[$i].Target) after $($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts) failure(s)" -ForegroundColor Green
+                                Write-Host "---------OUTPUT START---------" -ForegroundColor DarkYellow
+                                $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Error
+                                Write-Host "---------OUTPUT END-----------" -ForegroundColor DarkYellow                                
                                 $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Queued"
                             }else{
                                 $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Failed"
@@ -121,8 +124,6 @@ function Start-ScanJobs{
                 }
 
             }
-
-
 
             #if job is queued, start it if we have room
             if($global:octo.ScanJobs.$($Title).Jobs[$i].Status -eq "Queued"){
