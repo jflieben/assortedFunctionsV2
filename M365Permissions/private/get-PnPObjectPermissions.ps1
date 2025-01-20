@@ -44,7 +44,7 @@ Function get-PnPObjectPermissions{
                 $obj.Url = $Object.Url
                 $obj.Type = "Site"
                 Update-StatisticsObject -Category $Category -Subject $siteUrl
-                Get-PnPProperty -ClientObject $Object -Property HasUniqueRoleAssignments, RoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+                $Null = Get-PnPProperty -ClientObject $Object -Property HasUniqueRoleAssignments, RoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
                 if($Object.HasUniqueRoleAssignments -eq $False){
                     Write-Verbose "Skipping $($obj.Title) as it fully inherits permissions from parent"
                     continue
@@ -58,7 +58,7 @@ Function get-PnPObjectPermissions{
                 $obj.Url = "$($siteUrl.Split(".com")[0]).com$($rootFolder.ServerRelativeUrl)"
                 $obj.Type = "List or Library"  
                 Update-StatisticsObject -Category $Category -Subject $siteUrl
-                Get-PnPProperty -ClientObject $Object -Property HasUniqueRoleAssignments, RoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+                $Null = Get-PnPProperty -ClientObject $Object -Property HasUniqueRoleAssignments, RoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
                 if($Object.HasUniqueRoleAssignments -eq $False){
                     Write-Verbose "Skipping $($obj.Title) as it fully inherits permissions from parent"
                     continue
@@ -133,7 +133,7 @@ Function get-PnPObjectPermissions{
         $childObjects = $Null; $childObjects = $Object.Webs
         foreach($childObject in $childObjects){
             #check if permissions are unique
-            Get-PnPProperty -ClientObject $childObject -Property HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+            $Null = Get-PnPProperty -ClientObject $childObject -Property HasUniqueRoleAssignments -Connection (Get-SpOConnection -Type User -Url $siteUrl)
             if($childObject.HasUniqueRoleAssignments -eq $False){
                 Write-Verbose "Skipping $($childObject.Title) child web as it fully inherits permissions from parent"
                 continue
@@ -149,12 +149,12 @@ Function get-PnPObjectPermissions{
         $ExcludedListFeatureIDs = @("00000000-0000-0000-0000-000000000000","a0e5a010-1329-49d4-9e09-f280cdbed37d","d11bc7d4-96c6-40e3-837d-3eb861805bfa","00bfea71-c796-4402-9f2f-0eb9a6e71b18","de12eebe-9114-4a4a-b7da-7585dc36a907")
 
         $sharedLinksList = $Null; $sharedLinksList = $childObjects | Where-Object{$_.TemplateFeatureId -eq "d11bc7d4-96c6-40e3-837d-3eb861805bfa" -and $_}
-        try{
-            $global:sharedLinks = $Null;$global:sharedLinks = Get-PnPListItem -List $sharedLinksList.Id -PageSize 500 -Fields ID,AvailableLinks -Connection (Get-SpOConnection -Type User -Url $siteUrl) | ForEach-Object {
-                try{$_.FieldValues["AvailableLinks"] | ConvertFrom-Json }catch{$Null}
-            }
-        }catch{
-            $global:sharedLinks
+        if($sharedLinksList){
+            try{
+                $global:sharedLinks = $Null;$global:sharedLinks = Get-PnPListItem -List $sharedLinksList.Id -PageSize 500 -Fields ID,AvailableLinks -Connection (Get-SpOConnection -Type User -Url $siteUrl) | ForEach-Object {
+                    try{$_.FieldValues["AvailableLinks"] | ConvertFrom-Json }catch{$Null}
+                }
+            }catch{$Null}
         }
 
         Write-Verbose "Cached $($sharedLinks.Count) shared links for $($Object.Title)..."
