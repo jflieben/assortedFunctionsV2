@@ -129,8 +129,12 @@
 
         if(!$wasOwner){
             Write-Host "Cleanup: Removing you as site collection owner of $($site.Url)..."
-            Remove-PnPSiteCollectionAdmin -Owners $global:octo.currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
-            Write-Host "Cleanup: Owner removed"
+            try{
+                Remove-PnPSiteCollectionAdmin -Owners $global:octo.currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
+                Write-Host "Cleanup: Owner removed"
+            }catch{
+                Write-Error "Cleanup: Failed to remove you as site collection owner of $($site.Url) because $_" -ErrorAction Continue
+            }
         }       
         
         $permissionRows = foreach($row in $global:SPOPermissions.Keys){

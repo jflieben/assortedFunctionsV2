@@ -85,16 +85,16 @@ Function get-PnPObjectPermissions{
     #processes all ACL's on the object
     Foreach($member in $ACLs){
         foreach($permission in $member.RoleDefinitionBindings){
-            Write-Verbose "Detected: $($member.member.Title) $($permission.Name) ($($permission.RoleTypeKind))"
-            if($ignoreablePermissions -contains $permission.RoleTypeKind -or $member.member.IsHiddenInUI){
-                Write-Verbose "Ignoring $($permission.Name) permission type for $($member.member.Title) because it is only relevant at a deeper level or hidden"
+            Write-Verbose "Detected: $($member.Member.Title) $($permission.Name) ($($permission.RoleTypeKind))"
+            if($ignoreablePermissions -contains $permission.RoleTypeKind -or $member.Member.IsHiddenInUI){
+                Write-Verbose "Ignoring $($permission.Name) permission type for $($member.Member.Title) because it is only relevant at a deeper level or hidden"
                 continue
             }
-            if($member.member.PrincipalType -eq 1){
-                New-SpOPermissionEntry -Path $obj.Url -Permission (get-spopermissionEntry -entity $member.member -object $obj -permission $permission.Name -Through "DirectAssignment")
+            if($member.Member.PrincipalType -eq 1){
+                New-SpOPermissionEntry -Path $obj.Url -Permission (get-spopermissionEntry -entity $member.Member -object $obj -permission $permission.Name -Through "DirectAssignment")
             }else{
-                if($member.member.LoginName -like "SharingLinks*"){
-                    $sharingLinkInfo = $Null; $sharingLinkInfo = get-SpOSharingLinkInfo -sharingLinkGuid $member.member.LoginName.Split(".")[3]
+                if($member.Member.LoginName -like "SharingLinks*"){
+                    $sharingLinkInfo = $Null; $sharingLinkInfo = get-SpOSharingLinkInfo -sharingLinkGuid $member.Member.LoginName.Split(".")[3]
                     if($sharingLinkInfo){
                         switch([Int]$sharingLinkInfo.LinkKind){
                             {$_ -in (2,3)}  { #Org wide
@@ -110,7 +110,7 @@ Function get-PnPObjectPermissions{
                             }
                         }
                     }else{
-                        New-SpOPermissionEntry -Path $obj.Url -Permission (get-spopermissionEntry -entity $member.member -object $obj -permission $permissions.Name -Through "SharingLink")
+                        New-SpOPermissionEntry -Path $obj.Url -Permission (get-spopermissionEntry -entity $member.Member -object $obj -permission $permissions.Name -Through "SharingLink")
                     }                    
                 }else{
                     if($expandGroups){
