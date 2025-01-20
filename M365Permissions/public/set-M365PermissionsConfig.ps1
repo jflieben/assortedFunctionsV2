@@ -78,7 +78,7 @@
 
     #run verbose log to file if verbose is on
     if($global:VerbosePreference -eq "Continue"){
-        try{Start-Transcript -Path $(Join-Path -Path $global:octo.outputFolder -ChildPath "M365PermissionsVerbose.log") -Force -Confirm:$False}catch{
+        try{Start-Transcript -Path $(Join-Path -Path $global:octo.outputFolder -ChildPath "M365PermissionsVerbose_$((Get-Date).ToString("yyyyMMddHHmm")).log") -Force -Confirm:$False}catch{
             Write-Verbose "Transcript already running"
         }
     }

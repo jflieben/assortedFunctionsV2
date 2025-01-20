@@ -107,7 +107,12 @@
         }
         
         Write-Host "Scanning root $($spoWeb.Url)..."
-        $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
+        try{
+            $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
+        }catch{
+            Start-Sleep -s 10 #working but not ideal fix for pnp command having issues with concurrent loops
+            $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
+        }
         $global:SPOPermissions.$($spoWeb.Url) = @()
 
         foreach($spoSiteAdmin in $spoSiteAdmins){

@@ -138,6 +138,13 @@ function Start-ScanJobs{
                     $handle = $thread.BeginInvoke()
                     $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Running"
                     $global:octo.ScanJobs.$($Title).Jobs[$i].StartTime = Get-Date
+                    if($global:octo.ScanJobs.$($Title).Jobs[$i].Handle){
+                        $global:octo.ScanJobs.$($Title).Jobs[$i].Handle = $Null 
+                    }
+                    if($global:octo.ScanJobs.$($Title).Jobs[$i].Thread){
+                        $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Dispose()
+                        $global:octo.ScanJobs.$($Title).Jobs[$i].Thread = $Null
+                    }      
                     $global:octo.ScanJobs.$($Title).Jobs[$i].Handle = $handle
                     $global:octo.ScanJobs.$($Title).Jobs[$i].Thread = $thread
                 }
@@ -152,7 +159,7 @@ function Start-ScanJobs{
         if($global:VerbosePreference -ne "Continue"){
             Write-Host "To run in Verbose mode, use set-M365PermissionsConfig -Verbose `$True before starting a scan."
         }else{
-            Write-Host "Verbose log path: $($global:octo.outputFolder)\M365PermissionsVerbose.log"
+            Write-Host "Verbose log path: $($global:octo.outputFolder)\M365PermissionsVerbose_[datetime].log"
         }
         
     }
