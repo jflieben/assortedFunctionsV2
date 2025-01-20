@@ -1,18 +1,19 @@
 function Reset-ReportQueue{
-    Write-Verbose "Flushing report queue to file...."
+    Write-Verbose "Start Flushing report queue to report file...."
     
     $dataBatch = @()
-    if($global:octo.reportWriteQueue.Count -gt 0){
-        #copy the report write queue to a clean array to be processed 
-        $dataBatch =$global:octo.reportWriteQueue | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
-        #reset the original queue
-        $global:octo.reportWriteQueue = @()
-        [System.GC]::Collect()  
+    $queuedFiles = Get-ChildItem -Path $global:octo.outputTempFolder -Filter "*.xml"
+    if($queuedFiles.Count -gt 0){
+        Write-Verbose "Reading batch of $($queuedFiles.Count) reports from queue..."
+        foreach($queuedFile in $queuedFiles){
+            $dataBatch += Import-Clixml -Path $queuedFile.FullName
+            Remove-Item -Path $queuedFile.FullName -Force
+        }  
     }
 
     if($dataBatch){
-        Write-Verbose "Writing batch of $($dataBatch.Count) reports"
-        $statistics =$Null; $statistics = ($dataBatch | Where{$_.statistics}).statistics
+        Write-Verbose "Writing batch of $($dataBatch.Count) reports to report file..."
+        $statistics =$Null; $statistics = ($dataBatch | Where-Object{$_.statistics}).statistics
         if($statistics){
             Export-WithRetry -category "Statistics" -data $statistics
         }
