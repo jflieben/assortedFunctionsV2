@@ -159,7 +159,7 @@ function Start-ScanJobs{
         if($global:VerbosePreference -ne "Continue"){
             Write-Host "To run in Verbose mode, use set-M365PermissionsConfig -Verbose `$True before starting a scan."
         }else{
-            Write-Host "Verbose log path: $($global:octo.outputFolder)\M365PermissionsVerbose_[datetime].log"
+            Write-Host "Verbose log path: $($global:octo.outputTempFolder)\M365PermissionsVerbose.log"
         }
         
     }

@@ -42,8 +42,10 @@
     }
 
     #ensure verbose preferences are set in all child processes
-    if($Verbose -or $preferredConfig.Verbose){
+    if($True -eq $Verbose -or $True -eq $preferredConfig.Verbose){
         $global:VerbosePreference = "Continue"
+    }else{
+        $global:VerbosePreference = "SilentlyContinue"
     }
 
     #override cached config with any passed in parameters (and only those we explicitly defined in the default config options)
@@ -76,9 +78,12 @@
         $global:octo.outputFolder = Join-Path -Path $env:appdata -ChildPath "LiebenConsultancy"
     }
 
+    #configure a temp folder specific for this run
+    $global:octo.outputTempFolder = Join-Path -Path $global:octo.outputFolder -ChildPath "Temp$((Get-Date).ToString("yyyyMMddHHmm"))"
+
     #run verbose log to file if verbose is on
     if($global:VerbosePreference -eq "Continue"){
-        try{Start-Transcript -Path $(Join-Path -Path $global:octo.outputFolder -ChildPath "M365PermissionsVerbose_$((Get-Date).ToString("yyyyMMddHHmm")).log") -Force -Confirm:$False}catch{
+        try{Start-Transcript -Path $(Join-Path -Path $global:octo.outputTempFolder -ChildPath "M365PermissionsVerbose.log") -Force -Confirm:$False}catch{
             Write-Verbose "Transcript already running"
         }
     }
