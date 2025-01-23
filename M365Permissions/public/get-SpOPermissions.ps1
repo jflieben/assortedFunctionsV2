@@ -101,8 +101,12 @@
                 Write-Host "Site collection ownership verified for $($site.Url) :)"
             }            
             $spoWeb = (New-RetryCommand -Command 'Get-PnPWeb' -Arguments @{Connection = (Get-SpOConnection -Type User -Url $site.Url); ErrorAction = "Stop"})
-        }catch{        
-            Write-Error "Failed to parse site $($site.Url) because $_" -ErrorAction Continue
+        }catch{
+            if($sites.Count -le 1){
+                Throw $_
+            }else{
+                Write-Error "Failed to parse site $($site.Url) because $_" -ErrorAction Continue
+            }
             continue
         }
         
