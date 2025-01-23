@@ -16,7 +16,7 @@ function get-SpOInvitee{
     #type 3 = external user
     if($invitee.Type -in @(1,2)){
         try{
-            $usr = $Null;$usr = Get-PnPUser -Connection (Get-SpOConnection -Type User -Url $siteUrl) -Identity $invitee.PId
+            $usr = $Null;$usr = (New-RetryCommand -Command 'Get-PnPUser' -Arguments @{Connection = (Get-SpOConnection -Type User -Url $siteUrl);Identity =$invitee.PId})
         }catch{
             $usr = $Null
         }

@@ -151,13 +151,16 @@ Function get-PnPObjectPermissions{
         $sharedLinksList = $Null; $sharedLinksList = $childObjects | Where-Object{$_.TemplateFeatureId -eq "d11bc7d4-96c6-40e3-837d-3eb861805bfa" -and $_}
         if($sharedLinksList){
             try{
-                $global:sharedLinks = $Null;$global:sharedLinks = Get-PnPListItem -List $sharedLinksList.Id -PageSize 500 -Fields ID,AvailableLinks -Connection (Get-SpOConnection -Type User -Url $siteUrl) | ForEach-Object {
-                    try{$_.FieldValues["AvailableLinks"] | ConvertFrom-Json }catch{$Null}
+                $global:sharedLinks = $Null;$global:sharedLinks = (New-RetryCommand -Command 'Get-PnPListItem' -Arguments @{List = $sharedLinksList.Id; PageSize = 500;Fields = ("ID","AvailableLinks"); Connection = (Get-SpOConnection -Type User -Url $siteUrl)}) | ForEach-Object {
+                    $_.FieldValues["AvailableLinks"] | ConvertFrom-Json
                 }
-            }catch{$Null}
+                Write-Host "Cached $($sharedLinks.Count) shared links in $($Object.Title)..."
+            }catch{
+                Write-Error "Failed to retrieve shared links in $($Object.Title) because $_" -ErrorAction Continue
+            }
+        }else{
+            Write-Host "No shared links in $($Object.Title) discovered"
         }
-
-        Write-Verbose "Cached $($sharedLinks.Count) shared links for $($Object.Title)..."
 
         $counter = 0
         ForEach($List in $childObjects){
@@ -168,7 +171,6 @@ Function get-PnPObjectPermissions{
                 #grab top level info of the list first
                 get-PnPObjectPermissions -Object $List -siteUrl $siteUrl -Category $Category
 
-                #check if permissions are unique
                 Get-PnPProperty -ClientObject $List -Property Title, HasUniqueRoleAssignments, DefaultDisplayFormUrl -Connection (Get-SpOConnection -Type User -Url $siteUrl)
                 if($List.HasUniqueRoleAssignments -eq $False){
                     Write-Verbose "Skipping $($List.Title) List as it fully inherits permissions from parent"

@@ -100,19 +100,14 @@
                 $wasOwner = $True
                 Write-Host "Site collection ownership verified for $($site.Url) :)"
             }            
-            $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
+            $spoWeb = (New-RetryCommand -Command 'Get-PnPWeb' -Arguments @{Connection = (Get-SpOConnection -Type User -Url $site.Url); ErrorAction = "Stop"})
         }catch{        
             Write-Error "Failed to parse site $($site.Url) because $_" -ErrorAction Continue
             continue
         }
         
         Write-Host "Scanning root $($spoWeb.Url)..."
-        try{
-            $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
-        }catch{
-            Start-Sleep -s 10 #working but not ideal fix for pnp command having issues with concurrent loops
-            $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
-        }
+        $spoSiteAdmins = (New-RetryCommand -Command 'Get-PnPSiteCollectionAdmin' -Arguments @{Connection = (Get-SpOConnection -Type User -Url $site.Url)})
         $global:SPOPermissions.$($spoWeb.Url) = @()
 
         foreach($spoSiteAdmin in $spoSiteAdmins){
@@ -135,7 +130,7 @@
         if(!$wasOwner){
             Write-Host "Cleanup: Removing you as site collection owner of $($site.Url)..."
             try{
-                Remove-PnPSiteCollectionAdmin -Owners $global:octo.currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
+                (New-RetryCommand -Command 'Remove-PnPSiteCollectionAdmin' -Arguments @{Owners = $global:octo.currentUser.userPrincipalName; Connection = (Get-SpOConnection -Type User -Url $site.Url)})
                 Write-Host "Cleanup: Owner removed"
             }catch{
                 Write-Error "Cleanup: Failed to remove you as site collection owner of $($site.Url) because $_" -ErrorAction Continue
