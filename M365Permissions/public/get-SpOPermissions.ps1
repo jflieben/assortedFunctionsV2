@@ -140,6 +140,8 @@
                 Write-Error "Cleanup: Failed to remove you as site collection owner of $($site.Url) because $_" -ErrorAction Continue
             }
         }       
+
+        Write-Host "Finalizing data and adding to report queue..."
         
         $permissionRows = foreach($row in $global:SPOPermissions.Keys){
             foreach($permission in $global:SPOPermissions.$row){
@@ -161,10 +163,13 @@
     
         Add-ToReportQueue -permissions $permissionRows -category $siteCategory -statistics @($global:unifiedStatistics.$($siteCategory).$($site.Url))
         Remove-Variable -Name permissionRows -Force -Confirm:$False
+
         if(!$isParallel){
             Reset-ReportQueue          
         }else{
-            [System.GC]::Collect()           
-        }         
+            [System.GC]::Collect()
+        }    
+        
+        Write-Host "Done"
     }
 }

@@ -11,7 +11,7 @@ function New-RetryCommand {
         [int]$MaxNumberOfRetries = 5,
 
         [Parameter(Mandatory = $false)]
-        [int]$RetryDelayInSeconds = 5
+        [int]$RetryDelayInSeconds = 30
     )
 
     $RetryCommand = $true
@@ -24,10 +24,12 @@ function New-RetryCommand {
             $RetryCommand = $false
         }catch {
             if ($RetryCount -le $MaxNumberOfRetries) {
+                Write-Verbose "$Command failed, retrying in $($RetryDelayInSeconds * $RetryMultiplier) seconds..."
                 Start-Sleep -Seconds ($RetryDelayInSeconds * $RetryMultiplier)
-                $RetryMultiplier += 1
+                $RetryMultiplier *= 1.2
                 $RetryCount++
             }else {
+                Write-Verbose "$Command failed permanently after $RetryCount attempts"
                 throw $_
             }
         }

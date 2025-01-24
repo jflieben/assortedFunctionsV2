@@ -22,7 +22,7 @@ Function Get-PnPGroupMembers{
         [Array]$global:octo.PnPGroupCache.$($group.Title) = @()
     }
 
-    $groupGuid = $Null; try{$groupGuid = $group.LoginName.Split("|")[2].Split("_")[0]}catch{$groupGuid = $Null}
+    try{$groupGuid = $Null; $groupGuid = $group.LoginName.Split("|")[2].Split("_")[0]}catch{$groupGuid = $Null}
     if($group.LoginName.Split("|")[0] -eq "c:0(.s"){
         Write-Verbose "Found $($group.Title) special group"
         $global:octo.PnPGroupCache.$($group.Title) += [PSCustomObject]@{
@@ -49,7 +49,7 @@ Function Get-PnPGroupMembers{
         }
     }elseif($groupGuid -and [guid]::TryParse($groupGuid, $([ref][guid]::Empty))){
         try{
-            $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
+            $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET -ErrorAction Stop | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
         }catch{
             $graphMembers = @(
                 [PSCustomObject]@{
@@ -71,20 +71,10 @@ Function Get-PnPGroupMembers{
             }
         }
     }else{
-        $attempts = 0
-        $maxAttempts = 5
-        while ($attempts -lt $maxAttempts) {
-            $attempts++
-            try{
-                $members = Get-PnPGroupMember -Group $group.Title -Connection (Get-SpOConnection -Type User -Url $site.Url)
-                $attempts = $maxAttempts
-            }catch{
-                if ($attempts -ge $maxAttempts) { 
-                    Write-Error "Failed to get members for $($group.Title) because $_" -ErrorAction Continue
-                    $members = $Null
-                }
-                Start-Sleep -Seconds (1 + (6 * $attempts))                
-            }
+        try{
+            $members=$Null; $members = (New-RetryCommand -Command 'Get-PnPGroupMember' -Arguments @{Group = $group.Title; Connection =(Get-SpOConnection -Type User -Url $site.Url)})
+        }catch{
+            Write-Error "Failed to get members for $($group.Title) because $_" -ErrorAction Continue
         }
         foreach($member in $members){   
             $groupGuid = $Null; try{$groupGuid = $member.LoginName.Split("|")[2].Split("_")[0]}catch{$groupGuid = $Null}
@@ -95,7 +85,7 @@ Function Get-PnPGroupMembers{
             }
             if($groupGuid -and [guid]::TryParse($groupGuid, $([ref][guid]::Empty))){
                 try{
-                    $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
+                    $graphMembers = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/groups/$groupGuid/transitiveMembers" -Method GET -ErrorAction Stop | Where-Object { $_."@odata.type" -eq "#microsoft.graph.user" }
                 }catch{
                     $graphMembers = @(
                         [PSCustomObject]@{
