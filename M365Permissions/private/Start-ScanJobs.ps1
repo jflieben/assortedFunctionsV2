@@ -27,7 +27,7 @@ function Start-ScanJobs{
 
     Write-Progress -Id 1 -Activity $Title -Status "Starting initial threads" -PercentComplete 0
     
-    [Int]$batchSize = 25
+    [Int]$batchSize = 50
     [Int]$doneUntil = $batchSize
     [Array]$failedJobs = @()
     while($true){
@@ -78,30 +78,32 @@ function Start-ScanJobs{
                         if($global:octo.ScanJobs.$($Title).Jobs[$i].Thread.HadErrors){
                             #check if the errors were terminating or not
                             $terminatingErrors= $Null; $terminatingErrors = $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Error.Exception | Where-Object {$_ -is [System.Management.Automation.RuntimeException]}
-                        }
-                        if($terminatingErrors){
-                            Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed with critical errors :(" -ForegroundColor DarkRed
-                            $global:octo.ScanJobs.$($Title).Jobs[$i].Attempts++
-                            if($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts -lt $global:octo.maxJobRetries){
-                                Write-Host "Retrying $($global:octo.ScanJobs.$($Title).Jobs[$i].Target) after $($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts) failure(s)" -ForegroundColor Green
-                                Write-Host "---------OUTPUT START---------" -ForegroundColor DarkYellow
-                                $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Error
-                                Write-Host "---------OUTPUT END-----------" -ForegroundColor DarkYellow                                
-                                $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Queued"
+                            if($terminatingErrors){
+                                Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed with critical errors :(" -ForegroundColor DarkRed
+                                $global:octo.ScanJobs.$($Title).Jobs[$i].Attempts++
+                                if($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts -lt $global:octo.maxJobRetries){
+                                    Write-Host "Retrying $($global:octo.ScanJobs.$($Title).Jobs[$i].Target) after $($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts) failure(s)" -ForegroundColor Green
+                                    Write-Host "---------OUTPUT START---------" -ForegroundColor DarkYellow
+                                    $global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Error
+                                    Write-Host "---------OUTPUT END-----------" -ForegroundColor DarkYellow                                
+                                    $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Queued"
+                                }else{
+                                    $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Failed"
+                                    Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) failed $($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts) times, abandoning Job..." -ForegroundColor DarkRed                                
+                                    $failedJobs += $global:octo.ScanJobs.$($Title).Jobs[$i].Target
+                                }
                             }else{
-                                $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Failed"
-                                Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) failed $($global:octo.ScanJobs.$($Title).Jobs[$i].Attempts) times, abandoning Job..." -ForegroundColor DarkRed                                
-                                $failedJobs += $global:octo.ScanJobs.$($Title).Jobs[$i].Target
+                                Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed, but had $($global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Error.Count) non-retryable errors :|" -ForegroundColor Yellow
+                                $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Succeeded"
                             }
                         }else{
-                            if($global:octo.ScanJobs.$($Title).Jobs[$i].Thread.HadErrors){
-                                Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed, but had $($global:octo.ScanJobs.$($Title).Jobs[$i].Thread.Streams.Error.Count) non-retryable errors :|" -ForegroundColor Yellow
-                            }else{
-                                Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed without any errors :)" -ForegroundColor Green
-                            }                            
+                            Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has completed without any errors :)" -ForegroundColor Green
                             $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Succeeded"
-                        }
-                    }catch{}
+                        }                                                    
+                    }catch{
+                        Write-Host "$($global:octo.ScanJobs.$($Title).Jobs[$i].Target) has crashed and will be retried" -ForegroundColor DarkRed
+                        $global:octo.ScanJobs.$($Title).Jobs[$i].Status = "Queued"
+                    }
                 }
 
                 #dispose of threads that have completed
@@ -161,7 +163,6 @@ function Start-ScanJobs{
         }else{
             Write-Host "Verbose log path: $($global:octo.outputTempFolder)\M365PermissionsVerbose.log"
         }
-        
     }
     Reset-ReportQueue
 }        

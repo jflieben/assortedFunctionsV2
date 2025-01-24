@@ -155,7 +155,7 @@
         }
     }
 
-    Write-Progress -Id 1 -PercentComplete 35 -Activity "Scanning Entra ID" -Status "Retrieving flexible assigments"
+    Write-Progress -Id 1 -PercentComplete 35 -Activity "Scanning Entra ID" -Status "Retrieving flexible (PIM) assigments"
 
     #get eligible role assignments
     try{
@@ -165,12 +165,12 @@
         $roleEligibilities = @()
     }
 
-    Write-Progress -Id 1 -PercentComplete 45 -Activity "Scanning Entra ID" -Status "Processing flexible assigments"
+    Write-Progress -Id 1 -PercentComplete 45 -Activity "Scanning Entra ID" -Status "Processing flexible (PIM) assigments"
 
     $count = 0
     foreach($roleEligibility in $roleEligibilities){
         $count++
-        Write-Progress -Id 2 -PercentComplete $(try{$count / $roleEligibilities.Count *100}catch{1}) -Activity "Processing flexible assignments" -Status "[$count / $($roleEligibilities.Count)]"
+        Write-Progress -Id 2 -PercentComplete $(try{$count / $roleEligibilities.Count *100}catch{1}) -Activity "Processing flexible (PIM) assignments" -Status "[$count / $($roleEligibilities.Count)]"
         $roleDefinition = $roleDefinitions | Where-Object { $_.id -eq $roleEligibility.roleDefinitionId }
         $principalType = "Unknown"
         $groupMembers = $Null
@@ -196,7 +196,7 @@
             Update-StatisticsObject -category "Entra" -subject "Roles"
             New-EntraPermissionEntry -path $roleEligibility.directoryScopeId -type "EligibleRole" -principalId $principal.id -roleDefinitionId $roleEligibility.roleDefinitionId -principalName $principal.displayName -principalUpn $principal.userPrincipalName -principalType $principalType -roleDefinitionName $roleDefinition.displayName -startDateTime $roleEligibility.startDateTime -endDateTime $roleEligibility.endDateTime
         }
-        Write-Progress -Id 2 -Completed -Activity "Processing flexible assignments"
+        Write-Progress -Id 2 -Completed -Activity "Processing flexible (PIM) assignments"
     }
 
     Remove-Variable roleDefinitions -Force -Confirm:$False
