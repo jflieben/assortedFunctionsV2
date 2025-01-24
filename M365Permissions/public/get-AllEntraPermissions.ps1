@@ -223,28 +223,31 @@
     }
 
     Write-Progress -Id 1 -PercentComplete 75 -Activity "Scanning Entra ID" -Status "Getting Graph Subscriptions"
-    $graphSubscriptions = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/subscriptions' -Method GET
-    foreach($graphSubscription in $graphSubscriptions){
-        Update-StatisticsObject -category "Entra" -subject "Roles"
-        $spn = $null; $spn = $servicePrincipals | Where-Object { $_.appId -eq $graphSubscription.applicationId }
-        if(!$spn){
-            $spn = @{
-                displayName = "Microsoft"
-                id = $graphSubscription.applicationId
+    if($global:octo.authMode -ne "Delegated"){
+        Write-Warning "Graph subscriptions can only be retrieved in delegated mode, and will not be added to your report."
+    }else{
+        $graphSubscriptions = New-GraphQuery -Uri 'https://graph.microsoft.com/v1.0/subscriptions' -Method GET
+        foreach($graphSubscription in $graphSubscriptions){
+            Update-StatisticsObject -category "Entra" -subject "Roles"
+            $spn = $null; $spn = $servicePrincipals | Where-Object { $_.appId -eq $graphSubscription.applicationId }
+            if(!$spn){
+                $spn = @{
+                    displayName = "Microsoft"
+                    id = $graphSubscription.applicationId
+                }
             }
-        }
-        try{$parent = $Null; $parent = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/directoryObjects/$($graphSubscription.creatorId)" -Method GET}
-        catch{$parent = $Null}
-        if(!$parent){
-            $parent = @{
-                displayName = "Unknown"
-                "@odata.type" = "Deleted?"
+            try{$parent = $Null; $parent = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/directoryObjects/$($graphSubscription.creatorId)" -Method GET}catch{$parent = $Null}
+            if(!$parent){
+                $parent = @{
+                    displayName = "Unknown"
+                    "@odata.type" = "Deleted?"
+                }
             }
+            New-EntraPermissionEntry -path "/graph/$($graphSubscription.resource)" -type "Subscription/Webhook" -principalId $graphSubscription.applicationId -roleDefinitionId "N/A" -principalName $spn.displayName -principalUpn "N/A" -principalType "ServicePrincipal" -roleDefinitionName "Get $($graphSubscription.changeType) events" -startDateTime "See audit log" -endDateTime $graphSubscription.expirationDateTime -through "GraphAPI" -parent "$($parent.displayName) ($($parent.'@odata.type'.Split(".")[2]))"
         }
-        New-EntraPermissionEntry -path "/graph/$($graphSubscription.resource)" -type "Subscription/Webhook" -principalId $graphSubscription.applicationId -roleDefinitionId "N/A" -principalName $spn.displayName -principalUpn "N/A" -principalType "ServicePrincipal" -roleDefinitionName "Get $($graphSubscription.changeType) events" -startDateTime "See audit log" -endDateTime $graphSubscription.expirationDateTime -through "GraphAPI" -parent "$($parent.displayName) ($($parent.'@odata.type'.Split(".")[2]))"
-    }
 
-    Remove-Variable graphSubscriptions -Force -Confirm:$False
+        Remove-Variable graphSubscriptions -Force -Confirm:$False
+    }
     Remove-Variable servicePrincipals -Force -Confirm:$False
 
     Stop-statisticsObject -category "Entra" -subject "Roles"
