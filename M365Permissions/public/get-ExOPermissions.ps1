@@ -103,6 +103,10 @@
                     Write-Verbose "Ignoring folder $($folder.Name) as it is in the ignored list"
                     continue
                 }
+                if($folder.ItemsInFolder -lt 1){
+                    Write-Verbose "Ignoring folder $($folder.Name) as it is empty"
+                    continue
+                }                
                 try{
                     $folderPermissions = $Null; $folderPermissions = New-ExoQuery -cmdlet "Get-MailboxFolderPermission" -cmdParams @{Identity = "$($mailbox.UserPrincipalName):$($folder.FolderId)"}
                     foreach($folderPermission in $folderPermissions){

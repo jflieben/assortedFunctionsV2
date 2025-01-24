@@ -12,7 +12,6 @@ function Reset-ReportQueue{
     }
 
     if($dataBatch){
-        Write-Verbose "Writing batch of $($dataBatch.Count) reports to report file..."
         $statistics =$Null; $statistics = ($dataBatch | Where-Object{$_.statistics}).statistics
         if($statistics){
             Export-WithRetry -category "Statistics" -data $statistics
@@ -25,5 +24,7 @@ function Reset-ReportQueue{
             }
         }   
         [System.GC]::Collect()   
+    }else{
+        Write-Verbose "No reports to write to report file..."
     }
 }
