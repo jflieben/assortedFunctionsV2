@@ -80,14 +80,22 @@ Function Get-PnPGroupMembers{
             $groupGuid = $Null; try{$groupGuid = $member.LoginName.Split("|")[2].Split("_")[0]}catch{$groupGuid = $Null}
             if($member.LoginName -like "*spo-grid-all-users*"){
                 Write-Verbose "Found $($member.Title) special group"
-                $member.PrincipalType = "ORG-WIDE"
-                $global:octo.PnPGroupCache.$($group.Title) += $member
+                $global:octo.PnPGroupCache.$($group.Title) += [PSCustomObject]@{
+                    "Title" = $member.Title
+                    "LoginName" = $member.LoginName
+                    "PrincipalType" = "ORG-WIDE"
+                    "Email" = "N/A"
+                }                
                 continue
             }
             if($member.LoginName -eq "c:0(.s|true"){
                 Write-Verbose "Found $($member.Title) special group"
-                $member.PrincipalType = "ANYONE"
-                $global:octo.PnPGroupCache.$($group.Title) += $member
+                $global:octo.PnPGroupCache.$($group.Title) += [PSCustomObject]@{
+                    "Title" = $member.Title
+                    "LoginName" = $member.LoginName
+                    "PrincipalType" = "ANYONE"
+                    "Email" = "N/A"
+                }      
                 continue
             }
             if($groupGuid -and [guid]::TryParse($groupGuid, $([ref][guid]::Empty))){

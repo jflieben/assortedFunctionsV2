@@ -98,10 +98,10 @@ Function get-PnPObjectPermissions{
                     if($sharingLinkInfo){
                         switch([Int]$sharingLinkInfo.LinkKind){
                             {$_ -in (2,3)}  { #Org wide
-                                New-SpOPermissionEntry -Path $obj.Url -Permission (get-spopermissionEntry -linkCreationDate $sharingLinkInfo.CreatedDate -linkExpirationDate $sharingLinkInfo.ExpirationDateTime -entity @{Title = "All Internal Users";PrincipalType="ORG-WIDE"} -object $obj -permission $permission.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
+                                New-SpOPermissionEntry -Path $obj.Url -Permission (get-spopermissionEntry -linkCreationDate $sharingLinkInfo.CreatedDate -linkExpirationDate $sharingLinkInfo.ExpirationDateTime -entity @{Email = "N/A";Title = "All Internal Users";PrincipalType="ORG-WIDE"} -object $obj -permission $permission.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
                             }                            
                             {$_ -in (4,5)}  { #Anonymous
-                                New-SpOPermissionEntry -Path $obj.Url -Permission (get-spopermissionEntry -linkCreationDate $sharingLinkInfo.CreatedDate -linkExpirationDate $sharingLinkInfo.ExpirationDateTime -entity @{Title = "Anyone / Anonymous";PrincipalType="ANYONE"} -object $obj -permission $permission.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
+                                New-SpOPermissionEntry -Path $obj.Url -Permission (get-spopermissionEntry -linkCreationDate $sharingLinkInfo.CreatedDate -linkExpirationDate $sharingLinkInfo.ExpirationDateTime -entity @{Email = "N/A";Title = "Anyone / Anonymous";PrincipalType="ANYONE"} -object $obj -permission $permission.Name -Through "SharingLink" -parent "LinkId: $($sharingLinkInfo.ShareId)")
                             }                            
                             {$_ -in (1,6)}  { #direct, flexible
                                 foreach($invitee in $sharingLinkInfo.invitees){
