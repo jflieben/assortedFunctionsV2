@@ -7,10 +7,12 @@
         Parameters:
         -oldPermissionsFilePath: the path to the old permissions file. Leave one empty to auto-detect both
         -newPermissionsFilePath: the path to the new permissions file. Leave one empty to auto-detect both
+        -tabs: the tabs to compare, default is all tabs
     #>        
     Param(
         [String]$oldPermissionsFilePath,
-        [String]$newPermissionsFilePath
+        [String]$newPermissionsFilePath,
+        [String[]]$tabs = @("Onedrive","Teams","O365Group","PowerBI","GroupsAndMembers","Entra","ExoRecipients","ExoRoles")
     )
 
     if(!$oldPermissionsFilePath -or !$newPermissionsFilePath){
@@ -25,42 +27,52 @@
         Write-Host "Auto detected new permissions file: $($newPermissionsFile.FullName)"
     }
 
-    Write-Progress -Id 1 -Activity "Comparing data between $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Status "Loading data..." -PercentComplete 0
-
-    $oldTabs = Import-Excel -Path $oldPermissionsFile.FullName -WorksheetName "*"
-    $newTabs = Import-Excel -Path $newPermissionsFile.FullName -WorksheetName "*"
-
     Write-Host ""
 
     $diffResults = @{}
-    $oldTabNames = ($oldTabs.GetEnumerator().Name | Where-Object {$_ -ne "Statistics"})
-
     $count = 0
-    foreach ($oldTabName in $oldTabNames) {
+    foreach ($tabName in $tabs) {
         $count++
-        try{$percentComplete = (($count  / ($oldTabNames.Count*2)) * 100)}catch{$percentComplete = 0}
-        Write-Progress -Id 1 -Activity "Comparing data between $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Status "Processing $oldTabName" -PercentComplete $percentComplete
-        if(!$diffResults.$($oldTabName)){
-            $diffResults.$($oldTabName) = @()
+        try{$percentComplete = (($count  / ($tabs.Count)) * 100)}catch{$percentComplete = 0}
+        Write-Progress -Id 1 -Activity "Comparing $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Status "$tabName Loading previous permissions..." -PercentComplete $percentComplete
+        if(!$diffResults.$($tabName)){
+            $diffResults.$($tabName) = @()
         }
 
-        $oldTab = $oldTabs.$($oldTabName)
+        try{
+            $oldTab = $Null; $oldTab = Import-Excel -Path $oldPermissionsFile.FullName -WorksheetName $tabName -DataOnly
+        }catch{$null}
+
+        Write-Progress -Id 1 -Activity "Comparing $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Status "$tabName Loading current permissions..." -PercentComplete $percentComplete
+        
+        try{
+            $newTab = $Null; $newTab = Import-Excel -Path $newPermissionsFile.FullName -WorksheetName $tabName -DataOnly
+        }catch{$null}
 
         #current workload not found in new file
-        $newTab = $Null; $newTab = $newTabs.$($oldTabName)
         if ($null -eq $newTab) {
             if($oldTab.Count -gt 0){
-                $diffResults.$($oldTabName) += [PSCustomObject]@{
-                    "ERROR" = "Worksheet $($oldTabName) not found in NEW file, did you include this in the latest scan?"
+                $diffResults.$($tabName) += [PSCustomObject]@{
+                    "ERROR" = "Worksheet $($tabName) not found in NEW file, did you include this in the latest scan?"
                 }
             }
             continue
         }
 
+        #current workload not found in old file
+        if ($null -eq $oldTab) {
+            if($newTab.Count -gt 0){
+                $diffResults.$($tabName) += [PSCustomObject]@{
+                    "ERROR" = "Worksheet $($tabName) not found in OLD file, did you include this in the previous scan?"
+                }
+            }
+            continue
+        }        
+
         #current workload found, check for removals
         for($i=0;$i -lt $oldTab.Count;$i++){
             try{$percentComplete = ((($i+1)  / ($oldTab.Count+1)) * 100)}catch{$percentComplete = 0}
-            Write-Progress -Id 2 -Activity "Processing removals for $oldTabName" -Status "$($i+1) / $($oldTab.Count))" -PercentComplete $percentComplete
+            Write-Progress -Id 2 -Activity "Processing removals for $tabName" -Status "$($i+1) / $($oldTab.Count))" -PercentComplete $percentComplete
                         
             $oldRow = $oldTab[$i] | ConvertTo-Json -Depth 10
             $exists = $False; $exists = $newTab.Where({
@@ -70,38 +82,16 @@
             if (!$exists) {
                 [PSCustomObject]$diffItem = $oldRow | ConvertFrom-Json
                 $diffItem | Add-Member -MemberType NoteProperty -Name Action -Value "Removed"
-                $diffResults.$($oldTabName) += $diffItem
+                $diffResults.$($tabName) += $diffItem
             }
         }
-        Write-Host "Found $($diffResults.$($oldTabName).count) removed permissions for $oldTabName"
-        Write-Progress -Id 2 -Activity "Processing removals for $oldTabName" -Completed      
-    }
+        Write-Host "Found $($diffResults.$($tabName).count) removed permissions for $tabName"
+        Write-Progress -Id 2 -Activity "Processing removals for $tabName" -Completed      
 
-    $newTabNames = ($newTabs.GetEnumerator().Name | Where-Object {$_ -ne "Statistics"})
-    foreach ($newTabName in $newTabNames) {
-        $count++
-        try{$percentComplete = (($count  / ($newTabNames.Count*2)) * 100)}catch{$percentComplete = 0}
-        Write-Progress -Id 1 -Activity "Comparing data between $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Status "Processing $newTabName" -PercentComplete $percentComplete
-        
-        if(!$diffResults.$($newTabName)){
-            $diffResults.$($newTabName) = @()
-        }
-        $newTab = $newTabs.$($newTabName)
-
-        #current workload not found in old file
-        $oldTab = $Null; $oldTab = $oldTabs.$($newTabName)
-        if ($null -eq $oldTab) {
-            if($newTab.Count -gt 0){
-                $diffResults.$($newTabName) += [PSCustomObject]@{
-                    "ERROR" = "Worksheet $($newTabName) not found in OLD file, did you include this in the previous scan?"
-                }
-            }
-            continue
-        }
         #current workload found, check for additions
         for($i=0;$i -lt $newTab.Count;$i++){
             try{$percentComplete = ((($i+1)  / ($newTab.Count+1)) * 100)}catch{$percentComplete = 0}
-            Write-Progress -Id 2 -Activity "Processing additions for $newTabName" -Status "$($i+1) / $($newTab.Count))" -PercentComplete $percentComplete            
+            Write-Progress -Id 2 -Activity "Processing additions for $tabName" -Status "$($i+1) / $($newTab.Count))" -PercentComplete $percentComplete            
             $newRow = $newTab[$i] | ConvertTo-Json -Depth 10
             $existed = $False; $existed = $oldTab.Where({
                 ($_ | ConvertTo-Json -Depth 10) -eq $newRow
@@ -109,17 +99,17 @@
             if (!$existed) {
                 [PSCustomObject]$diffItem = $newRow | ConvertFrom-Json
                 $diffItem | Add-Member -MemberType NoteProperty -Name Action -Value "New or Updated"
-                $diffResults.$($newTabName) += $diffItem
+                $diffResults.$($tabName) += $diffItem
             }
         }
-        Write-Host "Found $($diffResults.$($newTabName).count) added or updated permissions for $newTabName"
-        Write-Progress -Id 2 -Activity "Processing additions for $newTabName" -Completed
+        Write-Host "Found $($diffResults.$($tabName).count) added or updated permissions for $tabName"
+        Write-Progress -Id 2 -Activity "Processing additions for $tabName" -Completed        
     }
 
-    Write-Progress -Id 1 -Activity "Comparing data between $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Status "Saving data" -PercentComplete 99
+    Write-Progress -Id 1 -Activity "Comparing $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Status "Saving data" -PercentComplete 99
 
-    Remove-Variable -Name newTabs -Force -Confirm:$False
-    Remove-Variable -Name oldTabs -Force -Confirm:$False
+    Remove-Variable -Name newTab -Force -Confirm:$False
+    Remove-Variable -Name oldTab -Force -Confirm:$False
 
     Write-Host ""
 
@@ -150,5 +140,5 @@
     Remove-Variable -Name diffResults -Force -Confirm:$False
     [System.GC]::Collect() 
     
-    Write-Progress -Id 1 -Activity "Comparing data between $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Completed
+    Write-Progress -Id 1 -Activity "Comparing $($oldPermissionsFile.LastWriteTime) and $($newPermissionsFile.LastWriteTime)" -Completed
 }

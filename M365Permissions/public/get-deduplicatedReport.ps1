@@ -59,7 +59,7 @@
         }else{
             Write-Progress -Id 1 -Activity "Deduplicating $($permissionsFile.Name)" -Status "Exporting $tabName $($tabDeduped.Count) rows" -PercentComplete $percentComplete
             Write-Host "$($tab.Count) reduced to $($tabDeduped.Count) rows in $tabName, writing to file..." 
-            $tabDeduped | Export-Excel -Path $permissionsFile.FullName -WorksheetName $tabName -TableName $tabName -TableStyle Medium10 -AutoSize -ClearSheet -
+            $tabDeduped | Export-Excel -Path $permissionsFile.FullName -WorksheetName $tabName -TableName $tabName -TableStyle Medium10 -AutoSize -ClearSheet
             [System.GC]::Collect() 
         }
         
