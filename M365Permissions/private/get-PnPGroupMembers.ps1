@@ -28,7 +28,7 @@ Function Get-PnPGroupMembers{
         $global:octo.PnPGroupCache.$($group.Title) += [PSCustomObject]@{
             "Title" = $group.Title
             "LoginName" = $group.LoginName
-            "PrincipalType" = "SecurityGroup"
+            "PrincipalType" = "ANYONE"
             "Email" = "N/A"
         }
     }elseif($group.LoginName.Split("|")[0] -eq "c:0-.f"){
@@ -36,7 +36,7 @@ Function Get-PnPGroupMembers{
         $global:octo.PnPGroupCache.$($group.Title) += [PSCustomObject]@{
             "Title" = $group.Title
             "LoginName" = $group.LoginName
-            "PrincipalType" = "SecurityGroup"
+            "PrincipalType" = "ORG-WIDE"
             "Email" = "N/A"
         }
     }elseif($group.LoginName.Split("|")[0] -eq "c:0t.c"){
@@ -78,8 +78,15 @@ Function Get-PnPGroupMembers{
         }
         foreach($member in $members){   
             $groupGuid = $Null; try{$groupGuid = $member.LoginName.Split("|")[2].Split("_")[0]}catch{$groupGuid = $Null}
-            if($member.LoginName -like "*spo-grid-all-users*" -or $member.LoginName -eq "c:0(.s|true"){
+            if($member.LoginName -like "*spo-grid-all-users*"){
                 Write-Verbose "Found $($member.Title) special group"
+                $member.PrincipalType = "ORG-WIDE"
+                $global:octo.PnPGroupCache.$($group.Title) += $member
+                continue
+            }
+            if($member.LoginName -eq "c:0(.s|true"){
+                Write-Verbose "Found $($member.Title) special group"
+                $member.PrincipalType = "ANYONE"
                 $global:octo.PnPGroupCache.$($group.Title) += $member
                 continue
             }
