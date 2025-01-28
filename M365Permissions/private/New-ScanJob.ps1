@@ -34,5 +34,7 @@ function New-ScanJob{
         "Status" = "Queued"
         "Handle" = $Null
         "Thread" = $Null
+        "StartTime" = $Null
+        "Attempts" = 0
     }
 }

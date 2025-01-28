@@ -1,22 +1,22 @@
 function Reset-ReportQueue{
-    Write-Verbose "Flushing report queue to file...."
+    Write-Verbose "Start Flushing report queue to report file...."
     
     $dataBatch = @()
-    if($global:octo.reportWriteQueue.Count -gt 0){
-        #copy the report write queue to a clean array to be processed 
-        $dataBatch =$global:octo.reportWriteQueue | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
-        #reset the original queue
-        $global:octo.reportWriteQueue = @()
-        [System.GC]::Collect()  
+    $queuedFiles = Get-ChildItem -Path $global:octo.outputTempFolder -Filter "*.xml"
+    if($queuedFiles.Count -gt 0){
+        Write-Verbose "Reading batch of $($queuedFiles.Count) reports from $($global:octo.outputTempFolder)..."
+        foreach($queuedFile in $queuedFiles){
+            $dataBatch += Import-Clixml -Path $queuedFile.FullName
+            Remove-Item -Path $queuedFile.FullName -Force
+        }  
     }
 
     if($dataBatch){
-        Write-Verbose "Writing batch of $($dataBatch.Count) reports"
-        $statistics =$Null; $statistics = ($dataBatch | Where{$_.statistics}).statistics
+        $statistics =$Null; $statistics = ($dataBatch | Where-Object{$_.statistics}).statistics
         if($statistics){
             Export-WithRetry -category "Statistics" -data $statistics
         }
-        $categories = $Null; $categories = $dataBatch.category | select-object -Unique
+        $categories = $Null; $categories = ($dataBatch | Where-Object{$_.category}).category | select-object -Unique
         foreach($category in $categories){
             $permissions = $Null; $permissions = ($dataBatch | Where-Object {$_.category -eq $category -and $_.permissions}).permissions
             if($permissions){
@@ -24,5 +24,7 @@ function Reset-ReportQueue{
             }
         }   
         [System.GC]::Collect()   
+    }else{
+        Write-Verbose "No reports to write to report file..."
     }
 }

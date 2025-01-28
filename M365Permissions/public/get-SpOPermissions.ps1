@@ -24,7 +24,7 @@
         [Boolean]$isParallel=$False
     )
 
-    Write-Host "Starting SpO Scan of $teamName $siteUrl"
+    Write-Host "Starting SpO Scan of $($teamName)$($siteUrl)"
 
     $spoBaseAdmUrl = "https://$($global:octo.tenantName)-admin.sharepoint.com"
     Write-Verbose "Using Sharepoint base URL: $spoBaseAdmUrl"
@@ -100,14 +100,18 @@
                 $wasOwner = $True
                 Write-Host "Site collection ownership verified for $($site.Url) :)"
             }            
-            $spoWeb = Get-PnPWeb -Connection (Get-SpOConnection -Type User -Url $site.Url) -ErrorAction Stop
-        }catch{        
-            Write-Error "Failed to parse site $($site.Url) because $_" -ErrorAction Continue
+            $spoWeb = (New-RetryCommand -Command 'Get-PnPWeb' -Arguments @{Connection = (Get-SpOConnection -Type User -Url $site.Url); ErrorAction = "Stop"})
+        }catch{
+            if($sites.Count -le 1){
+                Throw $_
+            }else{
+                Write-Error "Failed to parse site $($site.Url) because $_" -ErrorAction Continue
+            }
             continue
         }
         
         Write-Host "Scanning root $($spoWeb.Url)..."
-        $spoSiteAdmins = Get-PnPSiteCollectionAdmin -Connection (Get-SpOConnection -Type User -Url $site.Url)
+        $spoSiteAdmins = (New-RetryCommand -Command 'Get-PnPSiteCollectionAdmin' -Arguments @{Connection = (Get-SpOConnection -Type User -Url $site.Url)})
         $global:SPOPermissions.$($spoWeb.Url) = @()
 
         foreach($spoSiteAdmin in $spoSiteAdmins){
@@ -129,9 +133,15 @@
 
         if(!$wasOwner){
             Write-Host "Cleanup: Removing you as site collection owner of $($site.Url)..."
-            Remove-PnPSiteCollectionAdmin -Owners $global:octo.currentUser.userPrincipalName -Connection (Get-SpOConnection -Type User -Url $site.Url)
-            Write-Host "Cleanup: Owner removed"
+            try{
+                (New-RetryCommand -Command 'Remove-PnPSiteCollectionAdmin' -Arguments @{Owners = $global:octo.currentUser.userPrincipalName; Connection = (Get-SpOConnection -Type User -Url $site.Url)})
+                Write-Host "Cleanup: Owner removed"
+            }catch{
+                Write-Error "Cleanup: Failed to remove you as site collection owner of $($site.Url) because $_" -ErrorAction Continue
+            }
         }       
+
+        Write-Host "Finalizing data and adding to report queue..."
         
         $permissionRows = foreach($row in $global:SPOPermissions.Keys){
             foreach($permission in $global:SPOPermissions.$row){
@@ -153,10 +163,13 @@
     
         Add-ToReportQueue -permissions $permissionRows -category $siteCategory -statistics @($global:unifiedStatistics.$($siteCategory).$($site.Url))
         Remove-Variable -Name permissionRows -Force -Confirm:$False
+
         if(!$isParallel){
             Reset-ReportQueue          
         }else{
-            [System.GC]::Collect()           
-        }         
+            [System.GC]::Collect()
+        }    
+        
+        Write-Host "Done"
     }
 }

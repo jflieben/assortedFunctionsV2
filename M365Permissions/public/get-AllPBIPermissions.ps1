@@ -35,6 +35,7 @@
     }
 
     Write-Host "Starting PowerBI scan..."
+    New-StatisticsObject -category "PowerBI" -subject "Securables"
     Write-Progress -Id 1 -PercentComplete 0 -Activity $activity -Status "Retrieving workspaces..."
 
     $global:PBIPermissions = @{}

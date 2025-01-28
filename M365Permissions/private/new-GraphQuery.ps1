@@ -30,10 +30,16 @@ function New-GraphQuery {
         [int]$MaxAttempts = 5,
 
         [Parameter(Mandatory = $false)]
+        [int]$MaxResults = -1,        
+
+        [Parameter(Mandatory = $false)]
         [String]$resource = "https://graph.microsoft.com",
 
         [Parameter(Mandatory = $false)]
-        [Int]$expectedTotalResults = 0
+        [Int]$expectedTotalResults = 0,
+
+        [Parameter(Mandatory = $false)]
+        [String]$ContentType = 'application/json; charset=utf-8'   
 
     )
 
@@ -68,7 +74,7 @@ function New-GraphQuery {
                 $attempts ++
                 try {
                     [System.GC]::Collect()        
-                    $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -Body $Body -ContentType 'application/json; charset=utf-8' -ErrorAction Stop -Verbose:$False)
+                    $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -Body $Body -ContentType $ContentType -ErrorAction Stop -Verbose:$False)
                     $attempts = $MaxAttempts
                 }
                 catch {
@@ -93,7 +99,7 @@ function New-GraphQuery {
                     $attempts ++
                     try {
                         [System.GC]::Collect()
-                        $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -ContentType 'application/json; charset=utf-8' -ErrorAction Stop -Verbose:$false)
+                        $Data = (Invoke-RestMethod -Uri $nextURL -Method $Method -Headers $headers -ContentType $ContentType -ErrorAction Stop -Verbose:$false)
                         $attempts = $MaxAttempts
                     }
                     catch {
@@ -104,7 +110,7 @@ function New-GraphQuery {
                         Start-Sleep -Seconds (1 + (2 * $attempts))
                     }
                 }
-                if($resource -like "*sharepoint.com*"){
+                if($resource -like "*sharepoint.com*" -and $Data.PSObject.TypeNames -notcontains "System.Management.Automation.PSCustomObject"){
                     $Data = $Data | ConvertFrom-Json -AsHashtable
                 }
 
@@ -121,7 +127,7 @@ function New-GraphQuery {
                 if($expectedTotalResults -gt 0){
                     Try {$percentComplete = [math]::Min(100,($totalResults / $expectedTotalResults * 100))}Catch{$percentComplete = 0}
                     Write-Progress -Id 10 -Activity "Querying $resource API" -Status "Retrieved $totalResults of $expectedTotalResults items" -PercentComplete $percentComplete
-                }                
+                }         
                 
                 if($NoPagination){
                     $nextURL = $null
@@ -141,6 +147,10 @@ function New-GraphQuery {
                         $nextURL = $null
                     }
                 }else{
+                    $nextURL = $null
+                }
+
+                if($MaxResults -ne -1 -and $totalResults -gt $MaxResults){
                     $nextURL = $null
                 }
             }
