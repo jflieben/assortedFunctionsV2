@@ -25,6 +25,9 @@
         Write-Host "Auto detected old permissions file: $($oldPermissionsFile.FullName)"
         $newPermissionsFile = $lastTwoReportFiles[0]
         Write-Host "Auto detected new permissions file: $($newPermissionsFile.FullName)"
+    }else{
+        $oldPermissionsFile = Get-Item -Path $oldPermissionsFilePath
+        $newPermissionsFile = Get-Item -Path $newPermissionsFilePath
     }
 
     Write-Host ""
