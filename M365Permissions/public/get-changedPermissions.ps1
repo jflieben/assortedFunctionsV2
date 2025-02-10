@@ -15,6 +15,8 @@
         [String[]]$tabs = @("Onedrive","Teams","O365Group","PowerBI","GroupsAndMembers","Entra","ExoRecipients","ExoRoles")
     )
 
+    $excludeProps = @("modified")
+
     if(!$oldPermissionsFilePath -or !$newPermissionsFilePath){
         $reportFiles = Get-ChildItem -Path $global:octo.outputFolder -Filter "*.xlsx" | Where-Object { $_.Name -notlike "*delta*" }
         if($reportFiles.Count -lt 2){
@@ -72,18 +74,28 @@
             continue
         }        
 
+        $newJsonSet = @{}
+        foreach ($item in $newTab) {
+            $json = $item | Select-Object -Property ($item.PSObject.Properties.Name | Where-Object { $_ -notin $excludeProps }) | ConvertTo-Json -Depth 10
+            $newJsonSet[$json] = $true  # Store JSON as keys in a hash table
+        }      
+        
+        $oldJsonSet = @{}
+        foreach ($item in $oldTab) {
+            $json = $item | Select-Object -Property ($item.PSObject.Properties.Name | Where-Object { $_ -notin $excludeProps }) | ConvertTo-Json -Depth 10
+            $oldJsonSet[$json] = $true  # Store JSON as keys in a hash table
+        }            
+
         #current workload found, check for removals
         for($i=0;$i -lt $oldTab.Count;$i++){
             try{$percentComplete = ((($i+1)  / ($oldTab.Count+1)) * 100)}catch{$percentComplete = 0}
             Write-Progress -Id 2 -Activity "Processing removals for $tabName" -Status "$($i+1) / $($oldTab.Count))" -PercentComplete $percentComplete
-                        
-            $oldRow = $oldTab[$i] | ConvertTo-Json -Depth 10
-            $exists = $False; $exists = $newTab.Where({
-                ($_ | ConvertTo-Json -Depth 10) -eq $oldRow
-            }, 'First')        
+        
+            $oldRow = $oldTab[$i] | Select-Object -Property ($oldTab[$i].PSObject.Properties.Name | Where-Object { $_ -notin $excludeProps })  | ConvertTo-Json -Depth 10
             
-            if (!$exists) {
-                [PSCustomObject]$diffItem = $oldRow | ConvertFrom-Json
+            $existed = $newJsonSet.ContainsKey($newRow)  
+            if (!$existed) {
+                [PSCustomObject]$diffItem = $oldTab[$i]
                 $diffItem | Add-Member -MemberType NoteProperty -Name Action -Value "Removed"
                 $diffResults.$($tabName) += $diffItem
             }
@@ -95,12 +107,11 @@
         for($i=0;$i -lt $newTab.Count;$i++){
             try{$percentComplete = ((($i+1)  / ($newTab.Count+1)) * 100)}catch{$percentComplete = 0}
             Write-Progress -Id 2 -Activity "Processing additions for $tabName" -Status "$($i+1) / $($newTab.Count))" -PercentComplete $percentComplete            
-            $newRow = $newTab[$i] | ConvertTo-Json -Depth 10
-            $existed = $False; $existed = $oldTab.Where({
-                ($_ | ConvertTo-Json -Depth 10) -eq $newRow
-            }, 'First')                         
+            $newRow = $newTab[$i] | Select-Object -Property ($newTab[$i].PSObject.Properties.Name | Where-Object { $_ -notin $excludeProps })  | ConvertTo-Json -Depth 10
+            
+            $existed = $oldJsonSet.ContainsKey($newRow)                      
             if (!$existed) {
-                [PSCustomObject]$diffItem = $newRow | ConvertFrom-Json
+                [PSCustomObject]$diffItem = $newTab[$i]
                 $diffItem | Add-Member -MemberType NoteProperty -Name Action -Value "New or Updated"
                 $diffResults.$($tabName) += $diffItem
             }
