@@ -65,18 +65,22 @@
         Update-StatisticsObject -category "PowerBI" -subject "Securables"
         Write-Progress -Id 2 -PercentComplete $(Try{ ($g/$gateways.count)*100 } catch {0}) -Activity "Analyzing gateways..." -Status "$($g+1)/$($gateways.count) $($gateways[$g].id)"
         foreach($user in $gateways[$g].permissions){
-            $groupMembers = $null
-            if($user.principalType -eq "Group" -and $expandGroups.IsPresent){
-                try{
-                    $groupMembers = get-entraGroupMembers -groupId $user.graphId
-                }catch{
-                    Write-Warning "Failed to retrieve group members for $($user.id), adding as group principal type instead"
+            if($user.principalType -eq "Group"){
+                $groupMembers = $null
+                if($expandGroups.IsPresent){
+                    try{
+                        $groupMembers = get-entraGroupMembers -groupId $user.graphId
+                        foreach($groupMember in $groupMembers){
+                            New-PBIPermissionEntry -path "/gateways/$($gateways[$g].type)/$($gateways[$g].id)" -type "Gateway" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.role -through "Group" -parent $user.id
+                        }                        
+                    }catch{
+                        Write-Warning "Failed to retrieve group members for $($user.id), adding as group principal type instead"
+                    }
                 }
-                foreach($groupMember in $groupMembers){
-                    New-PBIPermissionEntry -path "/gateways/$($gateways[$g].type)/$($gateways[$g].id)" -type "Gateway" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.role -through "Group" -parent $user.id
+                if(!$groupMembers){
+                    New-PBIPermissionEntry -path "/gateways/$($gateways[$g].type)/$($gateways[$g].id)" -type "Gateway" -principalId $user.graphId -principalName $user.displayName -principalUpn "N/A" -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.role
                 }
-            }
-            if(!$groupMembers){
+            }else{
                 $userId = $Null; $userId = $user.id.Replace("app-","")
                 if($user.id.startsWith("app-")){
                     $userMetaData = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/serviceprincipals(appId='$userId')" -Method GET
@@ -90,7 +94,6 @@
                         }
                     }
                 }
-                
                 New-PBIPermissionEntry -path "/gateways/$($gateways[$g].type)/$($gateways[$g].id)" -type "Gateway" -principalId $userId -principalName $userMetaData.displayName -principalUpn $userMetaData.userPrincipalName -principalType $user.principalType -roleDefinitionName $user.role
             }
         }
@@ -152,21 +155,24 @@
                 $created = $secureableTypes.$secureableType.CreatedProperty -eq "N/A" ? "Unknown" : $secureable.$($secureableTypes.$secureableType.CreatedProperty)
                 $modified = $secureableTypes.$secureableType.ModifiedProperty -eq "N/A" ? "Unknown" : $secureable.$($secureableTypes.$secureableType.ModifiedProperty)
                 foreach($user in $secureable.users){
-                    $groupMembers = $null
-                    if($user.principalType -eq "Group" -and $expandGroups.IsPresent){
-                        try{
-                            $groupMembers = get-entraGroupMembers -groupId $user.graphId
-                        }catch{
-                            Write-Warning "Failed to retrieve group members for $($user.displayName), adding as group principal type instead"
+                    if($user.principalType -eq "Group"){
+                        $groupMembers = $null;
+                        if($expandGroups.IsPresent){
+                            try{
+                                 $groupMembers = get-entraGroupMembers -groupId $user.graphId
+                                foreach($groupMember in $groupMembers){
+                                    New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/$secureableType/$($secureable.name)" -type $secureableTypes.$secureableType.Type -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.$($secureableTypes.$secureableType.UserAccessRightProperty) -through "Group" -parent $user.graphId -created $created -modified $modified
+                                }                                
+                            }catch{
+                                Write-Warning "Failed to retrieve group members for $($user.displayName), adding as group principal type instead"
+                            }                          
                         }
-                        foreach($groupMember in $groupMembers){
-                            New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/$secureableType/$($secureable.name)" -type $secureableTypes.$secureableType.Type -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.$($secureableTypes.$secureableType.UserAccessRightProperty) -through "Group" -parent $user.graphId -created $created -modified $modified
-                        }
-                    }
-
-                    if(!$groupMembers){
+                        if(!$groupMembers){
+                            New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/$secureableType/$($secureable.name)" -type $secureableTypes.$secureableType.Type -principalId $user.graphId -principalName $user.displayName -principalUpn "N/A" -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.$($secureableTypes.$secureableType.UserAccessRightProperty) -created $created -modified $modified
+                        }                                                            
+                    }else{
                         New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/$secureableType/$($secureable.name)" -type $secureableTypes.$secureableType.Type -principalId $user.graphId -principalName $user.displayName -principalUpn $user.identifier -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.$($secureableTypes.$secureableType.UserAccessRightProperty) -created $created -modified $modified
-                    }  
+                    }
                 }                  
             }
         }

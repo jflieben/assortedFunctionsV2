@@ -93,7 +93,7 @@
         
             $oldRow = $oldTab[$i] | Select-Object -Property ($oldTab[$i].PSObject.Properties.Name | Where-Object { $_ -notin $excludeProps })  | ConvertTo-Json -Depth 10
             
-            $existed = $newJsonSet.ContainsKey($newRow)  
+            $existed = $newJsonSet.ContainsKey($oldRow)  
             if (!$existed) {
                 [PSCustomObject]$diffItem = $oldTab[$i]
                 $diffItem | Add-Member -MemberType NoteProperty -Name Action -Value "Removed"
