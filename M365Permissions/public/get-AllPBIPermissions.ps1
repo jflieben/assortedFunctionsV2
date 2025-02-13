@@ -27,11 +27,11 @@
                 }
             }
         }
-    }
 
-    if(!$hasPowerBI){
-        Write-Error "You do not have a PowerBI license, this function requires a PowerBI license assigned to the user you're logged in with" -ErrorAction Continue
-        return $Null
+        if(!$hasPowerBI){
+            Write-Error "You do not have a PowerBI license, this function requires a PowerBI license assigned to the user you're logged in with" -ErrorAction Continue
+            return $Null
+        }
     }
 
     Write-Host "Starting PowerBI scan..."

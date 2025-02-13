@@ -89,10 +89,10 @@
         }
 
         New-StatisticsObject -Category $siteCategory -Subject $site.Url
-           
+        
         $wasOwner = $False
         try{
-            if($site.Owners -notcontains $global:octo.currentUser.userPrincipalName){
+            if($site.Owners -notcontains $global:octo.currentUser.userPrincipalName -and $global:octo.authMode -eq "Delegated"){
                 Write-Host "Adding you as site collection owner to ensure all permissions can be read from $($site.Url)..."
                 Set-PnPTenantSite -Identity $site.Url -Owners $global:octo.currentUser.userPrincipalName -Connection (Get-SpOConnection -Type Admin -Url $spoBaseAdmUrl) -WarningAction Stop -ErrorAction Stop
                 Write-Host "Owner added and marked for removal upon scan completion"
