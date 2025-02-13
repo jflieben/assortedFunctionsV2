@@ -21,7 +21,12 @@
         [Boolean]$Verbose,
         [Boolean]$includeCurrentUser,
         [Int]$defaultTimeoutMinutes,
-        [Int]$maxJobRetries
+        [Int]$maxJobRetries,
+        [Boolean]$autoConnect,
+        [String]$LCClientId,
+        [String]$LCTenantId,
+        [ValidateSet('Delegated','ServicePrincipal')]
+        [String]$authMode
     )
 
     $defaultConfig = @{
@@ -32,6 +37,10 @@
         "includeCurrentUser" = [Boolean]$false
         "defaultTimeoutMinutes" = [Int]120
         "maxJobRetries" = [Int]3
+        "autoConnect" = [Boolean]$false
+        "LCClientId" = [String]$Null
+        "LCTenantId" = [String]$Null
+        "authMode" = [String]"Delegated"
     }
 
     $configLocation = Join-Path -Path $env:appdata -ChildPath "LiebenConsultancy\M365Permissions.conf"
