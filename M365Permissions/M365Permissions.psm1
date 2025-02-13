@@ -60,11 +60,9 @@ if(!$global:octo){
     }
 
     #check if we are running in a headless environment, if so, do not use delegated auth and use env variables for auth
-    #EXPERIMENTAL, DOES NOT WORK FOR SPO UNTIL CBA IS IMPLEMENTED
     if($Env:LCAUTHMODE -and $Env:LCAUTHMODE -ne "Delegated"){
         $global:octo.authMode = $Env:LCAUTHMODE
         $global:octo.LCClientId = $Env:LCCLIENTID
-        $global:octo.LCClientSecret = $Env:LCCLIENTSECRET
         $global:octo.LCTenantId = $Env:LCTENANTID
     }else{
         $global:octo.authMode = "Delegated"
@@ -79,7 +77,6 @@ if(!$global:octo){
     $global:runspacePool = [runspacefactory]::CreateRunspacePool(1, $global:octo.maxThreads, ([system.management.automation.runspaces.initialsessionstate]::CreateDefault()), $Host)
     $global:runspacePool.ApartmentState = "STA"
     $global:runspacepool.Open() 
-    
     
     write-host "----------------------------------"
     Write-Host "Welcome to M365Permissions v$($global:octo.moduleVersion)!" -ForegroundColor DarkCyan
