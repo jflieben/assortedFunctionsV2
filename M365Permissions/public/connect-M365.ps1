@@ -46,7 +46,7 @@
         $global:octo.currentUser = Get-CurrentUser
         $global:octo.OnMicrosoft = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' | Where-Object -Property isInitial -EQ $true).id 
         $global:octo.tenantName = $($global:octo.OnMicrosoft).Split(".")[0]
-        Write-Host "Thank you $($global:octo.currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
+        Write-Host "Authenticated successfully! Here are some examples using this module:"
         Write-Host ""
         Write-Host ">> Get-AllM365Permissions -expandGroups" -ForegroundColor Magenta
         
@@ -65,5 +65,7 @@
         Write-Host ">> get-AllPBIPermissions" -ForegroundColor Magenta 
         
         Write-Host ">> Get-ChangedPermissions" -ForegroundColor Magenta   
+
+        Write-Host ""
     }  
 }
