@@ -13,8 +13,8 @@
     https://www.lieben.nu/liebensraum/m365permissions
 
     .ROADMAP
-    1.1.x Add support for App-Only authentication (cert based)
-    1.1.x Staging of permissions for tenants without all resource categories
+    1.1.x Dynamically add entra groups and users while scanning other resources
+    1.1.x Staging of permissions for tenants without all resource categories and auto-setup of permissions
     1.1.x check defender xdr options 
     1.1.x Assess if Azure RM should be added or if a good open source tool already exists
     1.1.x Assess SQL or PBI as data destinations                                                                                                                                                                                                                                            
@@ -58,18 +58,6 @@ if(!$global:octo){
         $global:octo.modulePath = (Split-Path -Path $PSScriptRoot -Parent)
     }
 
-    #check if we are running in a headless environment, if so, do not use delegated auth and use env variables for auth
-    #EXPERIMENTAL, DOES NOT WORK FOR SPO UNTIL CBA IS IMPLEMENTED
-    if($Env:LCAUTHMODE -and $Env:LCAUTHMODE -ne "Delegated"){
-        $global:octo.authMode = $Env:LCAUTHMODE
-        $global:octo.LCClientId = $Env:LCCLIENTID
-        $global:octo.LCClientSecret = $Env:LCCLIENTSECRET
-        $global:octo.LCTenantId = $Env:LCTENANTID
-    }else{
-        $global:octo.authMode = "Delegated"
-        $global:octo.LCClientId = "0ee7aa45-310d-4b82-9cb5-11cc01ad38e4"
-    }
-
     cls
 
     #sets default config of user-configurable settings, can be overridden by user calls to set-M365PermissionsConfig
@@ -79,38 +67,18 @@ if(!$global:octo){
     $global:runspacePool.ApartmentState = "STA"
     $global:runspacepool.Open() 
     
-    
     write-host "----------------------------------"
     Write-Host "Welcome to M365Permissions v$($global:octo.moduleVersion)!" -ForegroundColor DarkCyan
     Write-Host "Visit https://www.lieben.nu/liebensraum/m365permissions/ for documentation" -ForegroundColor DarkCyan
     write-host "----------------------------------"
     Write-Host ""
-    if($global:octo.authMode -eq "Delegated"){
-        Write-Host "Prompting for delegated (safe/non persistent) AAD auth..."
-    }else{
-        Write-Host "Using $($global:octo.authMode) authentication..."
-    }
-    Write-Host ""
-    $global:octo.currentUser = Get-CurrentUser
-    $global:octo.OnMicrosoft = (New-GraphQuery -Method GET -Uri 'https://graph.microsoft.com/v1.0/domains?$top=999' | Where-Object -Property isInitial -EQ $true).id 
-    $global:octo.tenantName = $($global:octo.OnMicrosoft).Split(".")[0]
-    Write-Host "Thank you $($global:octo.currentUser.userPrincipalName), you are now authenticated and can run all functions in this module. Here are some examples:"
-    Write-Host ""
-    Write-Host ">> Get-AllM365Permissions -expandGroups" -ForegroundColor Magenta
-    
-    Write-Host ">> Get-AllExOPermissions -includeFolderLevelPermissions" -ForegroundColor Magenta
-    
-    Write-Host ">> Get-ExOPermissions -recipientIdentity `$mailbox.Identity -includeFolderLevelPermissions" -ForegroundColor Magenta
-    
-    Write-Host ">> Get-SpOPermissions -siteUrl `"https://tenant.sharepoint.com/sites/site`" -ExpandGroups" -ForegroundColor Magenta
-    
-    Write-Host ">> Get-SpOPermissions -teamName `"INT-Finance Department`"" -ForegroundColor Magenta
-    
-    Write-Host ">> get-AllSPOPermissions -ExpandGroups -IncludeOneDriveSites -ExcludeOtherSites" -ForegroundColor Magenta
-    
-    Write-Host ">> get-AllEntraPermissions -excludeGroupsAndUsers" -ForegroundColor Magenta    
 
-    Write-Host ">> get-AllPBIPermissions" -ForegroundColor Magenta 
-    
-    Write-Host ">> Get-ChangedPermissions" -ForegroundColor Magenta 
+    if($global:octo.autoConnect -eq $true){
+        connect-M365
+    }else{
+        Write-Host "Before you can run a scan, please run connect-M365" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "If you do not want to see this message in the future, run `"set-M365PermissionsConfig -autoConnect `$True`"" -ForegroundColor White
+        Write-Host ""
+    }
 }

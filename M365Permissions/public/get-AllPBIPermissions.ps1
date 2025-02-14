@@ -27,11 +27,11 @@
                 }
             }
         }
-    }
 
-    if(!$hasPowerBI){
-        Write-Error "You do not have a PowerBI license, this function requires a PowerBI license assigned to the user you're logged in with" -ErrorAction Continue
-        return $Null
+        if(!$hasPowerBI){
+            Write-Error "You do not have a PowerBI license, this function requires a PowerBI license assigned to the user you're logged in with" -ErrorAction Continue
+            return $Null
+        }
     }
 
     Write-Host "Starting PowerBI scan..."
@@ -41,7 +41,6 @@
     $global:PBIPermissions = @{}
 
     $workspaces = New-GraphQuery -Uri "https://api.powerbi.com/v1.0/myorg/admin/groups?`$top=5000" -resource "https://api.fabric.microsoft.com" -method "GET"
-
     $workspaceParts = [math]::ceiling($workspaces.Count / 100)
 
     if($workspaceParts -gt 500){
@@ -60,7 +59,53 @@
         $scanJobs += New-GraphQuery -Uri "https://api.powerbi.com/v1.0/myorg/admin/workspaces/getInfo?datasourceDetails=True&getArtifactUsers=True" -Method POST -Body $body -resource "https://api.fabric.microsoft.com"
     }
 
-    Write-Progress -Id 1 -PercentComplete 10 -Activity $activity -Status "Waiting for scan jobs to complete..."
+    if($global:octo.authMode -eq "Delegated"){
+        Write-Progress -Id 1 -PercentComplete 10 -Activity $activity -Status "Retrieving gateways..."
+        $gateways = New-GraphQuery -Uri "https://api.powerbi.com/v2.0/myorg/gatewayclusters?`$expand=permissions&`$skip=0&`$top=5000" -resource "https://api.fabric.microsoft.com" -method "GET"
+        for($g = 0; $g -lt $gateways.count; $g++){
+            Update-StatisticsObject -category "PowerBI" -subject "Securables"
+            Write-Progress -Id 2 -PercentComplete $(Try{ ($g/$gateways.count)*100 } catch {0}) -Activity "Analyzing gateways..." -Status "$($g+1)/$($gateways.count) $($gateways[$g].id)"
+            foreach($user in $gateways[$g].permissions){
+                if($user.principalType -eq "Group"){
+                    $groupMembers = $null
+                    if($expandGroups.IsPresent){
+                        try{
+                            $groupMembers = get-entraGroupMembers -groupId $user.graphId
+                            foreach($groupMember in $groupMembers){
+                                New-PBIPermissionEntry -path "/gateways/$($gateways[$g].type)/$($gateways[$g].id)" -type "Gateway" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.role -through "Group" -parent $user.id
+                            }                        
+                        }catch{
+                            Write-Warning "Failed to retrieve group members for $($user.id), adding as group principal type instead"
+                        }
+                    }
+                    if(!$groupMembers){
+                        New-PBIPermissionEntry -path "/gateways/$($gateways[$g].type)/$($gateways[$g].id)" -type "Gateway" -principalId $user.graphId -principalName $user.displayName -principalUpn "N/A" -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.role
+                    }
+                }else{
+                    $userId = $Null; $userId = $user.id.Replace("app-","")
+                    if($user.id.startsWith("app-")){
+                        $userMetaData = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/serviceprincipals(appId='$userId')" -Method GET
+                    }else{
+                        try{
+                            $userMetaData = New-GraphQuery -Uri "https://graph.microsoft.com/v1.0/users/$userId" -Method GET -maxAttempts 2
+                        }catch{
+                            $userMetaData = @{
+                                displayName = "Unknown (deleted user?)"
+                                userPrincipalName = "Unknown"
+                            }
+                        }
+                    }
+                    New-PBIPermissionEntry -path "/gateways/$($gateways[$g].type)/$($gateways[$g].id)" -type "Gateway" -principalId $userId -principalName $userMetaData.displayName -principalUpn $userMetaData.userPrincipalName -principalType $user.principalType -roleDefinitionName $user.role
+                }
+            }
+        }
+
+        Write-Progress -Id 2 -Completed -Activity "Analyzing gateways..."
+    }else{
+        Write-Warning "Skipping gateway analysis, this function requires delegated authentication mode"
+    }
+
+    Write-Progress -Id 1 -PercentComplete 15 -Activity $activity -Status "Waiting for scan jobs to complete..."
     foreach($scanJob in $scanJobs){
         do{
             $res = New-GraphQuery -Uri "https://api.powerbi.com/v1.0/myorg/admin/workspaces/scanStatus/$($scanJob.id)" -Method GET -resource "https://api.fabric.microsoft.com"
@@ -81,44 +126,60 @@
     Write-Progress -Id 1 -PercentComplete 45 -Activity $activity -Status "Processing PowerBI securables..."
     for($s=0;$s -lt $scanResults.count; $s++){
         Write-Progress -Id 2 -PercentComplete $(Try{ ($s/$scanResults.count)*100 } catch {0}) -Activity "Analyzing securables..." -Status "$($s+1)/$($scanResults.count) $($scanResults[$s].name)"
-        foreach($report in $scanResults[$s].reports){
-            Update-StatisticsObject -category "PowerBI" -subject "Securables"
-            foreach($user in $report.users){
-                $groupMembers = $null
-                if($user.principalType -eq "Group" -and $expandGroups.IsPresent){
-                    try{
-                        $groupMembers = get-entraGroupMembers -groupId $user.graphId
-                    }catch{
-                        Write-Warning "Failed to retrieve group members for $($user.displayName), adding as group principal type instead"
+        $secureableTypes = @{
+            "reports" = @{
+                "Type" = "Report"
+                "UserAccessRightProperty" = "reportUserAccessRight"
+                "CreatedProperty" = "createdDateTime"
+                "ModifiedProperty" = "modifiedDateTime"
+            }
+            "datasets" = @{
+                "Type" = "Dataset"
+                "UserAccessRightProperty" = "datasetUserAccessRight"
+                "CreatedProperty" = "createdDate"
+                "ModifiedProperty" = "N/A"
+            }    
+            "Lakehouse" = @{
+                "Type" = "Lakehouse"
+                "UserAccessRightProperty" = "artifactUserAccessRight"
+                "CreatedProperty" = "createdDate"
+                "ModifiedProperty" = "lastUpdatedDate"
+            } 
+            "warehouses" = @{
+                "Type" = "Warehouse"
+                "UserAccessRightProperty" = "datamartUserAccessRight"
+                "CreatedProperty" = "N/A"
+                "ModifiedProperty" = "modifiedDateTime"
+            }                                              
+        }
+
+        foreach($secureableType in $secureableTypes.Keys){
+            foreach($secureable in $scanResults[$s].$secureableType){
+                Update-StatisticsObject -category "PowerBI" -subject "Securables"
+                $created = $secureableTypes.$secureableType.CreatedProperty -eq "N/A" ? "Unknown" : $secureable.$($secureableTypes.$secureableType.CreatedProperty)
+                $modified = $secureableTypes.$secureableType.ModifiedProperty -eq "N/A" ? "Unknown" : $secureable.$($secureableTypes.$secureableType.ModifiedProperty)
+                foreach($user in $secureable.users){
+                    if($user.principalType -eq "Group"){
+                        $groupMembers = $null;
+                        if($expandGroups.IsPresent){
+                            try{
+                                 $groupMembers = get-entraGroupMembers -groupId $user.graphId
+                                foreach($groupMember in $groupMembers){
+                                    New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/$secureableType/$($secureable.name)" -type $secureableTypes.$secureableType.Type -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.$($secureableTypes.$secureableType.UserAccessRightProperty) -through "Group" -parent $user.graphId -created $created -modified $modified
+                                }                                
+                            }catch{
+                                Write-Warning "Failed to retrieve group members for $($user.displayName), adding as group principal type instead"
+                            }                          
+                        }
+                        if(!$groupMembers){
+                            New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/$secureableType/$($secureable.name)" -type $secureableTypes.$secureableType.Type -principalId $user.graphId -principalName $user.displayName -principalUpn "N/A" -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.$($secureableTypes.$secureableType.UserAccessRightProperty) -created $created -modified $modified
+                        }                                                            
+                    }else{
+                        New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/$secureableType/$($secureable.name)" -type $secureableTypes.$secureableType.Type -principalId $user.graphId -principalName $user.displayName -principalUpn $user.identifier -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.$($secureableTypes.$secureableType.UserAccessRightProperty) -created $created -modified $modified
                     }
-                    foreach($groupMember in $groupMembers){
-                        New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/reports/$($report.name)" -type "Report" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.reportUserAccessRight -through "Group" -parent $user.graphId -created $report.createdDateTime -modified $report.modifiedDateTime
-                    }
-                }
-                if(!$groupMembers){
-                    New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/reports/$($report.name)" -type "Report" -principalId $user.graphId -principalName $user.displayName -principalUpn $user.identifier -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.reportUserAccessRight -created $report.createdDateTime -modified $report.modifiedDateTime
-                }
+                }                  
             }
         }
-        foreach($dataset in $scanResults[$s].datasets){
-            Update-StatisticsObject -category "PowerBI" -subject "Securables"
-            foreach($user in $dataset.users){
-                $groupMembers = $Null
-                if($user.principalType -eq "Group" -and $expandGroups.IsPresent){
-                    try{
-                        $groupMembers = get-entraGroupMembers -groupId $user.graphId
-                    }catch{
-                        Write-Warning "Failed to retrieve group members for $($user.displayName), adding as group principal type instead"
-                    }
-                    foreach($groupMember in $groupMembers){
-                        New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/datasets/$($dataset.name)" -type "Dataset" -principalId $groupMember.id -principalName $groupMember.displayName -principalUpn $groupMember.userPrincipalName -principalType $groupmember.principalType -roleDefinitionName $user.datasetUserAccessRight -through "Group" -parent $user.graphId -created $dataset.createdDate
-                    }
-                }
-                if(!$groupMembers){
-                    New-PBIPermissionEntry -path "/workspaces/$($scanResults[$s].name)/datasets/$($dataset.name)" -type "Dataset" -principalId $user.graphId -principalName $user.displayName -principalUpn $user.identifier -principalType "$($user.principalType) ($($user.userType))" -roleDefinitionName $user.datasetUserAccessRight -created $dataset.createdDate
-                }
-            }
-        }        
     }
 
     Write-Progress -Id 2 -Completed -Activity "Analyzing securables..."
