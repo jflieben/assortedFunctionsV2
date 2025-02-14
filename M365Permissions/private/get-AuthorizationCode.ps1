@@ -4,7 +4,9 @@ function get-AuthorizationCode{
         CompanyName          = "Lieben Consultancy"
         Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
     #>        
-
+    Param(
+        [Switch]$reConsent
+    )
     $tcpListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, 1985)
     $tcpListener.Start()
 
@@ -18,7 +20,9 @@ function get-AuthorizationCode{
         if(([System.Version]::Parse((Get-Content -Path $cachedModuleVersion -Raw)) -lt [System.Version]::Parse($global:octo.moduleVersion))){
             Set-Content -Path $cachedModuleVersion -Value $global:octo.moduleVersion -Force
         }else{
-            $adminPrompt = $Null
+            if(!$reConsent){
+                $adminPrompt = $Null
+            }
         }
     }
 
