@@ -129,7 +129,7 @@ Function get-PnPObjectPermissions{
     #retrieve permissions for any (if present) child objects and recursively call this function for each
     If(!$Object.ListGuid -and $Object.TypedObject.ToString() -eq "Microsoft.SharePoint.Client.Web"){
         Write-Progress -Id 2 -PercentComplete 0 -Activity $($siteUrl.Split("/")[4]) -Status "Getting child objects..."
-        $Null = Get-PnPProperty -ClientObject $Object -Property Webs -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+        $Null = (New-RetryCommand -Command 'Get-PnPProperty' -Arguments @{ClientObject = $Object; Property = "Webs"; Connection = (Get-SpOConnection -Type User -Url $siteUrl)})
         $childObjects = $Null; $childObjects = $Object.Webs
         foreach($childObject in $childObjects){
             #check if permissions are unique
@@ -141,7 +141,7 @@ Function get-PnPObjectPermissions{
             Write-Verbose "Enumerating permissions for sub web $($childObject.Title)..."
             get-PnPObjectPermissions -Object $childObject -Category $Category
         }
-        $childObjects = $Null; $childObjects = Get-PnPProperty -ClientObject $Object -Property Lists -Connection (Get-SpOConnection -Type User -Url $siteUrl)
+        $childObjects = $Null; $childObjects = (New-RetryCommand -Command 'Get-PnPProperty' -Arguments @{ClientObject = $Object; Property = "Lists"; Connection = (Get-SpOConnection -Type User -Url $siteUrl)})
         $ExcludedListTitles = @("Access Requests","App Packages","appdata","appfiles","Apps in Testing","Cache Profiles","Composed Looks","Content and Structure Reports","Content type publishing error log","Converted Forms",
         "Device Channels","Form Templates","fpdatasources","Get started with Apps for Office and SharePoint","List Template Gallery", "Long Running Operation Status","Maintenance Log Library", "Images", "site collection images"
         ,"Master Docs","Master Page Gallery","MicroFeed","NintexFormXml","Quick Deploy Items","Relationships List","Reusable Content","Reporting Metadata", "Reporting Templates", "Search Config List","Site Assets","Preservation Hold Library",
@@ -191,6 +191,7 @@ Function get-PnPObjectPermissions{
                         "ListGuid" = $List.Id.Guid
                         "displayFormUrl" = $List.DefaultDisplayFormUrl
                     }
+                    
                     get-PnPObjectPermissions -Object $uniqueObject -siteUrl $siteUrl -Category $Category
                 }
                 Write-Progress -Id 3 -Completed -Activity $($siteUrl.Split("/")[4])

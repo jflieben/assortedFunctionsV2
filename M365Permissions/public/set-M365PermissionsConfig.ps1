@@ -12,6 +12,10 @@
         -includeCurrentUser: add entries for the user performing the audit (as this user will have all access, it'll clutter the report)
         -defaultTimeoutMinutes: the default timeout in minutes for all parallelized jobs, by default 120 minutes
         -maxJobRetries: the amount of times a job will be retried if it fails, by default 3
+        -autoConnect: if set, the module will attempt to connect to M365 automatically without prompting the user
+        -LCClientId: the client ID of the app registration you created in Azure AD
+        -LCTenantId: the tenant ID of the tenant you want to audit
+        -authMode: Delegated or ServicePrincipal, by default Delegated
     #>        
     Param(
         [Int]$maxThreads,
