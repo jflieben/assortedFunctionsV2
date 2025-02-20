@@ -16,14 +16,14 @@ function get-SpOInvitee{
     #type 3 = external user
     if($invitee.Type -in @(1,2)){
         try{
-            $usr = $Null;$usr = (New-RetryCommand -Command 'Get-PnPUser' -Arguments @{Connection = (Get-SpOConnection -Type User -Url $siteUrl);Identity =$invitee.PId})
+            $usr = $Null;$usr = (New-RetryCommand -ignoreableErrors @("User cannot be found") -Command 'Get-PnPUser' -Arguments @{Connection = (Get-SpOConnection -Type User -Url $siteUrl);Identity =$invitee.PId})
         }catch{
             $usr = $Null
         }
         if($usr){
             return $usr
         }else{
-            $retVal.Title = "Unknown (deleted?)"
+            $retVal.Title = "Unknown (deleted?) PID: $($invitee.PId)"
             $retVal.LoginName = "Unknown (deleted?)"
             $retVal.Email = "Unknown (deleted?)"
             $retVal.PrincipalType = "Internal User"        

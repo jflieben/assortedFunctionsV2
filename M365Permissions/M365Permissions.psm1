@@ -14,6 +14,9 @@
 
     .ROADMAP
     1.1.x Dynamically add entra groups and users while scanning other resources
+    1.1.x Dynamic job timeouts (based on child item count)
+    1.1.x Handle overnight runs (date-shift in filename)
+    1.1.x cache results of get-spouser? Id is per site?
     1.1.x Staging of permissions for tenants without all resource categories and auto-setup of permissions
     1.1.x check defender xdr options 
     1.1.x Assess if Azure RM should be added or if a good open source tool already exists

@@ -3,7 +3,7 @@
     RootModule           = 'M365Permissions.psm1'
 
     # Version number of this module.
-    ModuleVersion        = "1.1.4"
+    ModuleVersion        = "1.1.5"
     
     # Supported PSEditions
     CompatiblePSEditions = @('Core')
@@ -32,6 +32,10 @@
     INSTALLATION:
 
     Install-PSResource -Name M365Permissions -Repository PSGallery
+
+    LICENSE:
+    
+    Free for non-commercial use. See module link/website for conditions around commercial use.
 
     EXAMPLES:
 
