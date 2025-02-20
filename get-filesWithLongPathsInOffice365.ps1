@@ -32,7 +32,16 @@ Param(
     [Parameter(Mandatory=$true)][String]$tenantName,
     [Switch]$useMFA,
     [Switch]$exportCSV
-)$adminUrl = "https://$tenantName-admin.sharepoint.com"$baseUrl = "https://$tenantName.sharepoint.com"function Load-Module{    Param(        $Name    )    Write-Output "Checking for $Name Module"
+)
+
+$adminUrl = "https://$tenantName-admin.sharepoint.com"
+$baseUrl = "https://$tenantName.sharepoint.com"
+
+function Load-Module{
+    Param(
+        $Name
+    )
+    Write-Output "Checking for $Name Module"
     $module = Get-Module -Name $Name -ListAvailable
     if ($module -eq $null) {
         write-Output "$Name Powershell module not installed...trying to Install, this will fail in an unelevated session"
@@ -54,7 +63,22 @@ Param(
     }
     try{
         Write-Output "loading module"
-        Import-Module $Name -DisableNameChecking -Force -NoClobber        Write-Output "module loaded"    }catch{        Write-Output "failed to load module"    }}Load-Module SharePointPnPPowerShellOnlineif(!$useMFA){    $Credential = Get-Credential}if($useMFA){    Connect-PnPOnline $adminUrl -UseWebLogin
+        Import-Module $Name -DisableNameChecking -Force -NoClobber
+        Write-Output "module loaded"
+    }catch{
+        Write-Output "failed to load module"
+    }
+
+}
+
+Load-Module "PnP.PowerShell"
+
+if(!$useMFA){
+    $Credential = Get-Credential
+}
+
+if($useMFA){
+    Connect-PnPOnline $adminUrl -Interactive
 }else{
     Connect-PnPOnline $adminUrl -Credentials $Credential
 }
@@ -64,14 +88,15 @@ $reportRows = New-Object System.Collections.ArrayList
 $sites = Get-PnPListItem -List DO_NOT_DELETE_SPLIST_TENANTADMIN_AGGREGATED_SITECOLLECTIONS -Fields ID,Title,TemplateTitle,SiteUrl,IsGroupConnected
 foreach($site in $sites){
     Write-Output "Processing $($site.FieldValues.Title) with url $($site.FieldValues.SiteUrl)"
-    if($useMFA){        Connect-PnPOnline $site.FieldValues.SiteUrl -UseWebLogin
+    if($useMFA){
+        Connect-PnPOnline $site.FieldValues.SiteUrl -Interactive
     }else{
         Connect-PnPOnline $site.FieldValues.SiteUrl -Credentials $Credential
     }
     $lists = Get-PnPList -Includes BaseType,BaseTemplate,ItemCount
     $lists | where {$_.BaseTemplate -eq 101 -and $_.ItemCount -gt 0} | % {
         Write-Output "Detected document library $($_.Title) with Id $($_.Id.Guid) and Url $baseUrl$($_.RootFolder.ServerRelativeUrl), processing..."
-        $items = Get-PnPListItem -List $_ -PageSize 2000
+        $items = Get-PnPListItem -PageSize 2000 -List $_ 
         foreach($item in $items){
             $itemName = Split-Path $item.FieldValues.FileRef -Leaf
             $itemFullUrl = "$baseUrl$($item.FieldValues.FileRef)"
@@ -109,5 +134,3 @@ if($exportCSV){
     Write-Output "data exported to $path"
 }
 $reportRows | Out-GridView
-
-
