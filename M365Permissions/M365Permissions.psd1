@@ -33,6 +33,10 @@
 
     Install-PSResource -Name M365Permissions -Repository PSGallery
 
+    LICENSE:
+    
+    Free for non-commercial use. See module link/website for conditions around commercial use.
+
     EXAMPLES:
 
     Get-AllM365Permissions -expandGroups
