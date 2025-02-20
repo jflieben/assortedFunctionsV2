@@ -180,7 +180,7 @@ function get-vmRightSize{
 
     #use a global var to cache data between subsequent calls to list all available Azure VM sizes in the region
     if(!$global:azureAvailableVMSizes){
-        $localCachePath = Join-Path $env:TEMP "azureAvailableVMSizes.json"
+        $localCachePath = Join-Path $([System.IO.Path]::GetTempPath()) "azureAvailableVMSizes.json"
         if((Test-Path $localCachePath)){
             $global:azureAvailableVMSizes = Get-Content $localCachePath | ConvertFrom-Json
             Write-Host "Loaded cached Azure VM sizes from $localCachePath"
@@ -200,7 +200,7 @@ function get-vmRightSize{
 
     #use a global var to cache data between subsequent calls to list cost and performance data in the selected region
     if(!$global:azureVMPrices){
-        $localCachePath = Join-Path $env:TEMP "azureVMPrices.json"
+        $localCachePath = Join-Path $([System.IO.Path]::GetTempPath()) "azureVMPrices.json"
         if((Test-Path $localCachePath)){
             $global:azureVMPrices = Get-Content $localCachePath | ConvertFrom-Json
             Write-Host "Loaded cached Azure VM prices from $localCachePath"
@@ -527,7 +527,7 @@ function set-rsgRightSize{
         }
     }
     if($Report){
-        $reportPath = Join-Path $Env:TEMP -ChildPath "addrs-report.csv" 
+        $reportPath = Join-Path $([System.IO.Path]::GetTempPath()) -ChildPath "addrs-report.csv" 
         Write-Output "Writing report with $($reportRows.Count) lines to $reportPath"
         $reportRows | Export-CSV -Path $reportPath -Force -Encoding UTF8 -NoTypeInformation -Confirm:$False -Append
         Start-Process $reportPath
