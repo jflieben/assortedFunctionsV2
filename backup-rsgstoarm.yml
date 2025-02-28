@@ -1,0 +1,75 @@
+trigger: none
+pr: none
+schedules:
+- cron: 0 1 * * *
+  displayName: Scheduled run
+  branches:
+    include:
+    - main
+  always: true
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  azureSubscription: 'XYZ'  # Azure DevOps Service Connection Name with access to your azure subscription
+  exportDirectory: 'Azure\Backups'       # Directory in DevOps to store exported JSON files
+
+stages:
+- stage: Export_Rsgs
+  displayName: 'Export all resource groups and Check into Git'
+  jobs:
+  - job: Export_And_Commit
+    displayName: 'Export all resource groups and Commit Changes'
+    steps:
+    - checkout: self
+      persistCredentials: true   
+    - task: AzureCLI@2
+      displayName: 'Export all resource groups to template'
+      inputs:
+        azureSubscription: $(azureSubscription)
+        scriptType: 'ps'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          $exportPath = "$(Build.SourcesDirectory)\$(exportDirectory)"
+          New-Item -Path $exportPath -ItemType Directory -Force | Out-Null
+          
+          # Retrieve all rsgs
+          $rsgs = az group list | convertfrom-json
+          $rsgs | % {
+              $rsg = $_
+              $rsgName = $rsg.name
+              Write-Host "Exporting Resource Group: $rsgName"
+
+              # Export Resource Group template
+              $templateFile = Join-Path -Path $exportPath -ChildPath "$rsgName.json"
+              try{
+                az group export --name $rsgName --skip-resource-name-params > $templateFile
+              }catch{
+                Write-Host "Failed to export Resource Group $rsgName"
+                Write-Host $_.Exception.Message
+                continue
+              }
+
+              Write-Host "Resource Group $rsgName exported to $templateFile"
+          }
+
+          Write-Host "All resources exported."
+
+    - task: PowerShell@2
+      displayName: 'Commit and Push JSON Files to Git'
+      inputs:
+        targetType: 'inline'
+        script: |
+          # Commit and push changes to Azure DevOps Git
+          $exportPath = "$(Build.SourcesDirectory)\$(exportDirectory)"
+          Write-Host "Committing files in $exportPath to Git"
+
+          # Git commands to commit the files
+          git config user.name "azure-pipelines"
+          git config user.email "azure-pipelines@dev.azure.com"
+          git add $exportPath/\*
+          git commit -m "BackupJSON files [$(Build.BuildId)]"
+          git push origin HEAD:main
+
+          Write-Host "JSON files committed and pushed successfully."
