@@ -28,8 +28,8 @@
     Name of your Office 365 tenant (https://TENANTA.sharepoint.com) = TENANTA
     Example: tenanta
 
-    .PARAMETER useMFA
-    Switch parameter, if the admin account you plan to use is MFA enabled, supply -useMFA to this script
+    .PARAMETER clientId
+    clientId you used to register PNP PowerShell, as per https://pnp.github.io/powershell/articles/registerapplication.html  
 
     .PARAMETER specificSiteUrls
     Comma seperated list of sites to process. If not specified ALL sites are processed (including Onedrive for Business and Microsoft Teams)
@@ -47,24 +47,8 @@
     filename: fix-FilesWithLongPathsInOffice365.ps1
     author: Jos Lieben
     blog: www.lieben.nu
+    Copyright: https://www.lieben.nu/liebensraum/commercial-use/
     created: 13/10/2019
-
-    Example script to parse a CSV file for character types (to find ODD characters that may not be correctable by script):
-    $csv = import-csv "C:\temp\SharedDocuments.csv" -Encoding UTF8
-    $uniqueChars = @{}
-    foreach($item in $csv){
-        for($i=7;$i -lt $item."Item full URL".Length;$i++){
-            if(!$uniqueChars.$($item."Item full URL"[$i])){
-                $uniqueChars.$($item."Item full URL"[$i]) = 1
-            }else{
-                $uniqueChars.$($item."Item full URL"[$i]) += 1
-            }
-        }
-    }
-
-    $uniqueChars.GetEnumerator() |
-        Select-Object -Property Key,Value |
-            Export-Csv -NoTypeInformation -Path c:\temp\test.csv -Encoding UTF8
 #>
 Param(
     [String]$specialFileExtensions=".xlsx,.xls",
@@ -73,10 +57,10 @@ Param(
     [Int]$EditorWidth=1200,
     [Int]$EditorHeight=800,
     [Parameter(Mandatory=$true)][String]$tenantName,
+    [Parameter(Mandatory=$true)][Guid]$clientId,
     [Parameter(Mandatory=$true)]$csvPath,
     [String]$specificSiteUrls=$Null,
     [String]$specificDocumentLibraryUrls=$Null,
-    [Switch]$useMFA,
     [Switch]$WhatIf
 )
 
@@ -241,17 +225,10 @@ function doTheSharepointStuff{
         $mode=0   
     )
     try{
-        Load-Module SharePointPnPPowerShellOnline
-        if(!$useMFA -and !$script:Credential){
-            $script:Credential = Get-Credential
-        }
-        if($useMFA){
-            Connect-PnPOnline $adminUrl -UseWebLogin
-        }else{
-            Connect-PnPOnline $adminUrl -Credentials $Credential
-        }
+        Load-Module PnP.PowerShell
+        Connect-PnPOnline $adminUrl -Interactive -ClientId $clientId
     }catch{
-        Throw "Could not connect to SpO online, check your credentials"
+        Throw $_
     }
 
     #Load CSV data if mode 1 is specified into a highly efficient hashtable for ultra-fast lookups
@@ -314,11 +291,8 @@ function doTheSharepointStuff{
         for($targetCount = 0;$targetCount -lt $targets.Count;$targetCount++){
             write-output "Discovering subsites of: $($targets[$targetCount].TargetUrl)"
             try{
-                if($useMFA){
-                    Connect-PnPOnline $targets[$targetCount].TargetUrl -UseWebLogin
-                }else{
-                    Connect-PnPOnline $targets[$targetCount].TargetUrl -Credentials $script:Credential
-                }
+                Connect-PnPOnline $targets[$targetCount].TargetUrl -ClientId $clientId -Interactive
+        
                 Get-PnPSubWebs -Recurse | ForEach-Object {
                     if($targets.TargetUrl -notcontains $_.Url){
                         $targets+=[PSCustomObject]@{"TargetUrl"=$_.Url;"Type"="site";} 
@@ -352,11 +326,8 @@ function doTheSharepointStuff{
         }
         Write-Progress -Activity "$($targetCount+1)/$($targets.Count) $($targets[$targetCount].TargetUrl)" -Status "Retrieving lists in site..." -PercentComplete 0
         Write-Output "Processing $($targets[$targetCount].TargetUrl)"
-        if($useMFA){
-            Connect-PnPOnline $siteUrl -UseWebLogin
-        }else{
-            Connect-PnPOnline $siteUrl -Credentials $script:Credential
-        }
+        Connect-PnPOnline $siteUrl -Interactive -ClientId $clientId -ErrorAction Stop
+
         $lists = @(Get-PnPList -Includes BaseType,BaseTemplate,ItemCount | Where-Object {($_.BaseTemplate -eq 101 -or $_.BaseTemplate -eq 700) -and $_.ItemCount -gt 0})
         for($listCount = 0;$listCount -lt $lists.Count;$listCount++) {
             if($targets[$targetCount].type -eq "library"){
