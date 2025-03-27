@@ -40,22 +40,22 @@ if(!$biosPasswords){
             $passwordWorked = $true
             break
         }catch{
-            Write-Host "Bios password <redacted> did not work, trying next password"
+            Write-Host "Bios password <redacted> did not work, trying next password $($_.Exception.Message)"
         }   
     }
     if($passwordWorked -eq $false){
-        Write-Host "None of the configured bios passwords worked, aborting"
-        Write-Error $_ -ErrorAction Continue
+        Write-Error "None of the configured bios passwords worked, aborting" -ErrorAction Continue
         Exit 1
     }
 }
 
 Write-Host "Secureboot enabled"
+
 if($suspendBitlocker){
     Write-Host "Suspending bitlocker"
     try{
-        Get-BitLockerVolume | % {$_.MountPoint} | %{
-            Suspend-BitLocker -MountPoint $_ -RebootCount 1
+        Get-BitLockerVolume | Where-Object {$_.MountPoint -ne $Null} | Foreach-Object {
+            Suspend-BitLocker -MountPoint $_.MountPoint -RebootCount 1
         }
     }catch{
         Write-Error $_ -ErrorAction Continue
