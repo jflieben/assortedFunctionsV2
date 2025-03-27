@@ -21,7 +21,7 @@ $suspendBitlocker = $false
 $setBios = (gwmi -class Lenovo_SetBiosSetting -namespace root\wmi)
 $commitBios = (gwmi -class Lenovo_SaveBiosSettings -namespace root\wmi)
 
-if(!$biosPassword){
+if(!$biosPasswords){
     Write-Host "Enabling secureboot without bios password"
     try{
         $setBios.SetBiosSetting("SecureBoot,Enable")
