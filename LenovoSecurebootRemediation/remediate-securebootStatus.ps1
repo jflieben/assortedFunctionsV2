@@ -11,8 +11,9 @@
 #>
 
 #configure only if your bios is password protected, you may add multiple passwords if you use different passwords for different devices, the script will try them all
+#       !!WARNING!! using 3 or more 'bad' passwords could lock you out of the bios, use at your own risk!
 #       example config:
-#       $biosPasswords = @("password1","password2","password3")
+#       $biosPasswords = @("password1","password2")
 $biosPasswords = @() 
 
 #set to $true if your implementation of bitlocker requires suspend before enabling secureboot to avoid bugging users with locked machines until they unlock. This is normally not needed! (Tested on multiple Lenovo devices)
@@ -32,6 +33,9 @@ if(!$biosPasswords){
     }
 }else{
     $passwordWorked = $false
+    if($biosPasswords.Count -gt 2){
+        Write-Host "WARNING: Using 3 or more passwords could lock you out of the bios, use at your own risk!"
+    }
     foreach($biosPassword in $biosPasswords){
         try{
             Write-Host "Enabling secureboot using bios password"
