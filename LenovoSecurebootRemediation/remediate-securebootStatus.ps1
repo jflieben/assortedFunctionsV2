@@ -32,7 +32,7 @@ if(!$biosPassword){
     }
 }else{
     $passwordWorked = $false
-    foreach($biosPasswords in $biosPasswords){
+    foreach($biosPassword in $biosPasswords){
         try{
             Write-Host "Enabling secureboot using bios password"
             $setBios.SetBiosSetting("SecureBoot,Enable,$biosPassword,ascii,us,$biosPassword")
