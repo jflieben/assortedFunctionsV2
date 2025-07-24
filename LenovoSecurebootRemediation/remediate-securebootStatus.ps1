@@ -33,6 +33,7 @@ if(!$biosPasswords){
     }
 }else{
     $passwordWorked = $false
+    try{$opcodeInterface = (gwmi -class Lenovo_WmiOpcodeInterface -namespace root\wmi)}catch{}
     if($biosPasswords.Count -gt 2){
         Write-Host "WARNING: Using 3 or more passwords could lock you out of the bios, use at your own risk!"
     }
@@ -40,6 +41,9 @@ if(!$biosPasswords){
         try{
             Write-Host "Enabling secureboot using bios password"
             $setBios.SetBiosSetting("SecureBoot,Enable,$biosPassword,ascii,us,$biosPassword")
+            try{
+                $opcodeInterface.WmiOpcodeInterface("WmiOpcodePasswordAdmin:$biosPassword")
+            }catch{}
             $commitBios.SaveBiosSettings("$biosPassword,ascii,us")
             $passwordWorked = $true
             break
