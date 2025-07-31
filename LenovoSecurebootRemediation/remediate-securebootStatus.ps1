@@ -59,12 +59,21 @@ if(!$biosPasswords -or !$supervisorPwdSet){
 }else{
     $passwordWorked = $false
     try{$opcodeInterface = (gwmi -class Lenovo_WmiOpcodeInterface -namespace root\wmi)}catch{}
+    $count =  0
     foreach($biosPassword in $biosPasswords){
+        $count++
+        if($count -gt 2){
+            Write-Output "Tried $count passwords, none worked, cannot enable secureboot and will not continue to avoid locking the device"
+            Exit 1
+        }
         try{
             $setBios.SetBiosSetting("SecureBoot,Enable,$biosPassword,ascii,us,$biosPassword")
             try{
                 $opcodeInterface.WmiOpcodeInterface("WmiOpcodePasswordAdmin:$biosPassword")
             }catch{}
+            if($thirdPartyBios){
+                $setBios.SetBiosSetting("Allow3rdPartyUEFICA,Enable")
+            }
             $commitBios.SaveBiosSettings("$biosPassword,ascii,us")
             $passwordWorked = $true
             Write-Output "Secureboot enabled with bios password"
