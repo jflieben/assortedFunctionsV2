@@ -10,57 +10,75 @@
     site: https://www.lieben.nu
 #>
 
+####BEGIN CONFIGURATION####
 #configure only if your bios is password protected, you may add multiple passwords if you use different passwords for different devices, the script will try them all
-#       !!WARNING!! using 3 or more 'bad' passwords could lock you out of the bios, use at your own risk!
-#       example config:
-#       $biosPasswords = @("password1","password2")
-$biosPasswords = @() 
+#!!WARNING!! using 3 or more 'bad' passwords could lock you out of the bios, use at your own risk!
+$biosPasswords = @() #example: $biosPasswords = @("password1","password2")
+$suspendBitlocker = $false #set to $true if your implementation of bitlocker requires suspend before enabling secureboot to avoid bugging users with locked machines until they unlock. This is normally not needed! (Tested on multiple Lenovo devices)
+$thirdPartyBios = $False #set to $true if you want to use third party config (e.g. when using Linux)
+####END CONFIGURATION####
 
-#set to $true if your implementation of bitlocker requires suspend before enabling secureboot to avoid bugging users with locked machines until they unlock. This is normally not needed! (Tested on multiple Lenovo devices)
-$suspendBitlocker = $false
+
+
+###BEGIN SCRIPT####
+try{
+    $isInSetupMode = (Get-SecureBootUEFI -Name SetupMode).Bytes[0] -eq 1
+}catch{
+    $isInSetupMode = $false
+}
+
+if($isInSetupMode){
+    Write-Output "Bios is in Setup Mode, cannot activate secureboot until this is manually resolved"
+    Exit 1
+}
+
+try{
+    $supervisorPwdSet = (Get-WmiObject -Class Lenovo_BiosPasswordSettings -Namespace root\wmi).PasswordState -notin @(0,4)
+}catch{
+    $supervisorPwdSet = $false
+}
 
 $setBios = (gwmi -class Lenovo_SetBiosSetting -namespace root\wmi)
 $commitBios = (gwmi -class Lenovo_SaveBiosSettings -namespace root\wmi)
-
-if(!$biosPasswords){
-    Write-Host "Enabling secureboot without bios password"
+if(!$biosPasswords -or !$supervisorPwdSet){
+    if($supervisorPwdSet){
+        Write-Output "Bios is password protected, but no passwords configured, cannot enable secureboot"
+        Exit 1
+    }
     try{
         $setBios.SetBiosSetting("SecureBoot,Enable")
+        if($thirdPartyBios){
+            $setBios.SetBiosSetting("Allow3rdPartyUEFICA,Enable")
+        }
         $commitBios.SaveBiosSettings()
+        Write-Output "Secureboot enabled without bios password"
     }catch{
-        Write-Error $_ -ErrorAction Continue
+        Write-Output $_.Exception.Message
         Exit 1
     }
 }else{
     $passwordWorked = $false
     try{$opcodeInterface = (gwmi -class Lenovo_WmiOpcodeInterface -namespace root\wmi)}catch{}
-    if($biosPasswords.Count -gt 2){
-        Write-Host "WARNING: Using 3 or more passwords could lock you out of the bios, use at your own risk!"
-    }
     foreach($biosPassword in $biosPasswords){
         try{
-            Write-Host "Enabling secureboot using bios password"
             $setBios.SetBiosSetting("SecureBoot,Enable,$biosPassword,ascii,us,$biosPassword")
             try{
                 $opcodeInterface.WmiOpcodeInterface("WmiOpcodePasswordAdmin:$biosPassword")
             }catch{}
             $commitBios.SaveBiosSettings("$biosPassword,ascii,us")
             $passwordWorked = $true
+            Write-Output "Secureboot enabled with bios password"
             break
-        }catch{
-            Write-Host "Bios password <redacted> did not work, trying next password $($_.Exception.Message)"
-        }   
+        }catch{}   
     }
     if($passwordWorked -eq $false){
-        Write-Error "None of the configured bios passwords worked, aborting" -ErrorAction Continue
+        Write-Output "None of the configured bios passwords worked, cannot enable secureboot"
         Exit 1
     }
 }
 
-Write-Host "Secureboot enabled"
 
 if($suspendBitlocker){
-    Write-Host "Suspending bitlocker"
     try{
         Get-BitLockerVolume | Where-Object {$_.MountPoint -ne $Null} | Foreach-Object {
             Suspend-BitLocker -MountPoint $_.MountPoint -RebootCount 1
