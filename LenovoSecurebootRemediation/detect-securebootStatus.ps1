@@ -1,6 +1,7 @@
 <#
     .SYNOPSIS
     This script detects if secureboot is enabled (ONLY on Lenovo devices later than 2018)
+    Tested on multiple ThinkPad models between 2018 and 2025
     To be used in Intune Remediations together with remediate-securebootStatus.ps1
 
     .NOTES
