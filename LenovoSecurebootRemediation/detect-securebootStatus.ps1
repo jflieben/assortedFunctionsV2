@@ -13,8 +13,18 @@
 try{
     $securebootSetting = ((gwmi -class Lenovo_BiosSetting -namespace root\wmi) | Where{$_.CurrentSetting.StartsWith("SecureBoot")}).CurrentSetting
 }catch{
-    Write-Host $_
-    Write-Host "NonCompliant"
+    Write-Output "NonCompliant - Unable to Read Bios"
+    Exit 1
+}
+
+try{
+    $isInSetupMode = (Get-SecureBootUEFI -Name SetupMode).Bytes[0] -eq 1
+}catch{
+    $isInSetupMode = $false
+}
+
+if($isInSetupMode){
+    Write-Output "NonCompliant - Cannot remediate SetupMode"
     Exit 1
 }
 
