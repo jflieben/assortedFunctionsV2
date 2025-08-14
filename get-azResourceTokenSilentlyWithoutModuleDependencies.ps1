@@ -18,7 +18,9 @@
     Resource your token is for, e.g. "https://graph.microsoft.com" would give a token for the Graph API
     .PARAMETER refreshToken
     If supplied, this is used to update the token cache and interactive login will not be required. This parameter is meant as an alternative to that initial first time interactive login
-    
+    .PARAMETER clientId
+    ClientId of the application you want to use for the token, defaults to Azure PS module, but if you need other scopes, check https://entrascopes.com/ for client ID's you can try
+
     .NOTES
     filename: get-azResourceTokenSilentlyWithoutModuleDependencies.ps1
     author: Jos Lieben
@@ -33,10 +35,6 @@ Param(
     $resource="https://graph.microsoft.com",
     $clientId="1950a258-227b-4e31-a9cf-717495945fc2" #use 1b730954-1685-4b74-9bfd-dac224a7b894 for audit/sign in logs or other things that only work through the AzureAD module
 )
-
-$strCurrentTimeZone = (Get-WmiObject win32_timezone).StandardName
-$TZ = [System.TimeZoneInfo]::FindSystemTimeZoneById($strCurrentTimeZone)
-[datetime]$origin = '1970-01-01 00:00:00'
 
 if(!$tenantId){
     $tenantId = (Invoke-RestMethod "https://login.microsoftonline.com/$($userUPN.Split("@")[1])/.well-known/openid-configuration" -Method GET).userinfo_endpoint.Split("/")[3]
