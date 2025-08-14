@@ -1,7 +1,7 @@
 ﻿<#
     .SYNOPSIS
     Retrieve graph or other azure tokens as desired (e.g. for https://main.iam.ad.ext.azure.com) and bypass MFA by repeatedly recaching the RefreshToken
-    Only the first login will require an interactive / device login, subsequent logins will not require interactivity and will bypass MFA.
+    Only the first login will require an interactive / device login, subsequent logins will not require interactivity and will bypass MFA until you are e.g. signed out, change your password etc.
 
     This script is without warranty and not for commercial use without prior consent from the author. It is meant for scenario's where you need an Azure token to automate something that cannot yet be done with service principals.
     If your refresh token expires (default 90 days of inactivity) you'll have to rerun the script interactively.
@@ -39,13 +39,13 @@ $TZ = [System.TimeZoneInfo]::FindSystemTimeZoneById($strCurrentTimeZone)
 [datetime]$origin = '1970-01-01 00:00:00'
 
 if(!$tenantId){
-    $tenantId = (Invoke-RestMethod "https://login.windows.net/$($userUPN.Split("@")[1])/.well-known/openid-configuration" -Method GET).userinfo_endpoint.Split("/")[3]
+    $tenantId = (Invoke-RestMethod "https://login.microsoftonline.com/$($userUPN.Split("@")[1])/.well-known/openid-configuration" -Method GET).userinfo_endpoint.Split("/")[3]
 }
 
 if($refreshToken){
     try{
         write-verbose "checking provided refresh token and updating it"
-        $response = (Invoke-RestMethod "https://login.windows.net/$tenantId/oauth2/token" -Method POST -Body "grant_type=refresh_token&refresh_token=$refreshToken" -ErrorAction Stop)
+        $response = (Invoke-RestMethod "https://login.microsoftonline.com/$tenantId/oauth2/token" -Method POST -Body "grant_type=refresh_token&refresh_token=$refreshToken" -ErrorAction Stop)
         $refreshToken = $response.refresh_token
         $AccessToken = $response.access_token
         write-verbose "refresh and access token updated"
@@ -61,7 +61,7 @@ if([System.IO.File]::Exists($refreshTokenCachePath) -and !$refreshToken){
         $refreshToken = Get-Content $refreshTokenCachePath -ErrorAction Stop | ConvertTo-SecureString -ErrorAction Stop
         $refreshToken = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($refreshToken)
         $refreshToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($refreshToken)
-        $response = (Invoke-RestMethod "https://login.windows.net/$tenantId/oauth2/token" -Method POST -Body "grant_type=refresh_token&refresh_token=$refreshToken" -ErrorAction Stop)
+        $response = (Invoke-RestMethod "https://login.microsoftonline.com/$tenantId/oauth2/token" -Method POST -Body "grant_type=refresh_token&refresh_token=$refreshToken" -ErrorAction Stop)
         $refreshToken = $response.refresh_token
         $AccessToken = $response.access_token
         write-verbose "tokens updated using cached token"
@@ -118,7 +118,7 @@ if($refreshToken){
 #translate the token
 try{
     write-verbose "update token for supplied resource"
-    $response = (Invoke-RestMethod "https://login.windows.net/$tenantId/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=refresh_token&refresh_token=$refreshToken&client_id=$clientId&scope=openid" -ErrorAction Stop)
+    $response = (Invoke-RestMethod "https://login.microsoftonline.com/$tenantId/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=refresh_token&refresh_token=$refreshToken&client_id=$clientId&scope=openid" -ErrorAction Stop)
     $resourceToken = $response.access_token
     write-verbose "token translated to $resource"
 }catch{
