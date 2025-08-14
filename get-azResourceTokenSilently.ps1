@@ -39,13 +39,13 @@ $TZ = [System.TimeZoneInfo]::FindSystemTimeZoneById($strCurrentTimeZone)
 [datetime]$origin = '1970-01-01 00:00:00'
 
 if(!$tenantId){
-    $tenantId = (Invoke-RestMethod "https://login.windows.net/$($userUPN.Split("@")[1])/.well-known/openid-configuration" -Method GET).userinfo_endpoint.Split("/")[3]
+    $tenantId = (Invoke-RestMethod "https://login.microsoftonline.com/$($userUPN.Split("@")[1])/.well-known/openid-configuration" -Method GET).userinfo_endpoint.Split("/")[3]
 }
 
 if($refreshToken){
     try{
         write-verbose "checking provided refresh token and updating it"
-        $response = (Invoke-RestMethod "https://login.windows.net/$tenantId/oauth2/token" -Method POST -Body "grant_type=refresh_token&refresh_token=$refreshToken" -ErrorAction Stop)
+        $response = (Invoke-RestMethod "https://login.microsoftonline.com/$tenantId/oauth2/token" -Method POST -Body "grant_type=refresh_token&refresh_token=$refreshToken" -ErrorAction Stop)
         $refreshToken = $response.refresh_token
         $AccessToken = $response.access_token
         write-verbose "refresh and access token updated"
@@ -61,7 +61,7 @@ if([System.IO.File]::Exists($refreshTokenCachePath) -and !$refreshToken){
         $refreshToken = Get-Content $refreshTokenCachePath -ErrorAction Stop | ConvertTo-SecureString -ErrorAction Stop
         $refreshToken = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($refreshToken)
         $refreshToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($refreshToken)
-        $response = (Invoke-RestMethod "https://login.windows.net/$tenantId/oauth2/token" -Method POST -Body "grant_type=refresh_token&refresh_token=$refreshToken" -ErrorAction Stop)
+        $response = (Invoke-RestMethod "https://login.microsoftonline.com/$tenantId/oauth2/token" -Method POST -Body "grant_type=refresh_token&refresh_token=$refreshToken" -ErrorAction Stop)
         $refreshToken = $response.refresh_token
         $AccessToken = $response.access_token
         write-verbose "tokens updated using cached token"
@@ -86,6 +86,9 @@ if(!$refreshToken){
 
     if(!(Get-Module -Name "Az.Accounts")){
         Throw "Az.Accounts module not installed!"
+    }
+    if((Get-Module -Name "Az.Accounts").Version -gt [Version]"1.9.5.0"){
+        Throw "Az.Accounts module version is $((Get-Module -Name "Az.Accounts").Version), which is higher than 1.9.5. This script requires 1.9.5 or lower, because higher versions no longer store a Refresh Token this script can access. Please use Get-AzResourceTokenSilentlyWithoutModuleDependencies" 
     }
     Write-Verbose "Calling Login-AzAccount"
     if($tenantId){
@@ -115,7 +118,7 @@ if(!$refreshToken){
         }       
         $refreshToken = @($tokens | Where-Object {$_.expiresOn -gt (get-Date)} | Sort-Object -Descending -Property expiresOn)[0].refreshToken
         write-verbose "updating stolen refresh token"
-        $response = (Invoke-RestMethod "https://login.windows.net/$tenantId/oauth2/token" -Method POST -Body "grant_type=refresh_token&refresh_token=$refreshToken" -ErrorAction Stop)
+        $response = (Invoke-RestMethod "https://login.microsoftonline.com/$tenantId/oauth2/token" -Method POST -Body "grant_type=refresh_token&refresh_token=$refreshToken" -ErrorAction Stop)
         $refreshToken = $response.refresh_token
         $AccessToken = $response.access_token
         write-verbose "tokens updated"
@@ -136,7 +139,7 @@ if($refreshToken){
 #translate the token
 try{
     write-verbose "update token for supplied resource"
-    $response = (Invoke-RestMethod "https://login.windows.net/$tenantId/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=refresh_token&refresh_token=$refreshToken&client_id=1950a258-227b-4e31-a9cf-717495945fc2&scope=openid" -ErrorAction Stop)
+    $response = (Invoke-RestMethod "https://login.microsoftonline.com/$tenantId/oauth2/token" -Method POST -Body "resource=$([System.Web.HttpUtility]::UrlEncode($resource))&grant_type=refresh_token&refresh_token=$refreshToken&client_id=1950a258-227b-4e31-a9cf-717495945fc2&scope=openid" -ErrorAction Stop)
     $resourceToken = $response.access_token
     write-verbose "token translated to $resource"
 }catch{
