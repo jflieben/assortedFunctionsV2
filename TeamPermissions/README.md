@@ -1,0 +1,1 @@
+please visit https://www.m365permissions.com for the (extremely improved) successor of this tool
