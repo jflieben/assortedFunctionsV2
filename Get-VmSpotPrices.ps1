@@ -15,14 +15,19 @@ function Get-VMSpotPrices{
         The Azure region for which to retrieve spot prices, e.g. westeurope
     .PARAMETER vmFamily
         The (partial) VM family to filter spot prices, e.g. Standard_F2, Standard_F4
+    .PARAMETER useHybridBenefit
+        If specified, shows bare metal pricing, if omitted, shows pricing including Windows license
     #>
     Param(
         [Parameter(Mandatory=$true)][string]$location,
-        [Parameter(Mandatory=$true)][string]$vmFamily
+        [Parameter(Mandatory=$true)][string]$vmFamily,
+        [Switch]$useHybridBenefit
     )
 
+    $os = if($useHybridBenefit){"windows"}else{"linux"}
+
     $body = @{
-        "query" = "spotresources | where type =~ 'microsoft.compute/skuspotpricehistory/ostype/location' and location =~ '$($location)' and kind =~ 'linux' and sku contains '$($vmFamily)'"
+        "query" = "spotresources | where type =~ 'microsoft.compute/skuspotpricehistory/ostype/location' and location =~ '$($location)' and kind =~ '$($os)' and sku contains '$($vmFamily)'"
     } | ConvertTo-Json -Compress
     
     $prices = New-GraphQuery -Uri "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01" -Method Post -Body $body -resource "https://management.azure.com/" -MaxAttempts 2
