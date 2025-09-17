@@ -1,0 +1,145 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "This is location where resources are going to be created."
+            },
+            "type": "string"
+        },
+        "ContactName": {
+            "type": "string"
+        },
+        "ContactEmail": {
+            "type": "string"
+        },
+        "UseAzureHybridBenefit": {
+            "type": "bool",
+            "defaultValue": false,
+            "metadata": {
+                "description": "Use Azure Hybrid Benefit for Windows Server"
+            }
+        },
+        "allowSelfAuth": {
+            "type": "bool",
+            "defaultValue": false,
+            "metadata": {
+                "description": "Request additional permissions to allow M365Permissions to automatically scale up and down"
+            }
+        },
+        "TenantSize": {
+            "type": "string"
+        },
+        "vmSize": {
+            "type": "string"
+        },
+        "startTime1": {
+            "type": "string",
+            "defaultValue": "[utcNow('yyyy-MM-ddTHH:20:00Z')]",
+            "metadata": {
+                "description": "Current UTC time in ISO 8601 format."
+            }
+        },
+        "startTime2": {
+            "type": "string",
+            "defaultValue": "[utcNow('yyyy-MM-ddTHH:50:00Z')]",
+            "metadata": {
+                "description": "Current UTC time in ISO 8601 format."
+            }
+        },
+        "veryRandom": {
+            "type": "string",
+            "defaultValue": "[newGuid()]"
+        },
+        "customTags": {
+            "type": "object",
+            "defaultValue": {}
+        },
+        "applicationResourceName": {
+            "type": "string",
+            "defaultValue": "M365Permissions"
+        },
+        "managedResourceGroupId": {
+            "type": "string",
+            "defaultValue": ""
+        },
+        "version": {
+            "type": "string",
+            "defaultValue": "standard",
+            "allowedValues": [
+                "standard",
+                "enterprise"
+            ],
+            "metadata": {
+                "description": "Choose which version to install, see www.m365permissions.com for details"
+            }
+        },
+        "jitAccessPolicy": {
+            "type": "object",
+            "defaultValue": {
+                "jitAccessEnabled": false
+            }
+        }        
+    },
+    "variables": {
+        "managedResourceGroupId": "[if(empty(parameters('managedResourceGroupId')),concat(subscription().id,'/resourceGroups/',take(concat(resourceGroup().name,'-',uniquestring(resourceGroup().id),uniquestring(parameters('applicationResourceName'))),90)),parameters('managedResourceGroupId'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Solutions/applications",
+            "tags": "[if(contains(parameters('customTags'), 'Microsoft.Solutions/applications'), parameters('customTags')['Microsoft.Solutions/applications'], json('{}')) ]",
+            "apiVersion": "2021-07-01",
+            "location": "[resourceGroup().Location]",
+            "kind": "MarketPlace",
+            "name": "[parameters('applicationResourceName')]",
+            "plan": {
+                "name": "[parameters('version')]",
+                "product": "m365permissions-preview",
+                "publisher": "liebenconsultancy",
+                "version": "1.3.90"
+            },
+            "identity": "[json('null')]",
+            "properties": {
+                "managedResourceGroupId": "[variables('managedResourceGroupId')]",
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "ContactName": {
+                        "value": "[parameters('ContactName')]"
+                    },
+                    "ContactEmail": {
+                        "value": "[parameters('ContactEmail')]"
+                    },
+                    "UseAzureHybridBenefit": {
+                        "value": "[parameters('UseAzureHybridBenefit')]"
+                    },
+                    "allowSelfAuth": {
+                        "value": "[parameters('allowSelfAuth')]"
+                    },
+                    "TenantSize": {
+                        "value": "[parameters('TenantSize')]"
+                    },
+                    "vmSize": {
+                        "value": "[parameters('vmSize')]"
+                    },
+                    "startTime1": {
+                        "value": "[parameters('startTime1')]"
+                    },
+                    "startTime2": {
+                        "value": "[parameters('startTime2')]"
+                    },
+                    "veryRandom": {
+                        "value": "[parameters('veryRandom')]"
+                    },
+                    "customTags": {
+                        "value": "[parameters('customTags')]"
+                    }
+                },
+                "jitAccessPolicy": "[if(equals(parameters('version'), 'standard'), json('null'), parameters('jitAccessPolicy'))]"
+            }
+        }
+    ]
+}
