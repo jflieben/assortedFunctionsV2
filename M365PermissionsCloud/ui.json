@@ -342,7 +342,8 @@
                         }
                     ]
                 }
-            ],
+            ]
+        },
         "outputs": {
             "kind": "ResourceGroup",
             "location": "[steps('basics').resourceScope.location.name]",
@@ -362,6 +363,5 @@
 				"version": "[steps('m365configuration').version]"
             }
         }	
-        }
     }
 }
