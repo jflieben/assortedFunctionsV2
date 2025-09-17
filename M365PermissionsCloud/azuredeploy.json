@@ -99,7 +99,7 @@
             "name": "[parameters('applicationResourceName')]",
             "plan": {
                 "name": "[parameters('version')]",
-                "product": "m365permissions-preview",
+                "product": "[concat('m365permissions',if(equals(subscription().tenantId,'ab773612-c917-4af5-8b81-4a5222340706'),'-preview',''))]",
                 "publisher": "liebenconsultancy",
                 "version": "1.3.90"
             },

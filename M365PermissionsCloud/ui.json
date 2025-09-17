@@ -280,7 +280,7 @@
                         {
                             "name": "SetCustomTags",
                             "type": "Microsoft.Common.CheckBox",
-                            "label": "I want to customize Azure Resource Tags",
+                            "label": "I want to customize Azure Tags",
                             "toolTip": "As the deployed resource group is read-only, you or Azure Policy will be unable to add tags after deployment. Select this option to specify custom tags.",
                             "visible": true
                         },
@@ -302,6 +302,16 @@
                             ]
                         },
                         {
+                            "name": "chooseVersionInfo",
+                            "type": "Microsoft.Common.InfoBox",
+                            "visible": true,
+                            "options": {
+                                "text": "Click here to compare versions and features",
+                                "uri": "https://m365permissions.com/#/docs/support#edition-comparison",
+                                "style": "Info"
+                            }
+                        },                
+                        {
                             "name": "version",
                             "type": "Microsoft.Common.DropDown",
                             "label": "Choose which version to install",
@@ -313,9 +323,7 @@
                             "multiselect": false,
                             "selectAll": false,
                             "filter": false,
-                            "filterPlaceholder": "Filter items ...",
                             "multiLine": true,
-                            "defaultDescription": "Standard package",
                             "constraints": {
                                 "allowedValues": [
                                     {
