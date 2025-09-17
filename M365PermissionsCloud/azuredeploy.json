@@ -79,7 +79,10 @@
         "jitAccessPolicy": {
             "type": "object",
             "defaultValue": {
-                "jitAccessEnabled": false
+                "jitAccessEnabled": true,
+                "jitApprovalMode": "AutoApprove",
+                "maximumJitAccessDuration": "PT8H",
+                "jitApprovers": []
             }
         }        
     },
