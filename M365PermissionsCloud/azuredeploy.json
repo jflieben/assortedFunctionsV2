@@ -87,7 +87,7 @@
         }        
     },
     "variables": {
-        "managedResourceGroupId": "[if(empty(parameters('managedResourceGroupId')),concat(subscription().id,'/resourceGroups/',take(concat(resourceGroup().name,'-',uniquestring(resourceGroup().id),uniquestring(parameters('applicationResourceName'))),90)),parameters('managedResourceGroupId'))]"
+        "managedResourceGroupId": "[if(empty(parameters('managedResourceGroupId')),concat(subscription().id,'/resourceGroups/',take(concat(resourceGroup().name,'-',uniquestring(resourceGroup().id),uniquestring(parameters('applicationResourceName'))),90)),concat(subscription().id,'/resourceGroups/',parameters('managedResourceGroupId')))]"
     },
     "resources": [
         {
