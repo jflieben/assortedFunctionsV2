@@ -333,18 +333,12 @@
                                 "required": true
                             },
                             "visible": true
-                        },
-                        {
-                            "name": "jitConfigurationControl",
-                            "toolTip": "ONLY FOR ENTERPRISE! Just In Time access for M365Permissions support. This allows M365Permissions support to request temporary access to your environment to help you with issues or questions. You can always disable (or enable) this later. See https://learn.microsoft.com/en-us/azure/azure-resource-manager/managed-applications/approve-just-in-time-access",
-                            "type": "Microsoft.Solutions.JitConfigurator",
-                            "label": "JIT Configuration"
                         }
                     ]
                 }
             ]
         },
-        "deployment": {
+        "outputs": {
             "kind": "ResourceGroup",
             "location": "[steps('basics').resourceScope.location.name]",
             "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]",
@@ -359,7 +353,6 @@
 				"customTags": "[steps('m365configuration').customTags]",
 				"applicationResourceName": "[steps('m365configuration').applicationName]",
 				"managedResourceGroupId": "[steps('m365configuration').rsgName]",
-				"jitAccessPolicy": "[steps('m365configuration').jitConfigurationControl]",
 				"version": "[steps('m365configuration').version]"
             },
             "template": {
