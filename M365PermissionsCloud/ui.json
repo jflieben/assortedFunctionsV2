@@ -1,340 +1,367 @@
 {
-    "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
-    "handler": "Microsoft.Azure.CreateUIDef",
-    "version": "0.1.2-preview",
-    "parameters": {
-          "config": {
-              "isWizard": false,
-              "basics": {
-                "description": "You're about to deploy **M365Permissions Standard**! If you need additional guidance, visit our [Getting Started](https://m365permissions.com/#/docs/getting-started) page.",
-                "location": {
-                  "allowedValues": [
-                    "australiaeast",
-                    "canadacentral",
-                    "centralus",
-                    "eastus2",
-                    "francecentral",
-                    "germanywestcentral",
-                    "japaneast",
-                    "northeurope",
-                    "southafricanorth",
-                    "southcentralus",
-                    "southeastasia",
-                    "swedencentral",
-                    "switzerlandnorth",
-                    "uksouth",
-                    "westeurope",
-                    "westus2",
-                    "westus3"
-                  ],
-                  "label": "Region",
-                  "toolTip": "Choose the Azure region to deploy in. Only supported regions are listed.",
-                  "resourceTypes": [
-                      "Microsoft.Compute/virtualMachines",
-                      "Microsoft.OperationalInsights/workspaces",
-                      "Microsoft.Storage/storageAccounts",
-                      "microsoft.insights/components",
-                      "Microsoft.Sql/servers",
-                      "Microsoft.Web/sites",
-                      "Microsoft.Web/serverfarms",
-                      "Microsoft.Automation/automationAccounts",
-                      "Microsoft.Network/networkInterfaces",
-                      "Microsoft.Network/virtualNetworks",
-                      "Microsoft.Network/networkSecurityGroups",
-                      "Microsoft.Authorization/roleAssignments"
-                  ],
-                  "visible": true
-                },
-                "subscription": {
-                  "resourceProviders": [
-                    "Microsoft.Compute",
-                    "Microsoft.Capacity",
-                    "Microsoft.Network",
-                    "Microsoft.ManagedIdentity",
-                    "Microsoft.Sql",
-                    "Microsoft.Storage",
-                    "Microsoft.Web",
-                    "Microsoft.Insights",
-                    "Microsoft.Automation",
-                    "Microsoft.OperationalInsights",
-                    "Microsoft.Authorization"
-                  ]
-                }                 
-              }
-          },        
-         "basics": [                  
-            {
-                "name": "textBox1",
-                "type": "Microsoft.Common.TextBox",
-                "label": "ContactName",
-                "defaultValue": "",
-                "constraints": {
-                    "required": false,
-                    "regex": "^.{0,128}$",
-                    "validationMessage": "Your name should not be longer than 128 characters"                    
-                },                
-                "toolTip": "Your full name, feel free to enter 'Anonymous' if you do not want us to register your name, it is only used in communication between you and us",
-                "visible": true
-            },
-            {
-                "name": "textBox2",
-                "type": "Microsoft.Common.TextBox",
-                "label": "ContactEmail",
-                "defaultValue": "",
-                "constraints": {
-                    "required": true,
-                    "regex": "(?=^.{6,128}$)(.+\\@.+\\..+)",
-                    "validationMessage": "Business email should not be longer than 128 characters and needs to be a valid email address"                    
-                },                
-                "toolTip": "Your (business) email address (to send the login URL to and notify of updates or other changes to M365Permissions)",
-                "visible": true
-            },
-            {
-              "name": "vmSize",
-              "type": "Microsoft.Compute.SizeSelector",
-              "label": "VM Size (default = optimized)",
-              "toolTip": "Leave as default, the solution will automatically (if you enable it) utilize Azure SPOT capacity if needed. The VM will also automatically shut down between delta scans.",
-              "recommendedSizes": [
-                "Standard_D2as_v6",
-                "Standard_D2as_v5",
-                "Standard_D2as_v4",
-                "Standard_D2s_v6",
-                "Standard_D2s_v5",
-                "Standard_D2_v5",
-                "Standard_D2a_v4",
-                "Standard_D2as_v4",
-                "Standard_DC2as_v5",
-                "Standard_E2as_v5",
-                "Standard_EC2as_v5"
-              ],
-              "constraints": {
-                "allowedSizes": ["Standard_D2as_v6","Standard_D2as_v5","Standard_D2as_v4","Standard_D2s_v5","Standard_D2s_v6","Standard_D2_v5","Standard_D2a_v4","Standard_D2as_v4","Standard_DC2as_v5","Standard_E2as_v5","Standard_EC2as_v5"],
-                "numAvailabilityZonesRequired": 1
-              },
-              "options": {
-                "hideDiskTypeFilter": true
-              },
-              "osPlatform": "Windows",
-              "imageReference": {
-                "publisher": "MicrosoftWindowsServer",
-                "offer": "WindowsServer",
-                "sku": "2025-datacenter-azure-edition-smalldisk"
-              },
-              "count": 1,
-              "visible": true
-            },
-            {
-              "name": "hybridBenefit",
-              "type": "Microsoft.Common.CheckBox",
-              "label": "Use Azure Hybrid Benefit and save up to 52% on VM cost",
-              "toolTip": "Check only if you have existing Windows Server 2025 licenses with Software Assurance.",
-              "constraints": {
-                "required": false
-              }
-            },            
-            {
-              "name": "text1",
-              "type": "Microsoft.Common.InfoBox",
-              "visible": "[equals(basics('hybridBenefit'), true)]",
-              "options": {
-                "icon": "Info",
-                "text": "The virtual machine(s) in this solution run on Windows. By deploying you confirm you have existing Windows Server 2025 licenses with Software Assurance.",
-                "uri": "https://learn.microsoft.com/windows-server/get-started/azure-hybrid-benefit?tabs=azure"
-              }
-            },
-            {
-              "name": "dropDown1",
-              "type": "Microsoft.Common.DropDown",
-              "label": "TenantSize",
-              "defaultValue": "50",
-              "toolTip": "Approximate number of users (used for database sizing only)",
-              "multiselect": false,
-              "selectAll": false,
-              "filter": false,
-              "filterPlaceholder": "Filter items ...",
-              "multiLine": true,
-              "defaultDescription": "Approximate number of users (used for database sizing only)",
-              "constraints": {
-                  "allowedValues": [
-                    {
-                      "label": "0-50",
-                      "description": "Up to 50 users",
-                      "value": "50"
-                    },
-                    {
-                      "label": "50-500",
-                      "description": "Up to 500 users",
-                      "value": "500"
-                    },
-                    {
-                      "label": "500-3000",
-                      "description": "Up to 3000 users",
-                      "value": "3000"
-                    },
-                    {
-                      "label": "3000-5000",
-                      "description": "Up to 5000 users",
-                      "value": "5000"
-                    },
-                    {
-                      "label": "5000-10000",
-                      "description": "Up to 10000 users",
-                      "value": "10000"
-                    },
-                    {
-                      "label": "10000-20000",
-                      "description": "Up to 20000 users",
-                      "value": "20000"
-                    },
-                    {
-                      "label": "20000-30000",
-                      "description": "Up to 30000 users",
-                      "value": "30000"
-                    },
-                    {
-                      "label": "30000+",
-                      "description": "More than 30000 users",
-                      "value": "30000+"
-                    }
-                  ],
-                  "required": true
-                },                
-              "visible": true
-            },
-            {
-              "name": "allowSelfAuth",
-              "type": "Microsoft.Common.CheckBox",
-              "label": "Allow M365Permissions to automatically scale up and down",
-              "toolTip": "M365Permissions will request additional permissions during setup so it can automatically create and remove disposable SPOT VM's for scanning. This is optional except for tenants with > 5000 users",
-              "visible": "[and(not(empty(basics('dropDown1'))),not(equals(basics('dropDown1'),'50')),not(equals(basics('dropDown1'),'500')))]",
-              "constraints": {
-                "required": "[and(not(empty(basics('dropDown1'))),not(equals(basics('dropDown1'),'50')),not(equals(basics('dropDown1'),'500')),not(equals(basics('dropDown1'),'3000')))]"
-              }
-            },            
-            {
-              "name": "text3",
-              "type": "Microsoft.Common.InfoBox",
-              "visible": "[and(not(empty(basics('dropDown1'))),not(equals(basics('dropDown1'),'50')),not(equals(basics('dropDown1'),'500')))]",
-              "options": {
-              "icon": "Info",
-              "text": "If selected, M365Permissions will request extra Graph scopes so it can temporarily create and remove Azure SPOT VM's (these are 4-6 cents/hour on average). This is optional except for tenants with > 5000 users to ensure scanning is done in a timely manner and without causing throttling.",
-              "uri": "https://m365permissions.com/#/docs/support#required-permissions"
-              }
-            }                       
-         ],
-         "steps": [
-          {
-            "name": "m365configuration",
-            "label": "M365Permissions Configuration",
-            "subLabel": {
-              "preValidation": "Configure M365Permissions",
-              "postValidation": "Done"
-            },
-            "bladeTitle": "Deployment Configuration",
-            "elements": [
-              {
-                "name": "applicationName",
-                "type": "Microsoft.Common.TextBox",
-                "label": "Azure Application Name",
-                "defaultValue": "app-M365Permissions-01",
-                "constraints": {
-                    "required": true,
-                    "regex": "^[a-zA-Z0-9-]{3,64}$",
-                    "validationMessage": "The name should be between 3 and 64 characters and can only contain letters, numbers, and hyphens."
-                },
-                "toolTip": "This is going to be the name of your Azure Application object that is created during setup in the resource group you selected",
-                "visible": true
-              },
-              {
-                "name": "rsgName",
-                "type": "Microsoft.Common.TextBox",
-                "label": "Resource Group Name",
-                "defaultValue": "rsg-M365Permissions-01",
-                "constraints": {
-                    "required": true,
-                    "regex": "^[a-zA-Z0-9-]{3,64}$",
-                    "validationMessage": "The name should be between 3 and 64 characters and can only contain letters, numbers, and hyphens."
-                },
-                "toolTip": "This resource group will be automatically created and will contain all resources for M365Permissions. It will be read-only after deployment.",
-                "visible": true
-              },
-              {
-                "name": "SetCustomTags",
-                "type": "Microsoft.Common.CheckBox",
-                "label": "I want to customize Azure Resource Tags",
-                "toolTip": "As the deployed resource group is read-only, you or Azure Policy will be unable to add tags after deployment. Select this option to specify custom tags.",
-                "visible": true
-              },
-              {
-                "name": "customTags",
-                "type": "Microsoft.Common.TagsByResource",
-                "visible": "[equals(steps('m365configuration').SetCustomTags, true)]",
-                "toolTip": "As the deployed resource group is read-only, you or Azure Policy will be unable to add tags after deployment. Choose to set your tags for all or for specific resources.",
-                "resources": [
-                  "Microsoft.Solutions/applications",
-                  "Microsoft.Sql/servers",
-                  "Microsoft.OperationalInsights/workspaces",
-                  "Microsoft.Web/serverfarms",
-                  "Microsoft.Web/sites",
-                  "Microsoft.Network/networkInterfaces",
-                  "Microsoft.Network/virtualNetworks",
-                  "Microsoft.Network/networkSecurityGroups",
-                  "Microsoft.Network/virtualNetworks/subnets",
-                  "Microsoft.Automation/automationAccounts"
-                ]
-              },
-              {
-                "name": "version",
-                "type": "Microsoft.Common.DropDown",
-                "label": "Choose which version to install",
-                "placeholder": "",
-                "defaultValue": ["Standard"],
-                "toolTip": "see www.m365permissions.com for details",
-                "multiselect": false,
-                "selectAll": false,
-                "filter": false,
-                "filterPlaceholder": "Filter items ...",
-                "multiLine": true,
-                "defaultDescription": "Standard package",
-                "constraints": {
-                    "allowedValues": [
-                    {
-                        "label": "Standard",
-                        "description": "M365Permissions Standard",
-                        "value": "standard"
-                    },
-                    {
-                        "label": "Enterprise",
-                        "description": "M365Permissions Enterprise",
-                        "value": "enterprise"
-                    }
+    "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json",
+    "view": {
+        "kind": "Form",
+        "properties": {
+            "title": "Test Form View",
+            "steps": [
+                {
+                    "name": "basics",
+                    "label": "Basics",
+                    "elements": [
+                        {
+                            "name": "resourceScope",
+                            "type": "Microsoft.Common.ResourceScope",
+                            "location": {
+                                "allowedValues": [
+                                    "australiaeast",
+                                    "canadacentral",
+                                    "centralus",
+                                    "eastus2",
+                                    "francecentral",
+                                    "germanywestcentral",
+                                    "japaneast",
+                                    "northeurope",
+                                    "southafricanorth",
+                                    "southcentralus",
+                                    "southeastasia",
+                                    "swedencentral",
+                                    "switzerlandnorth",
+                                    "uksouth",
+                                    "westeurope",
+                                    "westus2",
+                                    "westus3"
+                                ],
+                                "label": "Region",
+                                "toolTip": "Choose the Azure region to deploy in. Only supported regions are listed.",
+                                "resourceTypes": [
+                                    "Microsoft.Compute/virtualMachines",
+                                    "Microsoft.OperationalInsights/workspaces",
+                                    "Microsoft.Storage/storageAccounts",
+                                    "microsoft.insights/components",
+                                    "Microsoft.Sql/servers",
+                                    "Microsoft.Web/sites",
+                                    "Microsoft.Web/serverfarms",
+                                    "Microsoft.Automation/automationAccounts",
+                                    "Microsoft.Network/networkInterfaces",
+                                    "Microsoft.Network/virtualNetworks",
+                                    "Microsoft.Network/networkSecurityGroups",
+                                    "Microsoft.Authorization/roleAssignments"
+                                ]
+                            },
+                            "subscription": {
+                                "resourceProviders": [
+                                    "Microsoft.Compute",
+                                    "Microsoft.Capacity",
+                                    "Microsoft.Network",
+                                    "Microsoft.ManagedIdentity",
+                                    "Microsoft.Sql",
+                                    "Microsoft.Storage",
+                                    "Microsoft.Web",
+                                    "Microsoft.Insights",
+                                    "Microsoft.Automation",
+                                    "Microsoft.OperationalInsights",
+                                    "Microsoft.Authorization"
+                                ]
+                            }
+                        },
+                        {
+                            "name": "textBox1",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "ContactName",
+                            "defaultValue": "",
+                            "constraints": {
+                                "required": false,
+                                "regex": "^.{0,128}$",
+                                "validationMessage": "Your name should not be longer than 128 characters"
+                            },
+                            "toolTip": "Your full name, feel free to enter 'Anonymous' if you do not want us to register your name, it is only used in communication between you and us",
+                            "visible": true
+                        },
+                        {
+                            "name": "textBox2",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "ContactEmail",
+                            "defaultValue": "",
+                            "constraints": {
+                                "required": true,
+                                "regex": "(?=^.{6,128}$)(.+\\@.+\\..+)",
+                                "validationMessage": "Business email should not be longer than 128 characters and needs to be a valid email address"
+                            },
+                            "toolTip": "Your (business) email address (to send the login URL to and notify of updates or other changes to M365Permissions)",
+                            "visible": true
+                        },
+                        {
+                            "name": "vmSize",
+                            "type": "Microsoft.Compute.SizeSelector",
+                            "label": "VM Size (default = optimized)",
+                            "toolTip": "Leave as default, the solution will automatically (if you enable it) utilize Azure SPOT capacity if needed. The VM will also automatically shut down between delta scans.",
+                            "recommendedSizes": [
+                                "Standard_D2as_v6",
+                                "Standard_D2as_v5",
+                                "Standard_D2as_v4",
+                                "Standard_D2s_v6",
+                                "Standard_D2s_v5",
+                                "Standard_D2_v5",
+                                "Standard_D2a_v4",
+                                "Standard_D2as_v4",
+                                "Standard_DC2as_v5",
+                                "Standard_E2as_v5",
+                                "Standard_EC2as_v5"
+                            ],
+                            "constraints": {
+                                "allowedSizes": [
+                                    "Standard_D2as_v6",
+                                    "Standard_D2as_v5",
+                                    "Standard_D2as_v4",
+                                    "Standard_D2s_v5",
+                                    "Standard_D2s_v6",
+                                    "Standard_D2_v5",
+                                    "Standard_D2a_v4",
+                                    "Standard_D2as_v4",
+                                    "Standard_DC2as_v5",
+                                    "Standard_E2as_v5",
+                                    "Standard_EC2as_v5"
+                                ],
+                                "numAvailabilityZonesRequired": 1
+                            },
+                            "options": {
+                                "hideDiskTypeFilter": true
+                            },
+                            "osPlatform": "Windows",
+                            "imageReference": {
+                                "publisher": "MicrosoftWindowsServer",
+                                "offer": "WindowsServer",
+                                "sku": "2025-datacenter-azure-edition-smalldisk"
+                            },
+                            "count": 1,
+                            "visible": true,
+                            "scope": {
+                                "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
+                                "location": "[steps('basics').resourceScope.location.name]"
+                            }
+                        },
+                        {
+                            "name": "hybridBenefit",
+                            "type": "Microsoft.Common.CheckBox",
+                            "label": "Use Azure Hybrid Benefit and save up to 52% on VM cost",
+                            "toolTip": "Check only if you have existing Windows Server 2025 licenses with Software Assurance.",
+                            "constraints": {
+                                "required": false
+                            }
+                        },
+                        {
+                            "name": "text1",
+                            "type": "Microsoft.Common.InfoBox",
+                            "visible": "[equals(steps('basics').hybridBenefit,true)]",
+                            "options": {
+                                "text": "The virtual machine(s) in this solution run on Windows. By deploying you confirm you have existing Windows Server 2025 licenses with Software Assurance.",
+                                "uri": "https://learn.microsoft.com/windows-server/get-started/azure-hybrid-benefit?tabs=azure",
+                                "style": "Info"
+                            }
+                        },
+                        {
+                            "name": "dropDown1",
+                            "type": "Microsoft.Common.DropDown",
+                            "label": "TenantSize",
+                            "defaultValue": "50",
+                            "toolTip": "Approximate number of users (used for database sizing only)",
+                            "multiselect": false,
+                            "selectAll": false,
+                            "filter": false,
+                            "filterPlaceholder": "Filter items ...",
+                            "multiLine": true,
+                            "defaultDescription": "Approximate number of users (used for database sizing only)",
+                            "constraints": {
+                                "allowedValues": [
+                                    {
+                                        "label": "0-50",
+                                        "description": "Up to 50 users",
+                                        "value": "50"
+                                    },
+                                    {
+                                        "label": "50-500",
+                                        "description": "Up to 500 users",
+                                        "value": "500"
+                                    },
+                                    {
+                                        "label": "500-3000",
+                                        "description": "Up to 3000 users",
+                                        "value": "3000"
+                                    },
+                                    {
+                                        "label": "3000-5000",
+                                        "description": "Up to 5000 users",
+                                        "value": "5000"
+                                    },
+                                    {
+                                        "label": "5000-10000",
+                                        "description": "Up to 10000 users",
+                                        "value": "10000"
+                                    },
+                                    {
+                                        "label": "10000-20000",
+                                        "description": "Up to 20000 users",
+                                        "value": "20000"
+                                    },
+                                    {
+                                        "label": "20000-30000",
+                                        "description": "Up to 30000 users",
+                                        "value": "30000"
+                                    },
+                                    {
+                                        "label": "30000+",
+                                        "description": "More than 30000 users",
+                                        "value": "30000+"
+                                    }
+                                ],
+                                "required": true
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "allowSelfAuth",
+                            "type": "Microsoft.Common.CheckBox",
+                            "label": "Allow M365Permissions to automatically scale up and down",
+                            "toolTip": "M365Permissions will request additional permissions during setup so it can automatically create and remove disposable SPOT VM's for scanning. This is optional except for tenants with > 5000 users",
+                            "visible": "[and(not(empty(steps('basics').dropDown1)),not(equals(steps('basics').dropDown1,'50')),not(equals(steps('basics').dropDown1,'500')))]",
+                            "constraints": {
+                                "required": "[and(not(empty(steps('basics').dropDown1)),not(equals(steps('basics').dropDown1,'50')),not(equals(steps('basics').dropDown1,'500')),not(equals(steps('basics').dropDown1,'3000')))]"
+                            }
+                        },
+                        {
+                            "name": "text3",
+                            "type": "Microsoft.Common.InfoBox",
+                            "visible": "[and(not(empty(steps('basics').dropDown1)),not(equals(steps('basics').dropDown1,'50')),not(equals(steps('basics').dropDown1,'500')))]",
+                            "options": {
+                                "text": "If selected, M365Permissions will request extra Graph scopes so it can temporarily create and remove Azure SPOT VM's (these are 4-6 cents/hour on average). This is optional except for tenants with > 5000 users to ensure scanning is done in a timely manner and without causing throttling.",
+                                "uri": "https://m365permissions.com/#/docs/support#required-permissions",
+                                "style": "Info"
+                            }
+                        }
                     ],
-                    "required": true
+                    "description": "You're about to deploy **M365Permissions Standard**! If you need additional guidance, visit our [Getting Started](https://m365permissions.com/#/docs/getting-started) page."
                 },
-                "visible": true
-             },
-             {
-                "name": "jitConfigurationControl",
-                "toolTip": "ONLY FOR ENTERPRISE! Just In Time access for M365Permissions support. This allows M365Permissions support to request temporary access to your environment to help you with issues or questions. You can always disable (or enable) this later. See https://learn.microsoft.com/en-us/azure/azure-resource-manager/managed-applications/approve-just-in-time-access",
-                "type": "Microsoft.Solutions.JitConfigurator",
-                "label": "JIT Configuration"
-             }                 
-            ]
-          }           
-         ],
-         "outputs": {
-             "ContactName": "[basics('textBox1')]",
-             "ContactEmail": "[basics('textBox2')]",
-             "TenantSize": "[basics('dropDown1')]",
-             "vmSize": "[basics('vmSize')]",
-             "UseAzureHybridBenefit": "[basics('hybridBenefit')]",
-             "allowSelfAuth": "[basics('allowSelfAuth')]",
-             "Location": "[location()]",
-             "customTags": "[steps('m365configuration').customTags]",
-             "applicationResourceName": "[steps('m365configuration').applicationName]",
-             "managedResourceGroupId": "[steps('m365configuration').rsgName]",
-             "jitAccessPolicy": "[steps('m365configuration').jitConfigurationControl]",
-             "version": "[steps('m365configuration').version]"
-         }
-     }
- }
+                {
+                    "name": "m365configuration",
+                    "label": "M365Permissions Configuration",
+                    "subLabel": {
+                        "preValidation": "Configure M365Permissions",
+                        "postValidation": "Done"
+                    },
+                    "bladeTitle": "Deployment Configuration",
+                    "elements": [
+                        {
+                            "name": "applicationName",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Azure Application Name",
+                            "defaultValue": "app-M365Permissions-01",
+                            "constraints": {
+                                "required": true,
+                                "regex": "^[a-zA-Z0-9-]{3,64}$",
+                                "validationMessage": "The name should be between 3 and 64 characters and can only contain letters, numbers, and hyphens."
+                            },
+                            "toolTip": "This is going to be the name of your Azure Application object that is created during setup in the resource group you selected",
+                            "visible": true
+                        },
+                        {
+                            "name": "rsgName",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Resource Group Name",
+                            "defaultValue": "rsg-M365Permissions-01",
+                            "constraints": {
+                                "required": true,
+                                "regex": "^[a-zA-Z0-9-]{3,64}$",
+                                "validationMessage": "The name should be between 3 and 64 characters and can only contain letters, numbers, and hyphens."
+                            },
+                            "toolTip": "This resource group will be automatically created and will contain all resources for M365Permissions. It will be read-only after deployment.",
+                            "visible": true
+                        },
+                        {
+                            "name": "SetCustomTags",
+                            "type": "Microsoft.Common.CheckBox",
+                            "label": "I want to customize Azure Resource Tags",
+                            "toolTip": "As the deployed resource group is read-only, you or Azure Policy will be unable to add tags after deployment. Select this option to specify custom tags.",
+                            "visible": true
+                        },
+                        {
+                            "name": "customTags",
+                            "type": "Microsoft.Common.TagsByResource",
+                            "visible": "[equals(steps('m365configuration').SetCustomTags,true)]",
+                            "toolTip": "As the deployed resource group is read-only, you or Azure Policy will be unable to add tags after deployment. Choose to set your tags for all or for specific resources.",
+                            "resources": [
+                                "Microsoft.Solutions/applications",
+                                "Microsoft.Sql/servers",
+                                "Microsoft.OperationalInsights/workspaces",
+                                "Microsoft.Web/serverfarms",
+                                "Microsoft.Web/sites",
+                                "Microsoft.Network/networkInterfaces",
+                                "Microsoft.Network/virtualNetworks",
+                                "Microsoft.Network/networkSecurityGroups",
+                                "Microsoft.Network/virtualNetworks/subnets",
+                                "Microsoft.Automation/automationAccounts"
+                            ]
+                        },
+                        {
+                            "name": "version",
+                            "type": "Microsoft.Common.DropDown",
+                            "label": "Choose which version to install",
+                            "placeholder": "",
+                            "defaultValue": [
+                                "Standard"
+                            ],
+                            "toolTip": "see www.m365permissions.com for details",
+                            "multiselect": false,
+                            "selectAll": false,
+                            "filter": false,
+                            "filterPlaceholder": "Filter items ...",
+                            "multiLine": true,
+                            "defaultDescription": "Standard package",
+                            "constraints": {
+                                "allowedValues": [
+                                    {
+                                        "label": "Standard",
+                                        "description": "M365Permissions Standard",
+                                        "value": "standard"
+                                    },
+                                    {
+                                        "label": "Enterprise",
+                                        "description": "M365Permissions Enterprise",
+                                        "value": "enterprise"
+                                    }
+                                ],
+                                "required": true
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "jitConfigurationControl",
+                            "toolTip": "ONLY FOR ENTERPRISE! Just In Time access for M365Permissions support. This allows M365Permissions support to request temporary access to your environment to help you with issues or questions. You can always disable (or enable) this later. See https://learn.microsoft.com/en-us/azure/azure-resource-manager/managed-applications/approve-just-in-time-access",
+                            "type": "Microsoft.Solutions.JitConfigurator",
+                            "label": "JIT Configuration"
+                        }
+                    ]
+                }
+            ],
+        "outputs": {
+            "kind": "ResourceGroup",
+            "location": "[steps('basics').resourceScope.location.name]",
+            "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]",
+            "parameters": {
+				"ContactName": "[steps('basics').textBox1]",
+				"ContactEmail": "[steps('basics').textBox2]",
+				"TenantSize": "[steps('basics').dropDown1]",
+				"vmSize": "[steps('basics').vmSize]",
+				"UseAzureHybridBenefit": "[steps('basics').hybridBenefit]",
+				"allowSelfAuth": "[steps('basics').allowSelfAuth]",
+				"Location": "[steps('basics').resourceScope.location.name]",
+				"customTags": "[steps('m365configuration').customTags]",
+				"applicationResourceName": "[steps('m365configuration').applicationName]",
+				"managedResourceGroupId": "[steps('m365configuration').rsgName]",
+				"jitAccessPolicy": "[steps('m365configuration').jitConfigurationControl]",
+				"version": "[steps('m365configuration').version]"
+            }
+        }	
+        }
+    }
+}
