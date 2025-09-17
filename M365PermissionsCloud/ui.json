@@ -344,7 +344,7 @@
                 }
             ]
         },
-        "outputs": {
+        "deployment": {
             "kind": "ResourceGroup",
             "location": "[steps('basics').resourceScope.location.name]",
             "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]",
@@ -361,7 +361,10 @@
 				"managedResourceGroupId": "[steps('m365configuration').rsgName]",
 				"jitAccessPolicy": "[steps('m365configuration').jitConfigurationControl]",
 				"version": "[steps('m365configuration').version]"
+            },
+            "template": {
+                "file": "<ARM deployment template relative path>"
             }
-        }	
+        }
     }
 }
