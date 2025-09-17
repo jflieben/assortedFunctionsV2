@@ -3,11 +3,12 @@
     "view": {
         "kind": "Form",
         "properties": {
-            "title": "Test Form View",
+            "title": "M365Permissions",
             "steps": [
                 {
                     "name": "basics",
                     "label": "Basics",
+                    "description": "You're about to deploy **M365Permissions**! If you need additional guidance, visit our [Getting Started](https://m365permissions.com/#/docs/getting-started) page.",
                     "elements": [
                         {
                             "name": "resourceScope",
@@ -239,8 +240,7 @@
                                 "style": "Info"
                             }
                         }
-                    ],
-                    "description": "You're about to deploy **M365Permissions Standard**! If you need additional guidance, visit our [Getting Started](https://m365permissions.com/#/docs/getting-started) page."
+                    ]
                 },
                 {
                     "name": "m365configuration",
@@ -298,7 +298,6 @@
                                 "Microsoft.Network/networkInterfaces",
                                 "Microsoft.Network/virtualNetworks",
                                 "Microsoft.Network/networkSecurityGroups",
-                                "Microsoft.Network/virtualNetworks/subnets",
                                 "Microsoft.Automation/automationAccounts"
                             ]
                         },
