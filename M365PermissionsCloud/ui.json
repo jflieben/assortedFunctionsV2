@@ -285,12 +285,23 @@
                             "visible": true
                         },
                         {
+                            "name": "tagsRsgWarning",
+                            "type": "Microsoft.Common.InfoBox",
+                            "visible": "[equals(steps('m365configuration').SetCustomTags,true)]",
+                            "options": {
+                            "icon": "Warning",
+                            "text": "Select Managed Application as Resource when targetting a resource group to tag the resource group itself.",
+                            "uri": "https://m365permissions.com/#/docs/support#configure-resource-group-tags"
+                            }
+                        }, 
+                        {
                             "name": "customTags",
                             "type": "Microsoft.Common.TagsByResource",
                             "visible": "[equals(steps('m365configuration').SetCustomTags,true)]",
                             "toolTip": "As the deployed resource group is read-only, you or Azure Policy will be unable to add tags after deployment. Choose to set your tags for all or for specific resources.",
                             "resources": [
                                 "Microsoft.Solutions/applications",
+                                "Microsoft.Compute/virtualMachines",
                                 "Microsoft.Sql/servers",
                                 "Microsoft.OperationalInsights/workspaces",
                                 "Microsoft.Web/serverfarms",
@@ -300,17 +311,7 @@
                                 "Microsoft.Network/networkSecurityGroups",
                                 "Microsoft.Automation/automationAccounts"
                             ]
-                        },
-                        {
-                            "name": "chooseVersionInfo",
-                            "type": "Microsoft.Common.InfoBox",
-                            "visible": true,
-                            "options": {
-                                "text": "Click here to compare versions and features",
-                                "uri": "https://m365permissions.com/#/docs/support#edition-comparison",
-                                "style": "Info"
-                            }
-                        },                
+                        },            
                         {
                             "name": "version",
                             "type": "Microsoft.Common.DropDown",
@@ -340,6 +341,16 @@
                                 "required": true
                             },
                             "visible": true
+                        },
+                        {
+                            "name": "chooseVersionInfo",
+                            "type": "Microsoft.Common.InfoBox",
+                            "visible": true,
+                            "options": {
+                                "text": "Click here to compare versions and features",
+                                "uri": "https://m365permissions.com/#/docs/support#edition-comparison",
+                                "style": "Info"
+                            }
                         }
                     ]
                 }
