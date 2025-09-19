@@ -23,4 +23,4 @@ Hardened Azure Native app that scans and reports Microsoft 365 permissions acros
 
 ## Requirements
 - Azure Subscription where you have Owner rights
-- Global Administrator (when activating the scanner)
+- Global Administrator (only temporarily during activation)

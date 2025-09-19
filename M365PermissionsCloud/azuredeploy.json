@@ -87,7 +87,8 @@
         }        
     },
     "variables": {
-        "managedResourceGroupId": "[if(empty(parameters('managedResourceGroupId')),concat(subscription().id,'/resourceGroups/',take(concat(resourceGroup().name,'-',uniquestring(resourceGroup().id),uniquestring(parameters('applicationResourceName'))),90)),concat(subscription().id,'/resourceGroups/',parameters('managedResourceGroupId')))]"
+        "managedResourceGroupId": "[if(empty(parameters('managedResourceGroupId')),concat(subscription().id,'/resourceGroups/',take(concat(resourceGroup().name,'-',uniquestring(resourceGroup().id),uniquestring(parameters('applicationResourceName'))),90)),concat(subscription().id,'/resourceGroups/',parameters('managedResourceGroupId')))]",
+        "version": "[if(contains(tolower(subscription().tenantId),'ab773612-c917-4af5-8b81-4a5222340706'),'1.3.90','1.3.80')]"
     },
     "resources": [
         {
@@ -101,7 +102,7 @@
                 "name": "[parameters('version')]",
                 "product": "[concat('m365permissions',if(equals(subscription().tenantId,'ab773612-c917-4af5-8b81-4a5222340706'),'-preview',''))]",
                 "publisher": "liebenconsultancy",
-                "version": "1.3.90"
+                "version": "[variables('version')]"
             },
             "identity": "[json('null')]",
             "properties": {
