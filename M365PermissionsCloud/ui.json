@@ -47,7 +47,10 @@
                                     "Microsoft.Network/networkInterfaces",
                                     "Microsoft.Network/virtualNetworks",
                                     "Microsoft.Network/networkSecurityGroups",
-                                    "Microsoft.Authorization/roleAssignments"
+                                    "Microsoft.Authorization/roleAssignments",
+                                    "Microsoft.Network/privateDnsZones",
+                                    "Microsoft.Network/privateEndpoints",
+                                    "Microsoft.KeyVault/vaults"
                                 ]
                             },
                             "subscription": {
@@ -62,7 +65,8 @@
                                     "Microsoft.Insights",
                                     "Microsoft.Automation",
                                     "Microsoft.OperationalInsights",
-                                    "Microsoft.Authorization"
+                                    "Microsoft.Authorization",
+                                    "Microsoft.KeyVault"
                                 ]
                             }
                         },
@@ -309,7 +313,10 @@
                                 "Microsoft.Network/networkInterfaces",
                                 "Microsoft.Network/virtualNetworks",
                                 "Microsoft.Network/networkSecurityGroups",
-                                "Microsoft.Automation/automationAccounts"
+                                "Microsoft.Automation/automationAccounts",
+                                "Microsoft.Network/privateDnsZones",
+                                "Microsoft.Network/privateEndpoints",
+                                "Microsoft.KeyVault/vaults"                             
                             ]
                         },            
                         {
