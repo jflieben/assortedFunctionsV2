@@ -10,7 +10,7 @@ This is for reference only, the deployment is fully automated.
 
 The solution utilizes Platform-as-a-Service (PaaS) for the backend and database to minimize maintenance, while using a specialized Compute instance (VM) for high-performance scanning.
 
-::: mermaid
+``` mermaid
 graph TD
     subgraph "Your Azure Subscription"
         subgraph "Resource Group"
@@ -46,13 +46,13 @@ graph TD
     %% Monitoring
     VM -->|Logs| LAW
     WEB -->|Telemetry| AI
-:::
+```
 
 ## 🏗️ Architecture Overview of the Enterprise Edition
 
 The Enterprise solution deploys a Virtual Network (VNet) and projects PaaS services (SQL, Key Vault, Web App) into that network using Private Endpoints.
 
-::: mermaid
+``` mermaid
 graph TD
     subgraph "Your Azure Subscription"
         subgraph "Resource Group"
@@ -102,7 +102,7 @@ graph TD
 
     %% Identity
     AA -->|Trigger| VM
-:::
+```
 
 ## 🌐 Connectivity & Internet Exposure
 
@@ -120,7 +120,7 @@ The Enterprise version includes private endpoints for additional integration opt
 
 We utilize **System Assigned Managed Identities** to eliminate hardcoded credentials and secret rotation.
 
-::: mermaid
+``` mermaid
 sequenceDiagram
     participant VM as Scanner VM
     participant KV as Key Vault
@@ -135,7 +135,7 @@ sequenceDiagram
     M365-->>VM: API Responses
     
     VM->>SQL: Store Processed Data (Encrypted Connection)
-:::
+```
 
 ## 📦 Component Bill of Materials
 
