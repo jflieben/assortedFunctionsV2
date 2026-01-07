@@ -4,7 +4,7 @@ function Get-EntraDynamicGroupType{
         Author:            Jos Lieben (Lieben Consultancy)
         Blog:              https://www.lieben.nu
         Purpose:           For a given entra group GUID, which high efficiency / speed, return 'AllUsers', 'AllInternalUsers', 'AllGuests' or Null depending on who's in it
-                           optionally, use a wider drif ratio if your tenant is small and has large user delta's while using this function
+                           optionally, use a wider drift ratio if your tenant is small and has large user delta's while using this function
     #>    
     Param(
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
