@@ -118,7 +118,7 @@ The Enterprise version includes private endpoints for additional integration opt
 
 ## 🔐 Identity & Access Model
 
-We utilize **System Assigned Managed Identities** to eliminate hardcoded credentials and secret rotation.
+We utilize **System Assigned Managed Identities** to eliminate hardcoded credentials and secret rotation. The frontend does NOT have access to anything except the database, thereby assuring that even if it is compromised, no direct access to the tenant can occur.
 
 ``` mermaid
 sequenceDiagram
@@ -131,7 +131,7 @@ sequenceDiagram
     VM->>KV: Request Secrets (via Managed Identity)
     KV-->>VM: Returns Credentials / Config
     
-    VM->>M365: Scan Tenant Permissions (Graph API)
+    VM->>M365: Scan Permissions (MI auth to Graph API)
     M365-->>VM: API Responses
     
     VM->>SQL: Store Processed Data (Encrypted Connection)
@@ -142,9 +142,9 @@ sequenceDiagram
 | Resource Type | SKU | Purpose | Version |
 |---------------|-----|---------|---------|
 | `Microsoft.Compute/virtualMachines` | User Selected | **The Worker.** Runs the scanning engine on a hardened image. | Both |
-| `Microsoft.Sql/servers/databases` | Standard | **The Memory.** Stores historical permission data and configuration. | Both |
+| `Microsoft.Sql/servers/databases` | Standard | **The Memory.** Stores discovered permission data (incl historical). | Both |
 | `Microsoft.Web/sites` (App Service) | F1 or B1 | **The Interface.** Linux container hosting the secure dashboard. | Both |
-| `Microsoft.KeyVault/vaults` | Standard | **The Safe.** Stores secrets and persistent configuration. | Both |
+| `Microsoft.KeyVault/vaults` | Standard | **The Safe.** Stores (internal) secrets and persistented configuration. | Both |
 | `Microsoft.Automation/automationAccounts` | Basic | **The Clock.** Managed the wake/sleep times of the VM. | Both |
 | `Microsoft.Insights/components` | Standard | **The Pulse.** Monitors application health and performance. | Both |
 | `Microsoft.Network/privateEndpoints` | N/A | **The Bridges.** Connects PaaS services to the VNet. | Enterprise |
@@ -152,7 +152,7 @@ sequenceDiagram
 
 ## 🛡️ Permissions Required
 
-Resources in this deployment require specific RBAC assignments to function automatically:
+Resources in the Azure part of M365Permissions require specific RBAC assignments to function, these are **assigned automatically**:
 
 1. **Scanner VM**: Assigned `Owner` on the Resource Group to facilitate self-healing and auto-scaling operations.
 2. **Scanner VM**: Assigned `Key Vault Administrator` to manage internal secrets.
