@@ -1,6 +1,4 @@
-# M365PermissionsCloud - Technical Architecture
-
-This document tracks the technical architecture deployed through Azure Marketplace.
+This document tracks the technical architecture of M365Permissions when deployed through Azure Marketplace. Private. Secure.
 
 This is for reference only, the deployment is fully automated.
 
