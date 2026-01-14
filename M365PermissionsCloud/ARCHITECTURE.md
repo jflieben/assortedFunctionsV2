@@ -96,10 +96,7 @@ graph TD
     VM <-->|Private Link| SQL
     VM <-->|Private Link | KV
     GR -.->|Retrieves permissions| VM
-    WEB <-->Private Link| SQL
-    
-    %% Web Flow
-    WEB_INT -->|Reads Reports| PE_SQL
+    WEB <-->|Private Link| SQL
 
     %% Monitoring
     VM -->|Logs| LAW
