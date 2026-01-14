@@ -12,6 +12,7 @@ The solution utilizes Platform-as-a-Service (PaaS) for the backend and database 
 
 ``` mermaid
 graph TD
+    GR[Microsoft Graph and other API's]
     subgraph "Your Azure Subscription"
         subgraph "Resource Group"
             
@@ -36,6 +37,7 @@ graph TD
     %% Data Flow
     AA -->|Triggers| VM
     VM -->|Writes Permissions Data| SQL
+    GR -->|Retrieves permissions| VM
     WEB -->|Reads Reports| SQL
     
     %% Security Flow
