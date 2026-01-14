@@ -12,7 +12,9 @@ The solution utilizes Platform-as-a-Service (PaaS) for the backend and database 
 
 ``` mermaid
 graph TD
-    GR[Microsoft Graph and other API's]
+    subgraph "Microsoft"
+        GR[Microsoft Graph <br/>(and other API's)]
+    end
     subgraph "Your Azure Subscription"
         subgraph "Resource Group"
             
@@ -21,7 +23,7 @@ graph TD
                 AA[Automation Account <br/> Scheduler]
             end
 
-            subgraph "Data & Security"
+            subgraph "Data and Config"
                 SQL[(Azure SQL <br/> Database)]
                 KV[Key Vault <br/> Secrets & Config]
             end
@@ -37,13 +39,11 @@ graph TD
     %% Data Flow
     AA -->|Triggers| VM
     VM -->|Writes Permissions Data| SQL
-    GR -->|Retrieves permissions| VM
+    GR -.->|Retrieves permissions| VM
     WEB -->|Reads Reports| SQL
     
     %% Security Flow
     VM -.->|Managed Identity| KV
-    WEB -.->|Managed Identity| KV
-    VM -.->|Managed Identity| SQL
     
     %% Monitoring
     VM -->|Logs| LAW
@@ -56,6 +56,9 @@ The Enterprise solution deploys a Virtual Network (VNet) and projects PaaS servi
 
 ``` mermaid
 graph TD
+    subgraph "Microsoft"
+        GR[Microsoft Graph <br/>(and other API's)]
+    end
     subgraph "Your Azure Subscription"
         subgraph "Resource Group"
             
@@ -91,7 +94,8 @@ graph TD
 
     %% Network Flow
     VM <-->|Private IP| PE_SQL
-    VM <-->|Private IP| PE_KV
+    VM <-->|Private IP| PE_KV`
+    GR -.->|Retrieves permissions| VM
     
     %% PaaS Links
     PE_SQL -.->|Private Link| SQL
@@ -99,8 +103,12 @@ graph TD
     PE_WEB -.->|Private Link| WEB
     
     %% Web Flow
-    WEB_INT -->|Outbound Queries| PE_SQL
-    WEB -.->|VNet Integrated/Hosted| WEB_INT
+    WEB_INT -->|Reads Reports| PE_SQL
+    WEB -.->|VNet Integrated| WEB_INT
+
+    %% Monitoring
+    VM -->|Logs| LAW
+    WEB -->|Telemetry| AI
 
     %% Identity
     AA -->|Trigger| VM
@@ -127,14 +135,14 @@ sequenceDiagram
     participant VM as Scanner VM
     participant KV as Key Vault
     participant SQL as SQL Database
-    participant M365 as Microsoft 365 API
+    participant M365 as Microsoft 365 API's
 
     Note over VM: Build Process / Daily Scan
-    VM->>KV: Request Secrets (via Managed Identity)
+    VM->>KV: Request Config at boot (via Managed Identity)
     KV-->>VM: Returns Credentials / Config
     
     VM->>M365: Scan Permissions (MI auth to Graph API)
-    M365-->>VM: API Responses
+    M365-->>VM: Permission information
     
     VM->>SQL: Store Processed Data (Encrypted Connection)
 ```
