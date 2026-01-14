@@ -57,7 +57,7 @@ The Enterprise solution deploys a Virtual Network (VNet) and projects PaaS servi
 ``` mermaid
 graph TD
     subgraph "Microsoft"
-        GR[Microsoft Graph <br/>(and other API's)]
+        GR[Microsoft Graph <br/>and other API's]
     end
     subgraph "Your Azure Subscription"
         subgraph "Resource Group"
