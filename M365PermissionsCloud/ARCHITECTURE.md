@@ -39,11 +39,11 @@ graph TD
     %% Data Flow
     AA -->|Triggers| VM
     VM -->|Writes Permissions Data| SQL
-    GR -.->|Retrieves permissions| VM
-    WEB -->|Reads Reports| SQL
+    GR <-.->|Retrieves permissions| VM
+    WEB <-->|Reads Reports| SQL
     
     %% Security Flow
-    VM -.->|Managed Identity| KV
+    VM <-.->|Managed Identity| KV
     
     %% Monitoring
     VM -->|Logs| LAW
@@ -74,7 +74,7 @@ graph TD
                 end
 
                 subgraph "Subnet: AppSvc (Delegated)"
-                    WEB_INT[WebApp VNet Integration]
+                    WEB_INT[WebApp VNet <br/>Integration]
                 end
             end
 
@@ -95,7 +95,7 @@ graph TD
     %% Network Flow
     VM <-->|Private Link| SQL
     VM <-->|Private Link | KV
-    GR -.->|Retrieves permissions| VM
+    GR <-.->|Retrieves permissions| VM
     WEB <-->|Private Link| SQL
 
     %% Monitoring
