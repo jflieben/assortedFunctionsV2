@@ -93,18 +93,13 @@ graph TD
     end
 
     %% Network Flow
-    VM <-->|Private IP| PE_SQL
-    VM <-->|Private IP| PE_KV`
+    VM <-->|Private Link| SQL
+    VM <-->|Private Link | KV
     GR -.->|Retrieves permissions| VM
-    
-    %% PaaS Links
-    PE_SQL -.->|Private Link| SQL
-    PE_KV -.->|Private Link| KV
-    PE_WEB -.->|Private Link| WEB
+    WEB <-->Private Link| SQL
     
     %% Web Flow
     WEB_INT -->|Reads Reports| PE_SQL
-    WEB -.->|VNet Integrated| WEB_INT
 
     %% Monitoring
     VM -->|Logs| LAW
