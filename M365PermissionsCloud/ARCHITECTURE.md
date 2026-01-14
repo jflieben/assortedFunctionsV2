@@ -13,7 +13,7 @@ The solution utilizes Platform-as-a-Service (PaaS) for the backend and database 
 ``` mermaid
 graph TD
     subgraph "Microsoft"
-        GR[Microsoft Graph <br/>(and other API's)]
+        GR[Microsoft Graph <br/>and other API's]
     end
     subgraph "Your Azure Subscription"
         subgraph "Resource Group"
