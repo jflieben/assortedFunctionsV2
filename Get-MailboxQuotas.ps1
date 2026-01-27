@@ -11,6 +11,8 @@
     - Exchange Online View-Only Organization Management role
     - Exchange.ManageAsApp
     - Mail.Send (or at the EXO level)
+    - Graph module installed in your automation account
+    - ExchangeOnlineManagement module installed in your automation account
 
 .PARAMETER emailAddress
     Recipient (and sending mailbox) for the report.
@@ -46,7 +48,6 @@ Write-Output "Connected to Exchange Online and got $($allMailboxes.count) Mailbo
 
 Write-Output "Connecting to Microsoft Graph..."
 Connect-MgGraph -Identity -NoWelcome
-$Null = Get-MgGroup -All # hack to ensure the graph dll is loaded before pnp loads the same older DLL, killing all graph commands from here on
 
 $report = @()
 
