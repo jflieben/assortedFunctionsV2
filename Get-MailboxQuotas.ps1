@@ -32,17 +32,18 @@ if($ThresholdPercent -lt 1 -or $ThresholdPercent -gt 100){
 Write-Output "Connecting to Exchange Online using Managed Identity..."
 
 Connect-ExchangeOnline -ManagedIdentity -Organization "$($emailAddress.Split("@"[1]))"
-$allMailboxes = Get-EXOMailbox -ResultSize Unlimited -Properties ProhibitSendQuota | ForEach-Object {
-    $stats = Get-EXOMailboxStatistics -Identity $_.Guid.Guid -Properties TotalItemSize -ErrorAction SilentlyContinue
-    if ($stats) {
-        [PSCustomObject]@{
-            DisplayName                      = $_.DisplayName
-            MailboxGuid                      = $_.Guid.Guid
-            TotalItemSize                    = $stats.TotalItemSize
-            ProhibitSendQuota                = $_.ProhibitSendQuota
-        }
+$mailboxes = Get-EXOMailbox -ResultSize Unlimited -Properties ProhibitSendQuota
+
+$allMailboxes = $mailboxes | ForEach-Object -Parallel {
+    $mbx = $_
+    $stats = Get-ExoMailboxStatistics -Identity $mbx.Guid.Guid -Properties TotalItemSize -ErrorAction SilentlyContinue
+    [PSCustomObject]@{
+        DisplayName       = $mbx.DisplayName
+        MailboxGuid       = $mbx.Guid.Guid
+        TotalItemSize     = $stats.TotalItemSize
+        ProhibitSendQuota = $mbx.ProhibitSendQuota
     }
-}
+} -ThrottleLimit 10
 
 Write-Output "Connected to Exchange Online and got $($allMailboxes.count) Mailboxes. Now connecting to Microsoft Graph..."
 
