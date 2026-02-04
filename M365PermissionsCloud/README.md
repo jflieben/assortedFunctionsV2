@@ -18,9 +18,20 @@ Hardened Azure Native app that scans and reports Microsoft 365 permissions acros
 - More info, see [M365Permissions.com website](https://www.m365permissions.com)
 
 ## Quick start
-- One‑click deploy: use the button above.
+- One‑click deploy: use the `Deploy to Azure` button above.
 - Follow the wizard
 
 ## Requirements
 - Azure Subscription where you have Owner rights
 - Global Administrator (only temporarily during activation)
+
+## Manual authorization
+If you cannot or do not want to use the one-time multi-tenant app for permissions setup, you can set permissions manually as follows
+- Install the marketplace package, and wait for the `second` welcome email to arrive, asking you to authorize the tool
+- Open Azure cloud shell using your global administrator account
+- Run our onboarding script [`authorize.ps1`](https://github.com/jflieben/assortedFunctionsV2/blob/main/authorize.ps1)
+- Follow the final instruction that will be printed onscreen
+- Security upgrade accomplished!
+
+## Architecture
+[View architecture doc / diagrams](ARCHITECTURE.md)
