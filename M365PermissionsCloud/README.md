@@ -25,13 +25,16 @@ Hardened Azure Native app that scans and reports Microsoft 365 permissions acros
 - Azure Subscription where you have Owner rights
 - Global Administrator (only temporarily during activation)
 
-## Manual authorization
-If you cannot or do not want to use the one-time multi-tenant app for permissions setup, you can set permissions manually as follows
-- Install the marketplace package, and wait for the `second` welcome email to arrive, asking you to authorize the tool
-- Open Azure cloud shell using your global administrator account
-- Run our onboarding script [`authorize.ps1`](https://github.com/jflieben/assortedFunctionsV2/blob/main/authorize.ps1)
-- Follow the final instruction that will be printed onscreen
-- Security upgrade accomplished!
+## 🔐 Manual authorization
+If you cannot or do not want to use the one-time multi-tenant app for permissions setup, you can set permissions manually as follows:
+
+1. Install the marketplace package, wait for the **second** welcome email that asks you to authorize M365Permissions
+1. Open Azure cloud shell using your global administrator account
+1. Copy our onboarding script [`authorize.ps1`](https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/refs/heads/main/M365PermissionsCloud/authorize.ps1)
+1. Replace "xxxxx-xxxxxx-xxxxx-xxxxx-xxxxx" with your Azure Subscription ID
+1. Paste the script into Azure Cloud shell
+1. Follow the final instruction printed onscreen
+1. Happy CISO / ISO / CIO / etc 🛡️ 
 
 ## Architecture
 [View architecture doc / diagrams](ARCHITECTURE.md)
