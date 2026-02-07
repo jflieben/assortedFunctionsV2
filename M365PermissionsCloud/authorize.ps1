@@ -1,5 +1,8 @@
 #M365Permissions Cloud post-install authorization script for those who do not wish to use the automated wizard
+#Author: Jos Lieben
+#Help: https://m365permissions.com/#/docs/support#manual-authorization
 #This script will create 3 security groups to manage access to the tool, assign the required API permissions to the managed identity of the VM and set up SSO for the frontend
+#It will match our VM and frontend by search for a VM and a Web App with the correct naming convention (m365vm* and m365pf*)
 #It will not touch anything else
 #You have to be logged in as a Global Administrator
 
@@ -420,9 +423,10 @@
     Write-Host "- Tenant ID: $TenantId"
     Write-Host "- VM Name: $($vm.Name)"
     Write-Host ""
-    Write-Host "!!!!!!!!!!!!!!!!!!!!!!!!!WITHOUT THE ABOVE, THE TOOL WILL NOT SCAN!!!!"
+    Write-Host "!!!!!!!!!!!!!!!!!WITHOUT THE ABOVE, THE TOOL WILL NOT SCAN!!!!!!!!!!!!"
     Write-Host ""
-    Write-Host "installation has been completed"
+    Write-Host "installation has been completed!"
+    Write-Host "https://m365permissions.com/#/docs/getting-started"
     Read-Host "Press any key to exit"
     Exit 0
 }
