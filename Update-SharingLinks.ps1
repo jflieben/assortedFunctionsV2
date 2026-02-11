@@ -5,6 +5,8 @@
     Author: Jos Lieben
     Blog: https://www.lieben.nu
     License: Free to use but keep the header intact and give credit.
+    Disclaimer: Use at your own risk. Test in a non-production environment first. The script uses direct REST API calls and may have side effects if misused or used in an unexpected situation.
+    I've tested the script against a variety of link types, but there may be edge cases or specific configurations I did not account for.
 
 .DESCRIPTION
     This script connects to SharePoint Online using certificate-based app authentication and
