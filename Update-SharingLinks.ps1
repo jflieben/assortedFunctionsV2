@@ -1,3 +1,5 @@
+#Requires -Version 7.0
+
 <#
 .SYNOPSIS
     Reconfigures all sharing links under one or more SharePoint sites, or for specific document URLs, to a desired role (e.g., View-only).
@@ -15,8 +17,9 @@
     You can supply either:
       - An array of site URLs: the script will enumerate ALL document libraries and ALL items
         in each site and update every sharing link found.
-      - An array of item URLs (full URLs to individual documents): the script will resolve each
-        document to its list and item, then update sharing links for those specific items.
+      - An array of item URLs (full URLs to individual documents or folders): the script will
+        resolve each URL to its list and item, then update sharing links. If the URL points to
+        a folder, the folder itself and all items within it are processed recursively.
 
     These two modes are mutually exclusive (parameter sets).
 
@@ -28,19 +31,31 @@
 
 .PARAMETER PfxPath
     Path to the PFX certificate file used for client-assertion authentication.
+    Mutually exclusive with CertThumbprint.
 
 .PARAMETER PfxPassword
     (Optional) Password for the PFX file. If omitted, an empty password is assumed.
+
+.PARAMETER CertThumbprint
+    Thumbprint of a certificate already installed in the local certificate store
+    (Cert:\CurrentUser\My or Cert:\LocalMachine\My). Mutually exclusive with PfxPath.
 
 .PARAMETER SiteUrls
     An array of SharePoint site URLs. All items in all document libraries of each site will be processed.
 
 .PARAMETER ItemUrls
-    An array of full document URLs (e.g., https://contoso.sharepoint.com/sites/hr/Shared Documents/report.docx).
+    An array of full URLs to individual documents or folders inside a document library
+    (e.g., https://contoso.sharepoint.com/sites/hr/Shared Documents/report.docx or
+    https://contoso.sharepoint.com/sites/hr/Shared Documents/MyFolder).
+    If a URL points to a folder, all items within it are processed recursively.
 
 .PARAMETER TargetRole
     The role to set on every sharing link found. Valid values are
-    View, Edit, Review, Can View but Cannot Download.
+    View, Edit, Review, NoDownload
+
+.PARAMETER ExistingRole
+    The role to replace If specified, only sharing links that currently have this role will be updated to the TargetRole.
+    View, Edit, Review, NoDownload
 
 .EXAMPLE
     .\Update-SharingLinks.ps1 -TenantId "ab77..." -ClientId "fa17..." -PfxPath ".\cert.pfx" -SiteUrls "https://contoso.sharepoint.com/sites/marketing"
@@ -48,34 +63,74 @@
     Updates ALL sharing links across every item in the marketing site to View-only.
 
 .EXAMPLE
+    .\Update-SharingLinks.ps1 -TenantId "ab77..." -ClientId "fa17..." -CertThumbprint "A1B2C3D4..." `
+        -SiteUrls "https://contoso.sharepoint.com/sites/marketing" -TargetRole View
+
+    Uses a certificate from the local store instead of a PFX file.
+
+.EXAMPLE
     .\Update-SharingLinks.ps1 -TenantId "ab77..." -ClientId "fa17..." -PfxPath ".\cert.pfx" `
         -ItemUrls "https://contoso.sharepoint.com/sites/sales/Shared Documents/proposal.pdf" -TargetRole View
 
-    Updates sharing links for the specific document to Edit.
+    Updates sharing links for the specific document.
+
+.EXAMPLE
+    .\Update-SharingLinks.ps1 -TenantId "ab77..." -ClientId "fa17..." -PfxPath ".\cert.pfx" `
+        -ItemUrls "https://contoso.sharepoint.com/sites/sales/Shared Documents/Reports" -TargetRole View -ExistingRole Edit
+
+    Recursively updates Edit sharing links for every item inside the Reports folder.
 
 .NOTES
     Requires: An Azure AD app registration with Sites.FullControl.All (or equivalent) application
     permission against Sharepoint and a valid certificate. This script uses raw REST APIs.
+    Certain types of links cannot be edited (even through the portal) and will be skipped without warning.
 #>
 
 param(
     [Parameter(Mandatory)][string]$TenantId,
     [Parameter(Mandatory)][string]$ClientId,
-    [Parameter(Mandatory)][string]$PfxPath,
+    [Parameter(Mandatory, ParameterSetName = 'BySite_Pfx')]
+    [Parameter(Mandatory, ParameterSetName = 'ByItem_Pfx')]
+    [string]$PfxPath,
+    [Parameter(ParameterSetName = 'BySite_Pfx')]
+    [Parameter(ParameterSetName = 'ByItem_Pfx')]
     [string]$PfxPassword,
-    [Parameter(Mandatory, ParameterSetName = 'BySite')]
+    [Parameter(Mandatory, ParameterSetName = 'BySite_Thumb')]
+    [Parameter(Mandatory, ParameterSetName = 'ByItem_Thumb')]
+    [string]$CertThumbprint,
+    [Parameter(Mandatory, ParameterSetName = 'BySite_Pfx')]
+    [Parameter(Mandatory, ParameterSetName = 'BySite_Thumb')]
     [string[]]$SiteUrls,
-    [Parameter(Mandatory, ParameterSetName = 'ByItem')]
+    [Parameter(Mandatory, ParameterSetName = 'ByItem_Pfx')]
+    [Parameter(Mandatory, ParameterSetName = 'ByItem_Thumb')]
     [string[]]$ItemUrls,
     [Parameter(Mandatory)]
     [ValidateSet('View','Edit','Review', 'NoDownload')]
-    [string]$TargetRole
+    [string]$TargetRole,
+    [ValidateSet('View','Edit','Review', 'NoDownload')]
+    [string]$ExistingRole    
 )
+
+if($ExistingRole -and $ExistingRole -eq $TargetRole){
+    Write-Host "Existing role is the same as target role ($TargetRole). No changes will be made." -ForegroundColor Green
+    exit 0
+}
 
 #region --- Authentication helpers ---
 
-# Load PFX
-if ($PfxPassword) {
+# Load certificate from PFX file or local certificate store
+if ($CertThumbprint) {
+    $cert = Get-Item "Cert:\CurrentUser\My\$CertThumbprint" -ErrorAction SilentlyContinue
+    if (-not $cert) {
+        $cert = Get-Item "Cert:\LocalMachine\My\$CertThumbprint" -ErrorAction SilentlyContinue
+    }
+    if (-not $cert) {
+        throw "Certificate with thumbprint '$CertThumbprint' not found in CurrentUser\My or LocalMachine\My."
+    }
+    if (-not $cert.HasPrivateKey) {
+        throw "Certificate with thumbprint '$CertThumbprint' does not have a private key."
+    }
+} elseif ($PfxPassword) {
     $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
         $PfxPath, $PfxPassword,
         [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable -bor
@@ -187,6 +242,10 @@ function Update-SharingLinksForItem {
 
         if($currentRole -eq $Role){
             Write-Host "    Not updating link $($sharingLink.ShareId) (current role $currentRole = $Role)" -ForegroundColor Green    
+            continue
+        }elseif($ExistingRole -and $currentRole -ne $ExistingRoleId){
+            Write-Host "    Not updating link $($sharingLink.ShareId) (current role $currentRole does not match specified ExistingRole $ExistingRole)" -ForegroundColor Green 
+            continue            
         }else{
             Write-Host "    Updating link $($sharingLink.ShareId) (current role $currentRole -> $Role)" -ForegroundColor Yellow
         }
@@ -220,7 +279,7 @@ function Update-SharingLinksForItem {
 function Resolve-ItemUrl {
     <#
     .SYNOPSIS
-        Resolves a full document URL to SiteUrl, ListId, and ItemId.
+        Resolves a full document or folder URL to SiteUrl, ListId, ItemId, and whether it is a folder.
     #>
     param([string]$DocumentUrl)
 
@@ -255,22 +314,111 @@ function Resolve-ItemUrl {
     $headers = Get-SpoHeaders -SiteUrl $siteUrl
     $serverRelativeUrl = $uri.AbsolutePath
 
+    # Try resolving as a file first
     try {
         $fileInfo = Invoke-RestMethod -Uri "$siteUrl/_api/web/GetFileByServerRelativePath(decodedurl='$serverRelativeUrl')/ListItemAllFields?`$select=Id" -Headers $headers -Method GET
+        if($fileInfo -and $fileInfo.PSObject.TypeNames -notcontains "System.Management.Automation.PSCustomObject"){
+            $fileInfo = $fileInfo | ConvertFrom-Json -AsHashtable
+        }    
         $itemId = $fileInfo.d.Id
 
         $listInfo = Invoke-RestMethod -Uri "$siteUrl/_api/web/GetFileByServerRelativePath(decodedurl='$serverRelativeUrl')/ListItemAllFields/ParentList?`$select=Id" -Headers $headers -Method GET
         $listId = $listInfo.d.Id
 
         return @{
-            SiteUrl = $siteUrl
-            ListId  = $listId
-            ItemId  = [int]$itemId
+            SiteUrl  = $siteUrl
+            ListId   = $listId
+            ItemId   = [int]$itemId
+            IsFolder = $false
         }
     } catch {
-        Write-Warning "Could not resolve file $DocumentUrl : $_"
+        # Not a file — try as a folder
+    }
+
+    # Try resolving as a folder
+    try {
+        $folderInfo = Invoke-RestMethod -Uri "$siteUrl/_api/web/GetFolderByServerRelativePath(decodedurl='$serverRelativeUrl')/ListItemAllFields?`$select=Id" -Headers $headers -Method GET
+        if($folderInfo -and $folderInfo.PSObject.TypeNames -notcontains "System.Management.Automation.PSCustomObject"){
+            $folderInfo = $folderInfo | ConvertFrom-Json -AsHashtable
+        }          
+        $itemId = $folderInfo.d.Id
+
+        $listInfo = Invoke-RestMethod -Uri "$siteUrl/_api/web/GetFolderByServerRelativePath(decodedurl='$serverRelativeUrl')/ListItemAllFields/ParentList?`$select=Id" -Headers $headers -Method GET
+        $listId = $listInfo.d.Id
+
+        return @{
+            SiteUrl              = $siteUrl
+            ListId               = $listId
+            ItemId               = [int]$itemId
+            IsFolder             = $true
+            FolderRelativeUrl    = $serverRelativeUrl
+        }
+    } catch {
+        Write-Warning "Could not resolve '$DocumentUrl' as a file or folder: $_"
         return $null
     }
+}
+
+function Get-FolderItemsRecursive {
+    <#
+    .SYNOPSIS
+        Recursively enumerates all files and subfolders inside a SharePoint folder,
+        returning ListId/ItemId pairs for each.
+    #>
+    param(
+        [string]$SiteUrl,
+        [string]$FolderServerRelativeUrl,
+        [string]$ListId,
+        [hashtable]$Headers
+    )
+
+    $results = @()
+
+    # Get files in this folder
+    try {
+        $filesUrl = "$SiteUrl/_api/web/GetFolderByServerRelativePath(decodedurl='$FolderServerRelativeUrl')/Files?`$select=Name,ListItemAllFields/Id&`$expand=ListItemAllFields"
+        $filesResponse = Invoke-RestMethod -Uri $filesUrl -Headers $Headers -Method GET
+        if($filesResponse -and $filesResponse.PSObject.TypeNames -notcontains "System.Management.Automation.PSCustomObject"){
+            $filesResponse = $filesResponse | ConvertFrom-Json -AsHashtable
+        }        
+        foreach ($file in $filesResponse.d.results) {
+            if ($file.ListItemAllFields -and $file.ListItemAllFields.Id) {
+                $results += @{
+                    ListId = $ListId
+                    ItemId = [int]$file.ListItemAllFields.Id
+                }
+            }
+        }
+    } catch {
+        Write-Warning "  Error fetching files from folder $FolderServerRelativeUrl : $_"
+    }
+
+    # Get subfolders, add them as items (they can have sharing links too), and recurse
+    try {
+        $foldersUrl = "$SiteUrl/_api/web/GetFolderByServerRelativePath(decodedurl='$FolderServerRelativeUrl')/Folders?`$select=ServerRelativeUrl,Name,ListItemAllFields/Id&`$expand=ListItemAllFields"
+        $foldersResponse = Invoke-RestMethod -Uri $foldersUrl -Headers $Headers -Method GET
+        if($foldersResponse -and $foldersResponse.PSObject.TypeNames -notcontains "System.Management.Automation.PSCustomObject"){
+            $foldersResponse = $foldersResponse | ConvertFrom-Json -AsHashtable
+        }
+        foreach ($subfolder in $foldersResponse.d.results) {
+            if ($subfolder.Name -eq "Forms") { continue } # Skip system folders
+
+            # Add the subfolder itself as an item (it may have sharing links)
+            if ($subfolder.ListItemAllFields -and $subfolder.ListItemAllFields.Id) {
+                $results += @{
+                    ListId = $ListId
+                    ItemId = [int]$subfolder.ListItemAllFields.Id
+                }
+            }
+
+            # Recurse into the subfolder
+            $results += Get-FolderItemsRecursive -SiteUrl $SiteUrl -FolderServerRelativeUrl $subfolder.ServerRelativeUrl -ListId $ListId -Headers $Headers
+        }
+    } catch {
+        Write-Warning "  Error fetching subfolders from $FolderServerRelativeUrl : $_"
+    }
+
+    return $results
 }
 
 function Get-AllListItems {
@@ -293,9 +441,13 @@ function Get-AllListItems {
     }
 
     $results = @()
-    foreach ($list in $lists.d.results) {
+    $totalLibraries = $lists.d.results.Count
+    for ($libIdx = 0; $libIdx -lt $totalLibraries; $libIdx++) {
+        $list = $lists.d.results[$libIdx]
         $listId = $list.Id
         $listTitle = $list.Title
+        $libPct = [math]::Floor(($libIdx / $totalLibraries) * 100)
+        Write-Progress -Id 2 -Activity "Enumerating libraries" -Status "[$($libIdx + 1)/$totalLibraries] $listTitle" -PercentComplete $libPct
         Write-Host "  Processing library: $listTitle ($listId)" -ForegroundColor Cyan
 
         $itemsUrl = "$SiteUrl/_api/web/lists(guid'$listId')/items?`$select=Id&`$top=5000"
@@ -324,6 +476,7 @@ function Get-AllListItems {
 
         Write-Host "    Found $($allItems.Count) items" -ForegroundColor Gray
     }
+    Write-Progress -Id 2 -Activity "Enumerating libraries" -Completed
 
     return $results
 }
@@ -342,29 +495,68 @@ Switch($TargetRole){
     "NoDownload" {$TargetRoleId = 7}
 }
 
+$ExistingRoleId = 7
+Switch($ExistingRole){
+    "View" {$ExistingRoleId = 1}
+    "Edit" {$ExistingRoleId = 2}
+    "Review" {$ExistingRoleId = 6}
+    "NoDownload" {$ExistingRoleId = 7}
+}
+
 Write-Host "Target role: $TargetRole (ID: $($TargetRoleId))"
 
-if ($PSCmdlet.ParameterSetName -eq 'ByItem') {
-    foreach ($itemUrl in $ItemUrls) {
+if ($PSCmdlet.ParameterSetName -like 'ByItem*') {
+    for ($urlIdx = 0; $urlIdx -lt $ItemUrls.Count; $urlIdx++) {
+        $itemUrl = $ItemUrls[$urlIdx]
+        $urlPct = [math]::Floor(($urlIdx / $ItemUrls.Count) * 100)
+        Write-Progress -Id 0 -Activity "Processing item URLs" -Status "[$($urlIdx + 1)/$($ItemUrls.Count)] $itemUrl" -PercentComplete $urlPct
         Write-Host "Resolving item: $itemUrl" -ForegroundColor Cyan
         $resolved = Resolve-ItemUrl -DocumentUrl $itemUrl
         if (-not $resolved) { continue }
 
         $headers = Get-SpoHeaders -SiteUrl $resolved.SiteUrl
-        Write-Host "  Site: $($resolved.SiteUrl) | List: $($resolved.ListId) | Item: $($resolved.ItemId)"
-        Update-SharingLinksForItem -SiteUrl $resolved.SiteUrl -ListId $resolved.ListId -ItemId $resolved.ItemId -Headers $headers -Role $TargetRoleId
+
+        if ($resolved.IsFolder) {
+            Write-Host "  Folder detected — processing recursively" -ForegroundColor Yellow
+            Write-Host "  Site: $($resolved.SiteUrl) | List: $($resolved.ListId) | Folder Item: $($resolved.ItemId)"
+
+            # Process sharing links on the folder item itself
+            Update-SharingLinksForItem -SiteUrl $resolved.SiteUrl -ListId $resolved.ListId -ItemId $resolved.ItemId -Headers $headers -Role $TargetRoleId
+
+            # Process all child items recursively
+            Write-Progress -Id 1 -ParentId 0 -Activity "Scanning folder contents" -Status "Enumerating items..." -PercentComplete 0
+            $folderItems = Get-FolderItemsRecursive -SiteUrl $resolved.SiteUrl -FolderServerRelativeUrl $resolved.FolderRelativeUrl -ListId $resolved.ListId -Headers $headers
+            Write-Host "  Total items in folder: $($folderItems.Count)" -ForegroundColor Cyan
+            for ($fi = 0; $fi -lt $folderItems.Count; $fi++) {
+                $fiPct = [math]::Floor(($fi / $folderItems.Count) * 100)
+                Write-Progress -Id 1 -ParentId 0 -Activity "Updating folder items" -Status "[$($fi + 1)/$($folderItems.Count)] Item $($folderItems[$fi].ItemId)" -PercentComplete $fiPct
+                Update-SharingLinksForItem -SiteUrl $resolved.SiteUrl -ListId $folderItems[$fi].ListId -ItemId $folderItems[$fi].ItemId -Headers $headers -Role $TargetRoleId
+            }
+            Write-Progress -Id 1 -ParentId 0 -Activity "Updating folder items" -Completed
+        } else {
+            Write-Host "  Site: $($resolved.SiteUrl) | List: $($resolved.ListId) | Item: $($resolved.ItemId)"
+            Update-SharingLinksForItem -SiteUrl $resolved.SiteUrl -ListId $resolved.ListId -ItemId $resolved.ItemId -Headers $headers -Role $TargetRoleId
+        }
     }
+    Write-Progress -Id 0 -Activity "Processing item URLs" -Completed
 } else {
-    foreach ($siteUrl in $SiteUrls) {
+    for ($siteIdx = 0; $siteIdx -lt $SiteUrls.Count; $siteIdx++) {
+        $siteUrl = $SiteUrls[$siteIdx]
+        $sitePct = [math]::Floor(($siteIdx / $SiteUrls.Count) * 100)
+        Write-Progress -Id 0 -Activity "Processing sites" -Status "[$($siteIdx + 1)/$($SiteUrls.Count)] $siteUrl" -PercentComplete $sitePct
         Write-Host "Processing site: $siteUrl" -ForegroundColor Cyan
         $headers = Get-SpoHeaders -SiteUrl $siteUrl
         $items = Get-AllListItems -SiteUrl $siteUrl -Headers $headers
 
         Write-Host "  Total items to check: $($items.Count)" -ForegroundColor Cyan
-        foreach ($item in $items) {
-            Update-SharingLinksForItem -SiteUrl $siteUrl -ListId $item.ListId -ItemId $item.ItemId -Headers $headers -Role $TargetRoleId
+        for ($itemIdx = 0; $itemIdx -lt $items.Count; $itemIdx++) {
+            $itemPct = [math]::Floor(($itemIdx / $items.Count) * 100)
+            Write-Progress -Id 1 -ParentId 0 -Activity "Updating sharing links" -Status "[$($itemIdx + 1)/$($items.Count)] Item $($items[$itemIdx].ItemId)" -PercentComplete $itemPct
+            Update-SharingLinksForItem -SiteUrl $siteUrl -ListId $items[$itemIdx].ListId -ItemId $items[$itemIdx].ItemId -Headers $headers -Role $TargetRoleId
         }
+        Write-Progress -Id 1 -ParentId 0 -Activity "Updating sharing links" -Completed
     }
+    Write-Progress -Id 0 -Activity "Processing sites" -Completed
 }
 
 Write-Host "`n=== Done ===" -ForegroundColor Green
