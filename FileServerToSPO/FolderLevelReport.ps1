@@ -226,7 +226,7 @@ foreach ($folder in $folders) {
             $acl = Get-Acl -LiteralPath $folder.FullName -ErrorAction Stop
             $nonInherited = $acl.Access | Where-Object { -not $_.IsInherited }
             if ($nonInherited) {
-                $dfEntries = $nonInherited | Where-Object { $_.IdentityReference.Value -like 'NMLAN\DF*' }
+                $dfEntries = $nonInherited
                 if ($dfEntries) {
                     Write-Host "[Folder] $relativePath has unique permissions" -ForegroundColor Yellow
                     $dfGroups = ($dfEntries | ForEach-Object { "$($_.IdentityReference.Value):$($_.FileSystemRights.ToString())" } | Sort-Object -Unique) -join '; '
@@ -324,7 +324,7 @@ foreach ($file in $files) {
             $nonInherited = $acl.Access | Where-Object { -not $_.IsInherited }
             if ($nonInherited) {
                 Write-Host "$relativePath has unique permissions 1" -ForegroundColor Yellow
-                $dfEntries = $nonInherited | Where-Object { $_.IdentityReference.Value -like 'NMLAN\DF*' }
+                $dfEntries = $nonInherited
                 if ($dfEntries) {
                     Write-Host "$relativePath has unique permissions 2" -ForegroundColor Yellow
                     $dfGroups = ($dfEntries | ForEach-Object { "$($_.IdentityReference.Value):$($_.FileSystemRights.ToString())" } | Sort-Object -Unique) -join '; '
