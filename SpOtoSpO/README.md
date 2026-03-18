@@ -207,7 +207,7 @@ The script accepts full library URLs and automatically parses the site URL and l
 |---|---|---|
 | `Access denied` or `403` | Insufficient permissions | Ensure the app has `Sites.FullControl.All` with admin consent |
 | `The specified certificate could not be found` | Thumbprint not in cert store | Verify with `Get-ChildItem Cert:\CurrentUser\My \| Where-Object Thumbprint -eq "..."` |
-| Items keep re-updating on each run | DateTime precision mismatch | Ensure both libraries are on the same SharePoint version; sub-second differences can cause this |
+| Items keep re-updating on each run | DateTime mismatch | Ensure both sites have the same locale setting |
 | `No common items found` | Different folder/file structure | Files are matched by relative path — verify the same files exist in both libraries |
 
 ## License
