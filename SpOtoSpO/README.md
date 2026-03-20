@@ -10,48 +10,101 @@ Items are matched by their **relative path** within each library. Items that exi
 
 ```mermaid
 flowchart TD
-    A[Start] --> B[Parse source & target library URLs]
-    B --> C[Connect to both sites using certificate auth]
-    C --> D[Retrieve all items from source library]
-    C --> E[Retrieve all items from target library]
-    D --> F[Build relative-path index for source]
-    E --> G[Build relative-path index for target]
-    F --> H[Find items present in both libraries]
-    G --> H
-    H --> I{For each common item}
-    I --> J{Current metadata differs?}
-    J -- No --> FV{-FixVersionHistory?}
-    J -- Yes --> L[Update target via CSOM UpdateOverwriteVersion]
-    L --> M[Set Author/Editor via FieldUserValue.LookupId]
-    L --> N[Set Created/Modified via UTC DateTime]
-    M --> O[ExecuteQuery]
-    N --> O
-    O --> FV2{-FixVersionHistory?}
-    FV -- No --> K[Skip]
-    FV -- Yes --> V{Is file with versions?}
-    FV2 -- No --> I
-    FV2 -- Yes --> V2{Is file?}
-    V -- No / Folder --> K
-    V -- Yes --> Q[Fix version metadata via RestoreByLabel + ValidateUpdateListItem]
-    V2 -- No / Folder --> I
-    V2 -- Yes --> Q
-    Q --> R[Restore original current version]
-    R --> S[Delete original pre-fix version entries]
-    S --> T{Deletion blocked by retention?}
-    T -- Yes --> U[Log warning, keep both versions]
-    T -- No --> W[Originals removed]
-    W --> I
-    U --> I
-    K --> I
-    I -- Done --> P[Report summary & disconnect]
+    A([🚀 Start]) --> B
 
-    style A fill:#4CAF50,color:#fff
-    style P fill:#2196F3,color:#fff
-    style K fill:#9E9E9E,color:#fff
-    style L fill:#FF9800,color:#fff
-    style Q fill:#FF9800,color:#fff
-    style S fill:#e74c3c,color:#fff
-    style U fill:#95a5a6,color:#fff
+    subgraph INIT ["⚙️ Initialization"]
+        direction TB
+        B[/"Parse source & target\nlibrary URLs"/] --> C["Connect to both sites\n(certificate auth)"]
+    end
+
+    C --> D & E
+
+    subgraph FETCH ["📥 Data Retrieval"]
+        direction TB
+        D[("Source library\nitems")] --> F["Build relative-path\nindex"]
+        E[("Target library\nitems")] --> G["Build relative-path\nindex"]
+    end
+
+    F --> H
+    G --> H
+
+    subgraph MATCH ["🔍 Matching"]
+        H{{"Find items present\nin both libraries"}}
+    end
+
+    H --> I
+
+    subgraph PROCESS ["🔄 Processing Loop"]
+        direction TB
+        I[[For each common item]]
+        I --> J{"Current metadata\ndiffers?"}
+
+        J -- "✅ No" --> FV{"−FixVersionHistory\nspecified?"}
+        J -- "❌ Yes" --> L
+
+        subgraph UPDATE ["✏️ Update Current Version"]
+            direction TB
+            L["Update target via CSOM\nUpdateOverwriteVersion"]
+            L --> M["Set Author / Editor\nvia FieldUserValue.LookupId"]
+            L --> N["Set Created / Modified\nvia UTC DateTime"]
+            M --> O[/"ExecuteQuery"/]
+            N --> O
+        end
+
+        O --> FV2{"−FixVersionHistory\nspecified?"}
+        FV -- "No" --> K(["⏭️ Skip"])
+        FV -- "Yes" --> V{"Is file\nwith versions?"}
+        FV2 -- "No" --> I
+        FV2 -- "Yes" --> V2{"Is file?"}
+        V -- "📁 Folder" --> K
+        V -- "📄 Yes" --> Q
+
+        subgraph VFIX ["🕐 Version History Fix"]
+            direction TB
+            Q["Fix version metadata\nRestoreByLabel +\nValidateUpdateListItem"]
+            Q --> R["Restore original\ncurrent version"]
+            R --> S["Delete original\npre-fix entries"]
+            S --> T{"Deletion blocked\nby retention?"}
+            T -- "🔒 Yes" --> U["Log warning\nKeep both versions"]
+            T -- "✅ No" --> W["Originals\nremoved"]
+        end
+
+        V2 -- "📁 Folder" --> I
+        V2 -- "📄 Yes" --> Q
+        W --> I
+        U --> I
+        K --> I
+    end
+
+    I -- "All done" --> P
+
+    subgraph DONE ["📊 Finish"]
+        P([🏁 Report summary\n& disconnect])
+    end
+
+    style A fill:#43a047,stroke:#2e7d32,color:#fff,stroke-width:2px
+    style P fill:#1e88e5,stroke:#1565c0,color:#fff,stroke-width:2px
+    style K fill:#78909c,stroke:#546e7a,color:#fff,stroke-width:2px
+    style L fill:#fb8c00,stroke:#ef6c00,color:#fff,stroke-width:2px
+    style Q fill:#fb8c00,stroke:#ef6c00,color:#fff,stroke-width:2px
+    style S fill:#e53935,stroke:#c62828,color:#fff,stroke-width:2px
+    style U fill:#78909c,stroke:#546e7a,color:#fff,stroke-width:2px
+    style W fill:#43a047,stroke:#2e7d32,color:#fff,stroke-width:2px
+    style H fill:#7e57c2,stroke:#5e35b1,color:#fff,stroke-width:2px
+    style J fill:#fdd835,stroke:#f9a825,color:#333,stroke-width:2px
+    style FV fill:#fdd835,stroke:#f9a825,color:#333,stroke-width:2px
+    style FV2 fill:#fdd835,stroke:#f9a825,color:#333,stroke-width:2px
+    style V fill:#fdd835,stroke:#f9a825,color:#333,stroke-width:2px
+    style V2 fill:#fdd835,stroke:#f9a825,color:#333,stroke-width:2px
+    style T fill:#fdd835,stroke:#f9a825,color:#333,stroke-width:2px
+
+    style INIT fill:#e8f5e9,stroke:#a5d6a7,stroke-width:2px,color:#333
+    style FETCH fill:#e3f2fd,stroke:#90caf9,stroke-width:2px,color:#333
+    style MATCH fill:#f3e5f5,stroke:#ce93d8,stroke-width:2px,color:#333
+    style PROCESS fill:#fff3e0,stroke:#ffcc80,stroke-width:2px,color:#333
+    style UPDATE fill:#fff8e1,stroke:#ffe082,stroke-width:1px,color:#333
+    style VFIX fill:#fce4ec,stroke:#f48fb1,stroke-width:1px,color:#333
+    style DONE fill:#e3f2fd,stroke:#90caf9,stroke-width:2px,color:#333
 ```
 
 ### Technical Details
