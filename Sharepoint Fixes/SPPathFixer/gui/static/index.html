@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPPathFixer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav id="navbar">
+        <div class="nav-brand">
+            <span class="nav-logo">📏</span>
+            <span class="nav-title">SPPathFixer</span>
+            <span class="nav-version" id="navVersion"></span>
+        </div>
+        <div class="nav-links">
+            <a href="#/" class="nav-link" data-page="dashboard">Dashboard</a>
+            <a href="#/scan" class="nav-link" data-page="scan">Scan</a>
+            <a href="#/results" class="nav-link" data-page="results">Results</a>
+            <a href="#/fix" class="nav-link" data-page="fix">Fix</a>
+            <a href="#/settings" class="nav-link" data-page="settings">Settings</a>
+        </div>
+        <div class="nav-actions">
+            <span id="connectionStatus" class="status-badge disconnected">Disconnected</span>
+            <button id="themeToggle" class="btn-icon" title="Toggle theme">🌙</button>
+        </div>
+    </nav>
+
+    <main id="app"></main>
+
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

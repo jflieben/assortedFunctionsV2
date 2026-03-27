@@ -1,0 +1,13 @@
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\bin\Debug\net8.0\SPPathFixer.Engine.deps.json
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\bin\Debug\net8.0\SPPathFixer.Engine.dll
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\bin\Debug\net8.0\SPPathFixer.Engine.pdb
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\obj\Debug\net8.0\SPPathFixer.Engine.csproj.AssemblyReference.cache
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\obj\Debug\net8.0\SPPathFixer.Engine.GeneratedMSBuildEditorConfig.editorconfig
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\obj\Debug\net8.0\SPPathFixer.Engine.AssemblyInfoInputs.cache
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\obj\Debug\net8.0\SPPathFixer.Engine.AssemblyInfo.cs
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\obj\Debug\net8.0\SPPathFixer.Engine.csproj.CoreCompileInputs.cache
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\obj\Debug\net8.0\SPPathFixer.Engine.sourcelink.json
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\obj\Debug\net8.0\SPPathFixer.Engine.dll
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\obj\Debug\net8.0\refint\SPPathFixer.Engine.dll
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\obj\Debug\net8.0\SPPathFixer.Engine.pdb
+C:\Git\assortedFunctionsV2\Sharepoint Fixes\src\SPPathFixer.Engine\obj\Debug\net8.0\ref\SPPathFixer.Engine.dll
