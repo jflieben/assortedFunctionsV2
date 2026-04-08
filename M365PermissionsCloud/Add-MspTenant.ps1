@@ -23,7 +23,9 @@
 #>
 
 [scriptblock]$authorizeM365Permissions = {
-    $AppDisplayName = "M365Permissions-CrossTenant"
+    $AppDisplayNameBackend = "M365Permissions-CrossTenant-Backend"
+    $AppDisplayNameFrontend = "M365Permissions-CrossTenant-Frontend"
+
     # Verify Azure context
     try {
         $context = Get-AzContext
@@ -55,18 +57,18 @@
 
     # Step 1: Create the app registration
     Write-Host ""
-    Write-Host "[1/7] Creating app registration '$AppDisplayName'..." -ForegroundColor Yellow
+    Write-Host "[1/11] Creating app registration '$AppDisplayNameBackend'..." -ForegroundColor Yellow
 
-    $existingApp = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$AppDisplayName'").value | Select-Object -First 1
+    $existingApp = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$AppDisplayNameBackend'").value | Select-Object -First 1
 
     $isNewApp = $false
     if ($existingApp) {
-        Write-Host "  App registration '$AppDisplayName' already exists (AppId: $($existingApp.appId)). Reusing."
+        Write-Host "  App registration '$AppDisplayNameBackend' already exists (AppId: $($existingApp.appId)). Reusing."
         $app = $existingApp
     } else {
         $isNewApp = $true
         $appBody = @{
-            displayName = $AppDisplayName
+            displayName = $AppDisplayNameBackend
             signInAudience = "AzureADMyOrg"
         } | ConvertTo-Json
         try {
@@ -82,7 +84,7 @@
     $clientId = $app.appId
 
     # Step 2: Ensure service principal exists
-    Write-Host "[2/7] Ensuring service principal exists..." -ForegroundColor Yellow
+    Write-Host "[2/11] Ensuring service principal exists..." -ForegroundColor Yellow
 
     $spn = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$clientId'").value | Select-Object -First 1
 
@@ -101,7 +103,7 @@
 
     if ($isNewApp) {
         # Step 3: Generate certificate (only for new app registrations)
-        Write-Host "[3/7] Generating self-signed certificate..." -ForegroundColor Yellow
+        Write-Host "[3/11] Generating self-signed certificate..." -ForegroundColor Yellow
 
         $pfxFilePath = Join-Path -Path (Get-Location).Path -ChildPath "$clientId.pfx"
         $cerFilePath = Join-Path -Path (Get-Location).Path -ChildPath "$clientId.cer"
@@ -126,7 +128,7 @@
         Export-Certificate -Cert $cert -FilePath $cerFilePath -Type CERT | Out-Null
 
         # Step 4: Upload certificate to app registration
-        Write-Host "[4/7] Uploading certificate to app registration..." -ForegroundColor Yellow
+        Write-Host "[4/11] Uploading certificate to app registration..." -ForegroundColor Yellow
 
         $certBytes = [System.IO.File]::ReadAllBytes($cerFilePath)
         $certBase64 = [System.Convert]::ToBase64String($certBytes)
@@ -150,12 +152,12 @@
         # Remove cert from local store - customer only needs the files
         Remove-Item -Path "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force
     } else {
-        Write-Host "[3/7] Skipping certificate generation (app already exists)" -ForegroundColor Yellow
-        Write-Host "[4/7] Skipping certificate upload (app already exists)" -ForegroundColor Yellow
+        Write-Host "[3/11] Skipping certificate generation (app already exists)" -ForegroundColor Yellow
+        Write-Host "[4/11] Skipping certificate upload (app already exists)" -ForegroundColor Yellow
     }
 
     # Step 5: Assign required API permissions
-    Write-Host "[5/7] Assigning API permissions..." -ForegroundColor Yellow
+    Write-Host "[5/11] Assigning API permissions..." -ForegroundColor Yellow
 
     $requiredRoles = @(
         @{ resource = "00000003-0000-0ff1-ce00-000000000000"; id = "Sites.FullControl.All" }          # SharePoint
@@ -227,7 +229,7 @@
     }
 
     # Step 6: Assign Exchange Administrator directory role
-    Write-Host "[6/7] Assigning Exchange Administrator directory role..." -ForegroundColor Yellow
+    Write-Host "[6/11] Assigning Exchange Administrator directory role..." -ForegroundColor Yellow
 
     $dirRoleId = "29232cdf-9323-42fd-ade2-1d097af3e4de" # Exchange Administrator
 
@@ -251,33 +253,307 @@
         }
     }
 
-    # Step 7: Summary
-    Write-Host "[7/7] Complete!" -ForegroundColor Yellow
+    # Step 7: Create Frontend App Registration for SSO
+    Write-Host "[7/11] Creating frontend app registration '$AppDisplayNameFrontend'..." -ForegroundColor Yellow
+
+    $existingFrontendApp = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$AppDisplayNameFrontend'").value | Select-Object -First 1
+
+    if ($existingFrontendApp) {
+        Write-Host "  Frontend app '$AppDisplayNameFrontend' already exists (AppId: $($existingFrontendApp.appId)). Reusing."
+        $frontendApp = $existingFrontendApp
+    } else {
+        $frontendAppBody = @{
+            displayName = $AppDisplayNameFrontend
+            signInAudience = "AzureADMyOrg"
+        } | ConvertTo-Json
+        try {
+            $frontendApp = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications" -Body $frontendAppBody
+            Write-Host "  Created frontend app. AppId: $($frontendApp.appId)"
+            Start-Sleep -Seconds 3
+        } catch {
+            Write-Error "Failed to create frontend app registration: $_"
+            return
+        }
+    }
+
+    $frontendClientId = $frontendApp.appId
+
+    # Step 8: Configure Frontend SPN and SSO permissions
+    Write-Host "[8/11] Configuring frontend SPN and SSO permissions..." -ForegroundColor Yellow
+
+    $frontendSpn = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$frontendClientId'").value | Select-Object -First 1
+
+    if (-not $frontendSpn) {
+        try {
+            $frontendSpn = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals" -Body (@{ appId = $frontendClientId } | ConvertTo-Json)
+            Write-Host "  Frontend SPN created. ObjectId: $($frontendSpn.id)"
+            Start-Sleep -Seconds 3
+        } catch {
+            Write-Error "Failed to create frontend service principal: $_"
+            return
+        }
+    } else {
+        Write-Host "  Frontend SPN already exists. ObjectId: $($frontendSpn.id)"
+    }
+
+    # Restrict access to assigned users/groups only
+    try {
+        Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($frontendSpn.id)" -Body '{"appRoleAssignmentRequired": true}'
+        Write-Host "  App role assignment requirement set on frontend SPN"
+    } catch {
+        Write-Error "  Failed to set appRoleAssignmentRequired: $_" -ErrorAction Continue
+    }
+
+    # Configure Graph delegated SSO permissions
+    $graphSpn = $resourceSpns | Where-Object { $_.appId -eq "00000003-0000-0000-c000-000000000000" }
+    if ($graphSpn) {
+        $desiredScopes = @("offline_access", "openid", "User.Read", "email", "profile")
+        $resourceAccess = @()
+        foreach ($scope in $desiredScopes) {
+            $scopeDef = $graphSpn.oauth2PermissionScopes | Where-Object { $_.value -eq $scope }
+            if ($scopeDef) {
+                $resourceAccess += @{
+                    id = $scopeDef.id
+                    type = "Scope"
+                }
+            }
+        }
+
+        $ssoBody = @{
+            requiredResourceAccess = @(
+                @{
+                    resourceAppId = "00000003-0000-0000-c000-000000000000"
+                    resourceAccess = $resourceAccess
+                }
+            )
+        } | ConvertTo-Json -Depth 5
+
+        try {
+            Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders `
+                -Uri "https://graph.microsoft.com/v1.0/applications/$($frontendApp.id)" `
+                -Body $ssoBody
+            Write-Host "  SSO delegated permissions configured (openid, email, profile, offline_access, User.Read)"
+        } catch {
+            Write-Error "  Failed to configure SSO permissions: $_" -ErrorAction Continue
+        }
+
+        # Grant admin consent for delegated scopes
+        $oauth2Body = @{
+            clientId    = $frontendSpn.id
+            consentType = "AllPrincipals"
+            resourceId  = $graphSpn.id
+            scope       = "openid email profile offline_access User.Read"
+        } | ConvertTo-Json -Depth 2
+        try {
+            Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" -Body $oauth2Body
+            Write-Host "  OAuth2 delegated permission grant created (admin consent)"
+        } catch {
+            Write-Error "  Failed to create OAuth2 permission grant: $_" -ErrorAction Continue
+        }
+    } else {
+        Write-Host "  WARNING: Graph SPN not found in resourceSpns, skipping SSO permission configuration" -ForegroundColor DarkYellow
+    }
+
+    # Step 9: Create security groups and set ownership
+    Write-Host "[9/11] Creating security groups and configuring ownership..." -ForegroundColor Yellow
+
+    # Determine who's running this script for group ownership
+    $userId = $null
+    try {
+        $me = Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/me" -ErrorAction Stop
+        $userId = $me.id
+    } catch {
+        Write-Host "  WARNING: Could not determine current user. You'll need to add yourself to SEC-APP-M365Permissions-Admins manually." -ForegroundColor DarkYellow
+    }
+
+    $desiredGroups = @(
+        "SEC-APP-M365Permissions-Admins"
+        "SEC-APP-M365Permissions-Users"
+        "SEC-SVC-M365Permissions"
+    )
+
+    $createdGroups = @{}
+
+    foreach ($groupName in $desiredGroups) {
+        $groupState = @{
+            displayName     = $groupName
+            mailEnabled     = $false
+            mailNickname    = $groupName.Replace("-", "_")
+            securityEnabled = $true
+            groupTypes      = @()
+        }
+
+        $group = $null
+        $group = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=displayName eq '$groupName'").value | Select-Object -First 1
+
+        if (-not $group) {
+            try {
+                $group = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups" -Body ($groupState | ConvertTo-Json)
+                Write-Host "  Created security group $groupName (ID: $($group.id))"
+                Start-Sleep -Seconds 3
+            } catch {
+                Write-Error "  Failed to create group $($groupName): $($_.Exception.Message)" -ErrorAction Continue
+                continue
+            }
+        } else {
+            Write-Host "  Group $groupName already exists (ID: $($group.id))"
+        }
+
+        $createdGroups[$groupName] = $group
+
+        # Add backend SPN as owner
+        $spnRef = @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($spn.id)" }
+        try {
+            Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups/$($group.id)/owners/`$ref" -Body ($spnRef | ConvertTo-Json)
+            Write-Host "  Backend SPN added as owner of $groupName"
+        } catch {
+            Write-Host "  Backend SPN already owner of $groupName (or failed: $($_.Exception.Message))"
+        }
+
+        # Add backend SPN as member to the SVC group only
+        if ($groupName -eq "SEC-SVC-M365Permissions") {
+            try {
+                Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups/$($group.id)/members/`$ref" -Body ($spnRef | ConvertTo-Json)
+                Write-Host "  Backend SPN added as member of $groupName"
+            } catch {
+                Write-Host "  Backend SPN already member of $groupName (or failed: $($_.Exception.Message))"
+            }
+        }
+
+        # Add current user as owner, and as member for the Admins group
+        if ($userId) {
+            $userRef = @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$userId" }
+            try {
+                Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups/$($group.id)/owners/`$ref" -Body ($userRef | ConvertTo-Json)
+                Write-Host "  You added as owner of $groupName"
+            } catch {
+                Write-Host "  You are already owner of $groupName (or failed: $($_.Exception.Message))"
+            }
+            if ($groupName -eq "SEC-APP-M365Permissions-Admins") {
+                try {
+                    Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups/$($group.id)/members/`$ref" -Body ($userRef | ConvertTo-Json)
+                    Write-Host "  You added as member of $groupName"
+                } catch {
+                    Write-Host "  You are already member of $groupName (or failed: $($_.Exception.Message))"
+                }
+            }
+        }
+    }
+
+    # Step 10: Define app roles on frontend app and assign groups
+    Write-Host "[10/11] Configuring app roles on frontend app and assigning groups..." -ForegroundColor Yellow
+
+    $desiredRoles = @(
+        @{
+            RoleValue   = "User.Read"
+            GroupName   = "SEC-APP-M365Permissions-Users"
+            Description = "Read-only access to the application"
+            DisplayName = "User"
+        },
+        @{
+            RoleValue   = "Admin.Full"
+            GroupName   = "SEC-APP-M365Permissions-Admins"
+            Description = "Full admin access to the application"
+            DisplayName = "Admin"
+        }
+    )
+
+    # Refresh the frontend app to get current appRoles
+    $frontendApp = Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications/$($frontendApp.id)"
+
+    $appRolesToAdd = @()
+    $appRolesChanged = $false
+
+    foreach ($roleInfo in $desiredRoles) {
+        $existingRole = $frontendApp.appRoles | Where-Object { $_.value -eq $roleInfo.RoleValue }
+        if (-not $existingRole) {
+            Write-Host "  App role '$($roleInfo.RoleValue)' not found. Creating..."
+            $appRolesChanged = $true
+            $appRolesToAdd += @{
+                allowedMemberTypes = @("User")
+                description        = $roleInfo.Description
+                displayName        = $roleInfo.DisplayName
+                id                 = [guid]::NewGuid().ToString()
+                isEnabled          = $true
+                value              = $roleInfo.RoleValue
+            }
+        } else {
+            Write-Host "  App role '$($roleInfo.RoleValue)' already exists"
+        }
+    }
+
+    if ($appRolesChanged) {
+        $updateBody = @{
+            appRoles = @($frontendApp.appRoles) + $appRolesToAdd
+        } | ConvertTo-Json -Depth 5
+
+        try {
+            Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications/$($frontendApp.id)" -Body $updateBody
+            Write-Host "  App roles updated on frontend app"
+            Start-Sleep -Seconds 10
+            # Refresh to get the new role IDs
+            $frontendApp = Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications/$($frontendApp.id)"
+        } catch {
+            Write-Error "  Failed to update app roles: $_" -ErrorAction Continue
+        }
+    }
+
+    # Assign security groups to the corresponding app roles on the frontend SPN
+    foreach ($roleInfo in $desiredRoles) {
+        $group = $createdGroups[$roleInfo.GroupName]
+        $appRole = $frontendApp.appRoles | Where-Object { $_.value -eq $roleInfo.RoleValue }
+
+        if ($group -and $appRole) {
+            $assignmentBody = @{
+                principalId = $group.id
+                resourceId  = $frontendSpn.id
+                appRoleId   = $appRole.id
+            } | ConvertTo-Json -Depth 5
+
+            try {
+                Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($frontendSpn.id)/appRoleAssignments" -Body $assignmentBody
+                Write-Host "  Assigned group '$($roleInfo.GroupName)' to role '$($roleInfo.RoleValue)'"
+            } catch {
+                if ($_.Exception.Message -like "*Permission being assigned already exists*") {
+                    Write-Host "  Group '$($roleInfo.GroupName)' already assigned to role '$($roleInfo.RoleValue)'"
+                } else {
+                    Write-Error "  Failed to assign group '$($roleInfo.GroupName)' to role '$($roleInfo.RoleValue)': $_" -ErrorAction Continue
+                }
+            }
+        } elseif (-not $group) {
+            Write-Host "  WARNING: Group '$($roleInfo.GroupName)' not found, skipping role assignment" -ForegroundColor DarkYellow
+        }
+    }
+
+    # Step 11: Summary
+    Write-Host "[11/11] Complete!" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Green
     Write-Host " Cross-tenant setup complete!" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
-    Write-Host "App Registration:" -ForegroundColor Cyan
-    Write-Host "  Display Name : $AppDisplayName"
+    Write-Host "Backend App Registration:" -ForegroundColor Cyan
+    Write-Host "  Display Name : $AppDisplayNameBackend"
     Write-Host "  Client ID    : $clientId"
-    Write-Host "  Tenant ID    : $tenantId"
-    Write-Host "  Object ID    : $($app.id)"
+    Write-Host ""
+    Write-Host "Frontend App Registration (SSO):" -ForegroundColor Cyan
+    Write-Host "  Display Name : $AppDisplayNameFrontend"
+    Write-Host "  Client ID    : $frontendClientId"
     Write-Host ""
     if ($isNewApp) {
         Write-Host "Certificate:" -ForegroundColor Cyan
         Write-Host "  Thumbprint   : $($cert.Thumbprint)"
         Write-Host "  Password     : $PfxPassword"
-        Write-Host "  Expires      : $($cert.NotAfter)"
         Write-Host "  PFX file     : $pfxFilePath"
         Write-Host "  CER file     : $cerFilePath"
         Write-Host ""
         Write-Host "Deployment steps:" -ForegroundColor Yellow
         Write-Host "  1. In the M365Permissions deployment wizard, go to the 'MSP / Cross-Tenant' tab"
         Write-Host "  2. Enable 'Cross-Tenant Scanning'"
-        Write-Host "  3. Enter Client ID: $clientId"
-        Write-Host "  4. Upload the PFX file: $pfxFilePath"
-        Write-Host "  5. Enter the PFX password: $PfxPassword"
+        Write-Host "  3. Enter Backend Client ID : $clientId"
+        Write-Host "  4. Enter Frontend Client ID: $frontendClientId"
+        Write-Host "  5. Upload the PFX file: $pfxFilePath"
+        Write-Host "  6. Enter the PFX password: $PfxPassword"
     } else {
         Write-Host "Permissions and roles have been validated/updated." -ForegroundColor Cyan
         Write-Host "Certificate was not regenerated (app already existed)." -ForegroundColor Yellow
