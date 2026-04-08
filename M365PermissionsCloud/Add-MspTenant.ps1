@@ -59,10 +59,12 @@
 
     $existingApp = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$AppDisplayName'").value | Select-Object -First 1
 
+    $isNewApp = $false
     if ($existingApp) {
         Write-Host "  App registration '$AppDisplayName' already exists (AppId: $($existingApp.appId)). Reusing."
         $app = $existingApp
     } else {
+        $isNewApp = $true
         $appBody = @{
             displayName = $AppDisplayName
             signInAudience = "AzureADMyOrg"
@@ -97,56 +99,60 @@
         Write-Host "  Service principal already exists. ObjectId: $($spn.id)"
     }
 
-    # Step 3: Generate certificate
-    Write-Host "[3/7] Generating self-signed certificate..." -ForegroundColor Yellow
+    if ($isNewApp) {
+        # Step 3: Generate certificate (only for new app registrations)
+        Write-Host "[3/7] Generating self-signed certificate..." -ForegroundColor Yellow
 
-    $pfxFilePath = Join-Path -Path (Get-Location).Path -ChildPath "$clientId.pfx"
-    $cerFilePath = Join-Path -Path (Get-Location).Path -ChildPath "$clientId.cer"
+        $pfxFilePath = Join-Path -Path (Get-Location).Path -ChildPath "$clientId.pfx"
+        $cerFilePath = Join-Path -Path (Get-Location).Path -ChildPath "$clientId.cer"
 
-    $cert = New-SelfSignedCertificate `
-        -Subject "CN=$clientId" `
-        -CertStoreLocation "Cert:\CurrentUser\My" `
-        -KeyExportPolicy Exportable `
-        -KeySpec Signature `
-        -KeyLength 2048 `
-        -KeyAlgorithm RSA `
-        -HashAlgorithm SHA256 `
-        -NotAfter (Get-Date).AddYears(10)
+        $cert = New-SelfSignedCertificate `
+            -Subject "CN=$clientId" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -KeyExportPolicy Exportable `
+            -KeySpec Signature `
+            -KeyLength 2048 `
+            -KeyAlgorithm RSA `
+            -HashAlgorithm SHA256 `
+            -NotAfter (Get-Date).AddYears(10)
 
-    Write-Host "  Thumbprint: $($cert.Thumbprint)"
+        Write-Host "  Thumbprint: $($cert.Thumbprint)"
 
-    
-    if (-not $PfxPassword) {
-        $PfxPassword = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([guid]::NewGuid().ToString())) -replace '[/+=]', '' | Select-Object -First 32
+        if (-not $PfxPassword) {
+            $PfxPassword = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([guid]::NewGuid().ToString())) -replace '[/+=]', '' | Select-Object -First 32
+        }
+        $securePwd = ConvertTo-SecureString -String $PfxPassword -AsPlainText -Force
+        Export-PfxCertificate -Cert $cert -FilePath $pfxFilePath -Password $securePwd | Out-Null
+        Export-Certificate -Cert $cert -FilePath $cerFilePath -Type CERT | Out-Null
+
+        # Step 4: Upload certificate to app registration
+        Write-Host "[4/7] Uploading certificate to app registration..." -ForegroundColor Yellow
+
+        $certBytes = [System.IO.File]::ReadAllBytes($cerFilePath)
+        $certBase64 = [System.Convert]::ToBase64String($certBytes)
+
+        $keyCredential = @{
+            type = "AsymmetricX509Cert"
+            usage = "Verify"
+            key = $certBase64
+            displayName = "M365Permissions Cross-Tenant Certificate"
+        }
+
+        try {
+            Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders `
+                -Uri "https://graph.microsoft.com/v1.0/applications/$($app.id)" `
+                -Body (@{ keyCredentials = @($keyCredential) } | ConvertTo-Json -Depth 5)
+            Write-Host "  Certificate uploaded to app registration"
+        } catch {
+            Write-Error "Failed to upload certificate to app registration: $_" -ErrorAction Continue
+        }
+
+        # Remove cert from local store - customer only needs the files
+        Remove-Item -Path "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force
+    } else {
+        Write-Host "[3/7] Skipping certificate generation (app already exists)" -ForegroundColor Yellow
+        Write-Host "[4/7] Skipping certificate upload (app already exists)" -ForegroundColor Yellow
     }
-    $securePwd = ConvertTo-SecureString -String $PfxPassword -AsPlainText -Force
-    Export-PfxCertificate -Cert $cert -FilePath $pfxFilePath -Password $securePwd | Out-Null
-    Export-Certificate -Cert $cert -FilePath $cerFilePath -Type CERT | Out-Null
-
-    # Step 4: Upload certificate to app registration
-    Write-Host "[4/7] Uploading certificate to app registration..." -ForegroundColor Yellow
-
-    $certBytes = [System.IO.File]::ReadAllBytes($cerFilePath)
-    $certBase64 = [System.Convert]::ToBase64String($certBytes)
-
-    $keyCredential = @{
-        type = "AsymmetricX509Cert"
-        usage = "Verify"
-        key = $certBase64
-        displayName = "M365Permissions Cross-Tenant Certificate"
-    }
-
-    try {
-        Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders `
-            -Uri "https://graph.microsoft.com/v1.0/applications/$($app.id)" `
-            -Body (@{ keyCredentials = @($keyCredential) } | ConvertTo-Json -Depth 5)
-        Write-Host "  Certificate uploaded to app registration"
-    } catch {
-        Write-Error "Failed to upload certificate to app registration: $_" -ErrorAction Continue
-    }
-
-    # Remove cert from local store - customer only needs the files
-    Remove-Item -Path "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force
 
     # Step 5: Assign required API permissions
     Write-Host "[5/7] Assigning API permissions..." -ForegroundColor Yellow
@@ -258,19 +264,24 @@
     Write-Host "  Tenant ID    : $tenantId"
     Write-Host "  Object ID    : $($app.id)"
     Write-Host ""
-    Write-Host "Certificate:" -ForegroundColor Cyan
-    Write-Host "  Thumbprint   : $($cert.Thumbprint)"
-    Write-Host "  Password     : $PfxPassword"
-    Write-Host "  Expires      : $($cert.NotAfter)"
-    Write-Host "  PFX file     : $pfxFilePath"
-    Write-Host "  CER file     : $cerFilePath"
-    Write-Host ""
-    Write-Host "Deployment steps:" -ForegroundColor Yellow
-    Write-Host "  1. In the M365Permissions deployment wizard, go to the 'MSP / Cross-Tenant' tab"
-    Write-Host "  2. Enable 'Cross-Tenant Scanning'"
-    Write-Host "  3. Enter Client ID: $clientId"
-    Write-Host "  4. Upload the PFX file: $pfxFilePath"
-    Write-Host "  5. Enter the PFX password: $PfxPassword"
+    if ($isNewApp) {
+        Write-Host "Certificate:" -ForegroundColor Cyan
+        Write-Host "  Thumbprint   : $($cert.Thumbprint)"
+        Write-Host "  Password     : $PfxPassword"
+        Write-Host "  Expires      : $($cert.NotAfter)"
+        Write-Host "  PFX file     : $pfxFilePath"
+        Write-Host "  CER file     : $cerFilePath"
+        Write-Host ""
+        Write-Host "Deployment steps:" -ForegroundColor Yellow
+        Write-Host "  1. In the M365Permissions deployment wizard, go to the 'MSP / Cross-Tenant' tab"
+        Write-Host "  2. Enable 'Cross-Tenant Scanning'"
+        Write-Host "  3. Enter Client ID: $clientId"
+        Write-Host "  4. Upload the PFX file: $pfxFilePath"
+        Write-Host "  5. Enter the PFX password: $PfxPassword"
+    } else {
+        Write-Host "Permissions and roles have been validated/updated." -ForegroundColor Cyan
+        Write-Host "Certificate was not regenerated (app already existed)." -ForegroundColor Yellow
+    }
     Write-Host ""
     Write-Host "Documentation: https://m365permissions.com/#/docs/msp-cross-tenant" -ForegroundColor Cyan
 }
