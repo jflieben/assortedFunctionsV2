@@ -246,7 +246,7 @@
         } | ConvertTo-Json
 
         try {
-            Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/beta/roleManagement/directory/roleAssignments" -Body $roleBody
+            $Null = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/beta/roleManagement/directory/roleAssignments" -Body $roleBody
             Write-Host "  Exchange Administrator role assigned"
         } catch {
             Write-Error "  Failed to assign Exchange Administrator role: $_" -ErrorAction Continue
@@ -302,6 +302,15 @@
         Write-Host "  App role assignment requirement set on frontend SPN"
     } catch {
         Write-Error "  Failed to set appRoleAssignmentRequired: $_" -ErrorAction Continue
+    }
+
+    # Add backend SPN as owner of the frontend SPN so it can manage role assignments
+    $spnRef = @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($spn.id)" }
+    try {
+        Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($frontendSpn.id)/owners/`$ref" -Body ($spnRef | ConvertTo-Json)
+        Write-Host "  Backend SPN added as owner of frontend SPN"
+    } catch {
+        Write-Host "  Backend SPN already owner of frontend SPN (or failed: $($_.Exception.Message))"
     }
 
     # Configure Graph delegated SSO permissions
