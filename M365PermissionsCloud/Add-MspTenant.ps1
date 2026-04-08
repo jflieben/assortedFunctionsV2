@@ -219,7 +219,7 @@
             appRoleId   = $fullRole.id
         }
         try {
-            Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($spn.id)/appRoleAssignments" -Body ($body | ConvertTo-Json -Depth 5)
+            $Null = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($spn.id)/appRoleAssignments" -Body ($body | ConvertTo-Json -Depth 5)
             Write-Host "  $($role.id) - assigned"
         } catch {
             Write-Error "  Failed to assign $($role.id): $_" -ErrorAction Continue
