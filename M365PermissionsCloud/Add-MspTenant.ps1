@@ -312,6 +312,14 @@
     } catch {
         Write-Host "  Backend SPN already owner of frontend SPN (or failed: $($_.Exception.Message))"
     }
+    
+    # Add backend SPN as owner of the frontend app so it can manage sso config
+    try {
+        Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications/$($frontendApp.id)/owners/`$ref" -Body ($spnRef | ConvertTo-Json)
+        Write-Host "  Backend SPN added as owner of frontend APP"
+    } catch {
+        Write-Host "  Backend SPN already owner of frontend APP (or failed: $($_.Exception.Message))"
+    }
 
     # Configure Graph delegated SSO permissions
     $graphSpn = $resourceSpns | Where-Object { $_.appId -eq "00000003-0000-0000-c000-000000000000" }
@@ -338,7 +346,7 @@
         } | ConvertTo-Json -Depth 5
 
         try {
-            Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders `
+            $Null = Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders `
                 -Uri "https://graph.microsoft.com/v1.0/applications/$($frontendApp.id)" `
                 -Body $ssoBody
             Write-Host "  SSO delegated permissions configured (openid, email, profile, offline_access, User.Read)"
@@ -354,7 +362,7 @@
             scope       = "openid email profile offline_access User.Read"
         } | ConvertTo-Json -Depth 2
         try {
-            Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" -Body $oauth2Body
+            $Null = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" -Body $oauth2Body
             Write-Host "  OAuth2 delegated permission grant created (admin consent)"
         } catch {
             Write-Error "  Failed to create OAuth2 permission grant: $_" -ErrorAction Continue
@@ -497,7 +505,7 @@
         } | ConvertTo-Json -Depth 5
 
         try {
-            Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications/$($frontendApp.id)" -Body $updateBody
+            $Null = Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications/$($frontendApp.id)" -Body $updateBody
             Write-Host "  App roles updated on frontend app"
             Start-Sleep -Seconds 10
             # Refresh to get the new role IDs
@@ -520,7 +528,7 @@
             } | ConvertTo-Json -Depth 5
 
             try {
-                Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($frontendSpn.id)/appRoleAssignments" -Body $assignmentBody
+                $Null = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($frontendSpn.id)/appRoleAssignments" -Body $assignmentBody
                 Write-Host "  Assigned group '$($roleInfo.GroupName)' to role '$($roleInfo.RoleValue)'"
             } catch {
                 if ($_.Exception.Message -like "*Permission being assigned already exists*") {
@@ -537,25 +545,7 @@
     # Step 11: Summary
     Write-Host "[11/11] Complete!" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "========================================" -ForegroundColor Green
-    Write-Host " Cross-tenant setup complete!" -ForegroundColor Green
-    Write-Host "========================================" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Backend App Registration:" -ForegroundColor Cyan
-    Write-Host "  Display Name : $AppDisplayNameBackend"
-    Write-Host "  Client ID    : $clientId"
-    Write-Host ""
-    Write-Host "Frontend App Registration (SSO):" -ForegroundColor Cyan
-    Write-Host "  Display Name : $AppDisplayNameFrontend"
-    Write-Host "  Client ID    : $frontendClientId"
-    Write-Host ""
     if ($isNewApp) {
-        Write-Host "Certificate:" -ForegroundColor Cyan
-        Write-Host "  Thumbprint   : $($cert.Thumbprint)"
-        Write-Host "  Password     : $PfxPassword"
-        Write-Host "  PFX file     : $pfxFilePath"
-        Write-Host "  CER file     : $cerFilePath"
-        Write-Host ""
         Write-Host "Deployment steps:" -ForegroundColor Yellow
         Write-Host "  1. In the M365Permissions deployment wizard, go to the 'MSP / Cross-Tenant' tab"
         Write-Host "  2. Enable 'Cross-Tenant Scanning'"
