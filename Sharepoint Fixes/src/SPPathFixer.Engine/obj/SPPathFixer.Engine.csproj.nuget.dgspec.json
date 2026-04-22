@@ -5,7 +5,7 @@
   },
   "projects": {
     "C:\\Git\\assortedFunctionsV2\\Sharepoint Fixes\\src\\SPPathFixer.Engine\\SPPathFixer.Engine.csproj": {
-      "version": "1.0.0",
+      "version": "1.0.1",
       "restore": {
         "projectUniqueName": "C:\\Git\\assortedFunctionsV2\\Sharepoint Fixes\\src\\SPPathFixer.Engine\\SPPathFixer.Engine.csproj",
         "projectName": "SPPathFixer.Engine",
@@ -72,7 +72,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.419/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.420/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

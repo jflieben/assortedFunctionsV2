@@ -3,6 +3,7 @@ using SPPathFixer.Engine.Auth;
 using SPPathFixer.Engine.Database;
 using SPPathFixer.Engine.Graph;
 using SPPathFixer.Engine.Models;
+using System.Diagnostics;
 
 namespace SPPathFixer.Engine.Scanning;
 
@@ -24,10 +25,13 @@ public sealed class ScanOrchestrator
     private int _totalSites;
     private int _processedSites;
     private int _totalLibraries;
+    private int _processedLibraries;
     private int _totalItemsScanned;
     private int _totalLongPaths;
     private string _currentSite = "";
     private string _currentLibrary = "";
+    private string _phase = "idle";
+    private readonly Stopwatch _scanStopwatch = new();
 
     public bool IsScanning => _scanTask != null && !_scanTask.IsCompleted;
     public long ActiveScanId => _activeScanId;
@@ -62,13 +66,19 @@ public sealed class ScanOrchestrator
             }
             catch (OperationCanceledException)
             {
+                _phase = "cancelled";
                 _scanRepo.CompleteScan(scanId, "cancelled");
                 _progressRepo.AddLog(scanId, "Scan was cancelled.", "warning");
             }
             catch (Exception ex)
             {
+                _phase = "failed";
                 _scanRepo.CompleteScan(scanId, "failed");
                 _progressRepo.AddLog(scanId, $"Scan failed: {ex.Message}", "error");
+            }
+            finally
+            {
+                _scanStopwatch.Stop();
             }
         });
 
@@ -82,16 +92,37 @@ public sealed class ScanOrchestrator
 
     public ScanProgress GetProgress()
     {
+        var elapsedSeconds = (int)Math.Max(0, _scanStopwatch.Elapsed.TotalSeconds);
+        var itemsPerSecond = elapsedSeconds > 0
+            ? Math.Round(_totalItemsScanned / Math.Max(1.0, _scanStopwatch.Elapsed.TotalSeconds), 2)
+            : 0;
+
+        var sitePct = _totalSites > 0 ? (int)((double)_processedSites / _totalSites * 100) : 0;
+        var libraryPct = _totalLibraries > 0 ? (int)((double)_processedLibraries / _totalLibraries * 100) : 0;
+        var overallPct = Math.Max(sitePct, libraryPct);
+
+        var etaSeconds = 0;
+        if (_processedLibraries > 0 && _totalLibraries > _processedLibraries)
+        {
+            var avgSecondsPerLibrary = _scanStopwatch.Elapsed.TotalSeconds / _processedLibraries;
+            etaSeconds = (int)Math.Round(avgSecondsPerLibrary * (_totalLibraries - _processedLibraries));
+        }
+
         return new ScanProgress
         {
             ScanId = _activeScanId,
             Status = IsScanning ? "running" : (_scanRepo.GetScan(_activeScanId)?.Status ?? "idle"),
+            Phase = _phase,
             TotalSites = _totalSites,
             ProcessedSites = _processedSites,
             TotalLibraries = _totalLibraries,
+            ProcessedLibraries = _processedLibraries,
             TotalItemsScanned = _totalItemsScanned,
             TotalLongPaths = _totalLongPaths,
-            OverallPercent = _totalSites > 0 ? (int)((double)_processedSites / _totalSites * 100) : 0,
+            OverallPercent = overallPct,
+            ElapsedSeconds = elapsedSeconds,
+            EstimatedRemainingSeconds = etaSeconds,
+            ItemsPerSecond = itemsPerSecond,
             CurrentSite = _currentSite,
             CurrentLibrary = _currentLibrary,
             RecentLogs = _activeScanId > 0 ? _progressRepo.GetRecentLogs(_activeScanId) : new()
@@ -103,8 +134,11 @@ public sealed class ScanOrchestrator
         _totalSites = 0;
         _processedSites = 0;
         _totalLibraries = 0;
+        _processedLibraries = 0;
         _totalItemsScanned = 0;
         _totalLongPaths = 0;
+        _phase = "initializing";
+        _scanStopwatch.Restart();
 
         var specialExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrEmpty(request.SpecialExtensions))
@@ -121,6 +155,7 @@ public sealed class ScanOrchestrator
         }
 
         _progressRepo.AddLog(scanId, "Discovering sites...", "info");
+        _phase = "discovering-sites";
 
         // Discover sites
         var siteUrls = new List<string>();
@@ -133,7 +168,7 @@ public sealed class ScanOrchestrator
         {
             // Enumerate all sites via Graph (search=* works with both delegated and app-only)
             _progressRepo.AddLog(scanId, "Enumerating all sites in tenant...");
-            await foreach (var site in _graphClient.GetPagedAsync("sites?search=*&$select=id,displayName,webUrl&$top=999", ct))
+            await foreach (var site in _graphClient.GetPagedAsync("sites?search=*&$select=id,displayName,webUrl&$top=500", eventualConsistency: true, ct: ct))
             {
                 ct.ThrowIfCancellationRequested();
                 if (site.TryGetProperty("webUrl", out var urlProp))
@@ -147,6 +182,7 @@ public sealed class ScanOrchestrator
         }
 
         _totalSites = siteUrls.Count;
+        _phase = "scanning-sites";
 
         for (int i = 0; i < siteUrls.Count; i++)
         {
@@ -165,10 +201,15 @@ public sealed class ScanOrchestrator
             {
                 _progressRepo.AddLog(scanId, $"Error scanning site {siteUrl}: {ex.Message}", "error");
             }
+
+            _processedSites = i + 1;
         }
 
         _processedSites = siteUrls.Count;
+        _phase = "finalizing";
         _scanRepo.UpdateScanStats(scanId, _totalSites, _totalLibraries, _totalItemsScanned, _totalLongPaths);
+        _scanStopwatch.Stop();
+        _phase = "completed";
     }
 
     private async Task ScanSiteAsync(long scanId, string siteUrl, int maxPathLength,
@@ -185,7 +226,7 @@ public sealed class ScanOrchestrator
 
         // Get document libraries
         var drives = new List<(string DriveId, string Name, string WebUrl)>();
-        await foreach (var drive in _graphClient.GetPagedAsync($"sites/{siteId}/drives?$select=id,name,webUrl,driveType", ct))
+        await foreach (var drive in _graphClient.GetPagedAsync($"sites/{siteId}/drives?$select=id,name,webUrl,driveType", ct: ct))
         {
             ct.ThrowIfCancellationRequested();
             var driveType = drive.TryGetProperty("driveType", out var dt) ? dt.GetString() : "";
@@ -199,6 +240,7 @@ public sealed class ScanOrchestrator
         }
 
         _totalLibraries += drives.Count;
+        _progressRepo.AddLog(scanId, $"  Found {drives.Count} library/libraries in site.");
 
         foreach (var (driveId, driveName, driveWebUrl) in drives)
         {
@@ -210,10 +252,12 @@ public sealed class ScanOrchestrator
             {
                 await ScanDriveAsync(scanId, siteUrl, driveId, driveName, driveWebUrl,
                     maxPathLength, maxPathLengthSpecial, specialExtensions, extensionFilter, ct);
+                _processedLibraries++;
             }
             catch (Exception ex)
             {
                 _progressRepo.AddLog(scanId, $"  Error scanning library {driveName}: {ex.Message}", "error");
+                _processedLibraries++;
             }
         }
     }
@@ -222,52 +266,29 @@ public sealed class ScanOrchestrator
         string driveWebUrl, int maxPathLength, int? maxPathLengthSpecial,
         HashSet<string> specialExtensions, HashSet<string> extensionFilter, CancellationToken ct)
     {
-        var batch = new List<LongPathItem>();
+        var fileBatch = new List<LongPathItem>(512);
+        var overLimitFiles = new List<LongPathItem>(512);
+        var folderCandidates = new List<LongPathItem>(256);
 
-        // Recursively enumerate all items via delta/children
-        await ScanFolderAsync(scanId, siteUrl, driveId, driveName, driveWebUrl,
-            $"drives/{driveId}/root", "", maxPathLength, maxPathLengthSpecial,
-            specialExtensions, extensionFilter, batch, ct);
-
-        // Compute deepest child depth for folders
-        ComputeDeepestChildDepths(batch);
-
-        // Remove folders that have no children exceeding the limit
-        var urls = new HashSet<string>(batch.Select(b => b.FullUrl), StringComparer.OrdinalIgnoreCase);
-        batch.RemoveAll(item =>
-        {
-            if (item.ItemType != "Folder") return false;
-            // Keep folder if any item has a URL starting with this folder's URL and exceeds the limit
-            return !batch.Any(other => other.ItemType != "Folder" &&
-                other.FullUrl.StartsWith(item.FullUrl + "/", StringComparison.OrdinalIgnoreCase));
-        });
-
-        if (batch.Count > 0)
-        {
-            _itemRepo.InsertItems(batch);
-            _totalLongPaths += batch.Count;
-        }
-    }
-
-    private async Task ScanFolderAsync(long scanId, string siteUrl, string driveId, string driveName,
-        string driveWebUrl, string folderPath, string parentWebPath,
-        int maxPathLength, int? maxPathLengthSpecial,
-        HashSet<string> specialExtensions, HashSet<string> extensionFilter,
-        List<LongPathItem> batch, CancellationToken ct)
-    {
-        await foreach (var item in _graphClient.GetPagedAsync($"{folderPath}/children?$select=id,name,size,file,folder,parentReference&$top=999", ct))
+        // Delta endpoint is substantially faster for very large libraries than recursive children traversal.
+        await foreach (var item in _graphClient.GetPagedAsync(
+            $"drives/{driveId}/root/delta?$select=id,name,size,file,folder,parentReference,deleted&$top=500",
+            ct: ct))
         {
             ct.ThrowIfCancellationRequested();
             _totalItemsScanned++;
 
+            if (item.TryGetProperty("deleted", out _))
+                continue;
+
             var name = item.GetProperty("name").GetString() ?? "";
             var isFolder = item.TryGetProperty("folder", out _);
             var isFile = item.TryGetProperty("file", out _);
+            if (!isFolder && !isFile)
+                continue;
+
             var itemId = item.GetProperty("id").GetString() ?? "";
 
-            // Build the actual file system URL from driveWebUrl + parentReference.path + name
-            // parentReference.path looks like: /drives/{driveId}/root:/folder1/folder2
-            // or just /drives/{driveId}/root if at the library root
             var relativePath = "";
             if (item.TryGetProperty("parentReference", out var parentRef) &&
                 parentRef.TryGetProperty("path", out var parentPath))
@@ -276,10 +297,8 @@ public sealed class ScanOrchestrator
                 var rootMarker = pathStr.IndexOf("root:", StringComparison.Ordinal);
                 if (rootMarker >= 0)
                 {
-                    // Everything after "root:" is the folder path within the library
                     relativePath = Uri.UnescapeDataString(pathStr[(rootMarker + 5)..]);
                 }
-                // If just "root" without colon, item is at library root — relativePath stays ""
             }
 
             var decodedDriveUrl = Uri.UnescapeDataString(driveWebUrl);
@@ -287,7 +306,7 @@ public sealed class ScanOrchestrator
                 ? $"{decodedDriveUrl}/{name}"
                 : $"{decodedDriveUrl}{relativePath}/{name}";
             var fileRef = fullUrl.Contains("://")
-                ? fullUrl[(fullUrl.IndexOf('/', fullUrl.IndexOf("://") + 3))..] // server-relative path
+                ? fullUrl[(fullUrl.IndexOf('/', fullUrl.IndexOf("://") + 3))..]
                 : fullUrl;
 
             // Determine extension
@@ -318,7 +337,7 @@ public sealed class ScanOrchestrator
 
                 if (pathLength >= localMax)
                 {
-                    batch.Add(new LongPathItem
+                    var candidate = new LongPathItem
                     {
                         ScanId = scanId,
                         SiteUrl = siteUrl,
@@ -337,31 +356,111 @@ public sealed class ScanOrchestrator
                         MaxAllowed = localMax,
                         Delta = localMax - pathLength,
                         DeepestChildDepth = pathLength
-                    });
+                    };
+
+                    if (isFolder)
+                    {
+                        folderCandidates.Add(candidate);
+                    }
+                    else
+                    {
+                        overLimitFiles.Add(candidate);
+                        fileBatch.Add(candidate);
+
+                        if (fileBatch.Count >= 500)
+                        {
+                            _itemRepo.InsertItems(fileBatch);
+                            _totalLongPaths += fileBatch.Count;
+                            fileBatch.Clear();
+                        }
+                    }
                 }
             }
+        }
 
-            // Recurse into folders
-            if (isFolder)
+        if (fileBatch.Count > 0)
+        {
+            _itemRepo.InsertItems(fileBatch);
+            _totalLongPaths += fileBatch.Count;
+            fileBatch.Clear();
+        }
+
+        if (folderCandidates.Count > 0)
+        {
+            var filteredFolders = FinalizeFolderCandidates(folderCandidates, overLimitFiles);
+            if (filteredFolders.Count > 0)
             {
-                await ScanFolderAsync(scanId, siteUrl, driveId, driveName, driveWebUrl,
-                    $"drives/{driveId}/items/{itemId}", fullUrl, maxPathLength, maxPathLengthSpecial,
-                    specialExtensions, extensionFilter, batch, ct);
+                _itemRepo.InsertItems(filteredFolders);
+                _totalLongPaths += filteredFolders.Count;
             }
         }
     }
 
-    private static void ComputeDeepestChildDepths(List<LongPathItem> items)
+    private static List<LongPathItem> FinalizeFolderCandidates(List<LongPathItem> folderCandidates, List<LongPathItem> overLimitFiles)
     {
-        foreach (var folder in items.Where(i => i.ItemType == "Folder"))
+        var folderUrlSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var folderToMaxDepth = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var folder in folderCandidates)
         {
-            var folderUrl = folder.FullUrl + "/";
-            var maxChildDepth = items
-                .Where(i => i.FullUrl.StartsWith(folderUrl, StringComparison.OrdinalIgnoreCase))
-                .Select(i => i.PathTotalLength)
-                .DefaultIfEmpty(folder.PathTotalLength)
-                .Max();
-            folder.DeepestChildDepth = maxChildDepth;
+            if (string.IsNullOrWhiteSpace(folder.FullUrl))
+                continue;
+
+            folderUrlSet.Add(folder.FullUrl);
+            if (!folderToMaxDepth.TryGetValue(folder.FullUrl, out var currentMax) || folder.PathTotalLength > currentMax)
+                folderToMaxDepth[folder.FullUrl] = folder.PathTotalLength;
+        }
+
+        var keepFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in overLimitFiles)
+        {
+            foreach (var folderUrl in EnumerateAncestorUrls(item.FullUrl))
+            {
+                if (!folderUrlSet.Contains(folderUrl))
+                    continue;
+
+                keepFolders.Add(folderUrl);
+                if (item.PathTotalLength > folderToMaxDepth[folderUrl])
+                    folderToMaxDepth[folderUrl] = item.PathTotalLength;
+            }
+        }
+
+        var result = new List<LongPathItem>(keepFolders.Count);
+        var added = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var folder in folderCandidates)
+        {
+            if (!keepFolders.Contains(folder.FullUrl))
+                continue;
+
+            if (!added.Add(folder.FullUrl))
+                continue;
+
+            folder.DeepestChildDepth = folderToMaxDepth.TryGetValue(folder.FullUrl, out var maxDepth)
+                ? maxDepth
+                : folder.PathTotalLength;
+
+            result.Add(folder);
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<string> EnumerateAncestorUrls(string fullUrl)
+    {
+        var schemeIndex = fullUrl.IndexOf("://", StringComparison.Ordinal);
+        var firstPathSlash = schemeIndex >= 0
+            ? fullUrl.IndexOf('/', schemeIndex + 3)
+            : 0;
+
+        var remaining = fullUrl;
+        while (true)
+        {
+            var slashIndex = remaining.LastIndexOf('/');
+            if (slashIndex <= firstPathSlash)
+                yield break;
+
+            remaining = remaining[..slashIndex];
+            yield return remaining;
         }
     }
 

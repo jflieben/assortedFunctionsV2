@@ -95,12 +95,17 @@ public class ScanProgress
 {
     public long ScanId { get; set; }
     public string Status { get; set; } = "";
+    public string Phase { get; set; } = "";
     public int TotalSites { get; set; }
     public int ProcessedSites { get; set; }
     public int TotalLibraries { get; set; }
+    public int ProcessedLibraries { get; set; }
     public int TotalItemsScanned { get; set; }
     public int TotalLongPaths { get; set; }
     public int OverallPercent { get; set; }
+    public int ElapsedSeconds { get; set; }
+    public int EstimatedRemainingSeconds { get; set; }
+    public double ItemsPerSecond { get; set; }
     public string CurrentSite { get; set; } = "";
     public string CurrentLibrary { get; set; } = "";
     public List<LogEntry> RecentLogs { get; set; } = new();

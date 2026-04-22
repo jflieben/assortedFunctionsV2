@@ -149,6 +149,16 @@
         return (n || 0).toLocaleString();
     }
 
+    function formatDuration(totalSeconds) {
+        const seconds = Math.max(0, parseInt(totalSeconds || 0, 10));
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        if (h > 0) return `${h}h ${m}m ${s}s`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+    }
+
     function siteRelativePath(url) {
         if (!url) return '';
         try { return new URL(url).pathname || url; } catch { return url; }
@@ -177,7 +187,7 @@
                         <p>Connect to SharePoint Online to start scanning for long paths.</p>
                         <div style="margin-top:16px">
                             <h4>Delegated (Interactive)</h4>
-                            <p style="color:var(--text-muted);font-size:0.85em;margin:8px 0">Sign in with your browser. Best for ad-hoc scans.</p>
+                            <p style="color:var(--text-muted);font-size:0.85em;margin:8px 0">Sign in with your browser. Best for ad-hoc scans but requires you have access to each site.</p>
                             <button class="btn btn-primary" id="btnConnectDelegated">Connect with Browser</button>
                         </div>
                         <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
@@ -326,6 +336,7 @@
     // ── Scan Page ──────────────────────────────────────────────
     // ═══════════════════════════════════════════════════════════
     let scanPollTimer = null;
+    let sitePickerState = null;
 
     async function renderScan() {
         const app = $('#app');
@@ -359,8 +370,28 @@
                     <label><input type="radio" name="scopeType" value="select" style="width:auto"> Select specific sites</label>
                 </div>
                 <div id="siteSelector" style="display:none;margin-top:12px">
-                    <button class="btn btn-secondary" id="btnLoadSites">Load Sites</button>
+                    <div class="form-row" style="align-items:flex-end">
+                        <div class="form-group" style="min-width:280px;flex:2">
+                            <label>Search Sites</label>
+                            <input id="siteSearchInput" placeholder="Search by title or URL (server-side)">
+                        </div>
+                        <div class="form-group" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                            <button class="btn btn-secondary" id="btnLoadSites">Load Sites</button>
+                            <button class="btn btn-secondary" id="btnLoadMoreSites" disabled>Load More</button>
+                        </div>
+                    </div>
+                    <div class="form-group" style="display:flex;gap:8px;flex-wrap:wrap">
+                        <button class="btn btn-secondary" id="btnSelectVisibleSites">Select Visible</button>
+                        <button class="btn btn-secondary" id="btnClearVisibleSites">Clear Visible</button>
+                        <button class="btn btn-secondary" id="btnClearSelectedSites">Clear All Selected</button>
+                    </div>
+                    <p id="siteSelectionSummary" style="color:var(--text-muted);font-size:0.85em;margin:8px 0">No sites loaded yet.</p>
                     <div id="siteList" style="margin-top:8px"></div>
+                    <div class="form-group" style="margin-top:12px">
+                        <label>Manual Site URLs (optional)</label>
+                        <textarea id="manualSiteUrls" rows="4" placeholder="https://tenant.sharepoint.com/sites/Finance&#10;https://tenant.sharepoint.com/sites/HR"></textarea>
+                        <span style="font-size:0.8em;color:var(--text-muted)">Add one URL per line (or comma-separated) to target specific sites directly.</span>
+                    </div>
                 </div>
             </div>
             <div class="card">
@@ -386,23 +417,48 @@
             });
         });
 
+        resetSitePicker();
+
         // Load sites
         document.getElementById('btnLoadSites').onclick = async () => {
-            document.getElementById('siteList').innerHTML = '<p style="color:var(--text-muted)">Loading sites...</p>';
-            try {
-                const res = await api.get('/sites');
-                if (res.success && res.data) {
-                    let html = '<div class="site-list">';
-                    res.data.forEach(s => {
-                        html += `<label class="site-item"><input type="checkbox" value="${s.webUrl}"> ${s.displayName || s.webUrl}</label>`;
-                    });
-                    html += '</div>';
-                    document.getElementById('siteList').innerHTML = html;
-                } else {
-                    document.getElementById('siteList').innerHTML = '<p style="color:var(--error)">Failed to load sites.</p>';
-                }
-            } catch (e) { document.getElementById('siteList').innerHTML = `<p style="color:var(--error)">${e.message}</p>`; }
+            await loadSitesPage({ reset: true });
         };
+
+        document.getElementById('btnLoadMoreSites').onclick = async () => {
+            await loadSitesPage({ reset: false });
+        };
+
+        document.getElementById('btnSelectVisibleSites').onclick = () => {
+            if (!sitePickerState?.visibleItems?.length) return;
+            sitePickerState.visibleItems.forEach(s => {
+                if (s.webUrl) sitePickerState.selected.set(s.webUrl, s);
+            });
+            renderSiteList();
+            updateSiteSelectionSummary();
+        };
+
+        document.getElementById('btnClearVisibleSites').onclick = () => {
+            if (!sitePickerState?.visibleItems?.length) return;
+            sitePickerState.visibleItems.forEach(s => {
+                if (s.webUrl) sitePickerState.selected.delete(s.webUrl);
+            });
+            renderSiteList();
+            updateSiteSelectionSummary();
+        };
+
+        document.getElementById('btnClearSelectedSites').onclick = () => {
+            if (!sitePickerState) return;
+            sitePickerState.selected.clear();
+            renderSiteList();
+            updateSiteSelectionSummary();
+        };
+
+        document.getElementById('siteSearchInput').addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                await loadSitesPage({ reset: true });
+            }
+        });
 
         // Start scan
         document.getElementById('btnStartScan').onclick = async () => {
@@ -413,8 +469,7 @@
             };
 
             if (scopeType === 'select') {
-                const checked = document.querySelectorAll('#siteList input[type="checkbox"]:checked');
-                body.siteUrls = Array.from(checked).map(cb => cb.value);
+                body.siteUrls = collectSelectedSiteUrls();
                 if (body.siteUrls.length === 0) { showToast('Select at least one site', 'warning'); return; }
             }
 
@@ -431,6 +486,139 @@
         };
     }
 
+    function resetSitePicker() {
+        sitePickerState = {
+            query: '',
+            nextCursor: null,
+            hasMore: false,
+            loadedCount: 0,
+            selected: new Map(),
+            itemsByUrl: new Map(),
+            visibleItems: []
+        };
+        renderSiteList();
+        updateSiteSelectionSummary();
+        const btnLoadMore = document.getElementById('btnLoadMoreSites');
+        if (btnLoadMore) btnLoadMore.disabled = true;
+    }
+
+    function renderSiteList() {
+        const listEl = document.getElementById('siteList');
+        if (!listEl || !sitePickerState) return;
+
+        const items = Array.from(sitePickerState.itemsByUrl.values());
+        sitePickerState.visibleItems = items;
+
+        if (items.length === 0) {
+            listEl.innerHTML = '<p style="color:var(--text-muted)">No sites loaded. Use search + Load Sites, or add URLs manually below.</p>';
+            return;
+        }
+
+        let html = '<div class="site-list">';
+        items.forEach((s, idx) => {
+            const checked = sitePickerState.selected.has(s.webUrl) ? 'checked' : '';
+            const label = s.displayName || s.webUrl;
+            html += `<label class="site-item" title="${s.webUrl}"><input type="checkbox" data-site-url="${s.webUrl}" ${checked}> ${label}</label>`;
+            if (idx < items.length - 1) html += '';
+        });
+        html += '</div>';
+        listEl.innerHTML = html;
+
+        listEl.querySelectorAll('input[type="checkbox"][data-site-url]').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const url = cb.getAttribute('data-site-url');
+                if (!url) return;
+                const site = sitePickerState.itemsByUrl.get(url) || { webUrl: url, displayName: '' };
+                if (cb.checked) sitePickerState.selected.set(url, site);
+                else sitePickerState.selected.delete(url);
+                updateSiteSelectionSummary();
+            });
+        });
+    }
+
+    function updateSiteSelectionSummary() {
+        const el = document.getElementById('siteSelectionSummary');
+        if (!el || !sitePickerState) return;
+        const selectedCount = sitePickerState.selected.size;
+        const loadedCount = sitePickerState.loadedCount;
+        const more = sitePickerState.hasMore ? 'More available.' : 'End of results.';
+        el.textContent = `Loaded: ${formatNumber(loadedCount)} site(s). Selected: ${formatNumber(selectedCount)}. ${more}`;
+    }
+
+    async function loadSitesPage({ reset }) {
+        const listEl = document.getElementById('siteList');
+        const btnLoad = document.getElementById('btnLoadSites');
+        const btnLoadMore = document.getElementById('btnLoadMoreSites');
+        const searchInput = document.getElementById('siteSearchInput');
+        if (!listEl || !btnLoad || !btnLoadMore || !searchInput) return;
+
+        if (!sitePickerState) resetSitePicker();
+
+        if (reset) {
+            const query = (searchInput.value || '').trim();
+            sitePickerState.query = query;
+            sitePickerState.nextCursor = null;
+            sitePickerState.hasMore = false;
+            sitePickerState.loadedCount = 0;
+            sitePickerState.itemsByUrl = new Map();
+            sitePickerState.visibleItems = [];
+            listEl.innerHTML = '<p style="color:var(--text-muted)">Loading sites...</p>';
+        } else {
+            if (!sitePickerState.nextCursor) {
+                showToast('No more sites to load', 'info');
+                return;
+            }
+        }
+
+        btnLoad.disabled = true;
+        btnLoadMore.disabled = true;
+
+        try {
+            const params = new URLSearchParams();
+            params.set('pageSize', '100');
+            if (sitePickerState.query) params.set('query', sitePickerState.query);
+            if (!reset && sitePickerState.nextCursor) params.set('cursor', sitePickerState.nextCursor);
+
+            const res = await api.get(`/sites?${params.toString()}`);
+            if (!res.success || !res.data) {
+                listEl.innerHTML = `<p style="color:var(--error)">${res.error || 'Failed to load sites.'}</p>`;
+                return;
+            }
+
+            const page = res.data;
+            (page.items || []).forEach(s => {
+                if (s?.webUrl && !sitePickerState.itemsByUrl.has(s.webUrl))
+                    sitePickerState.itemsByUrl.set(s.webUrl, s);
+            });
+
+            sitePickerState.loadedCount = sitePickerState.itemsByUrl.size;
+            sitePickerState.nextCursor = page.nextCursor || null;
+            sitePickerState.hasMore = !!page.hasMore;
+
+            renderSiteList();
+            updateSiteSelectionSummary();
+        } catch (e) {
+            listEl.innerHTML = `<p style="color:var(--error)">${e.message}</p>`;
+        } finally {
+            btnLoad.disabled = false;
+            btnLoadMore.disabled = !sitePickerState?.hasMore;
+        }
+    }
+
+    function collectSelectedSiteUrls() {
+        const selected = sitePickerState
+            ? Array.from(sitePickerState.selected.keys())
+            : [];
+
+        const manual = (document.getElementById('manualSiteUrls')?.value || '')
+            .split(/[\n,;]+/)
+            .map(v => v.trim())
+            .filter(v => !!v)
+            .filter(v => /^https?:\/\//i.test(v));
+
+        return Array.from(new Set([...selected, ...manual]));
+    }
+
     async function pollScanProgress() {
         if (scanPollTimer) clearInterval(scanPollTimer);
         const update = async () => {
@@ -439,11 +627,20 @@
                 if (res.success) {
                     const p = res.data;
                     const pct = p.overallPercent || 0;
+                    const phase = p.phase || 'running';
+                    const libDone = p.processedLibraries || 0;
+                    const libTotal = p.totalLibraries || 0;
+                    const ips = p.itemsPerSecond || 0;
+                    const elapsed = formatDuration(p.elapsedSeconds || 0);
+                    const eta = (p.estimatedRemainingSeconds || 0) > 0
+                        ? formatDuration(p.estimatedRemainingSeconds)
+                        : '-';
                     document.getElementById('scanProgressContent').innerHTML = `
-                        <p><strong>Status:</strong> ${p.status || 'scanning'}</p>
+                        <p><strong>Status:</strong> ${p.status || 'scanning'} (${phase})</p>
                         <p><strong>Current:</strong> ${p.currentSite || '-'}${p.currentLibrary ? ' / ' + p.currentLibrary : ''}</p>
                         <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-                        <p style="font-size:0.85em;color:var(--text-muted)">${pct}% — Sites: ${p.processedSites || 0}/${p.totalSites || '?'} — Libraries: ${p.totalLibraries || 0} — Long paths found: ${formatNumber(p.totalLongPaths || 0)}</p>`;
+                        <p style="font-size:0.85em;color:var(--text-muted)">${pct}% — Sites: ${p.processedSites || 0}/${p.totalSites || '?'} — Libraries: ${libDone}/${libTotal || '?'} — Items scanned: ${formatNumber(p.totalItemsScanned || 0)} — Long paths: ${formatNumber(p.totalLongPaths || 0)}</p>
+                        <p style="font-size:0.82em;color:var(--text-muted)">Speed: ${formatNumber(ips)} items/s — Elapsed: ${elapsed} — ETA: ${eta}</p>`;
 
                     if (p.recentLogs && p.recentLogs.length) {
                         const logArea = document.getElementById('scanLog');
@@ -595,7 +792,7 @@
                     const sortIcon = col => resultsState.sortColumn === col ? (resultsState.sortDirection === 'asc' ? '▲' : '▼') : '';
                     const sortClick = col => `onclick="window.__spfixSort('${col}')"`;
 
-                    let html = `<div class="table-wrapper"><table>
+                    let html = `<div class="table-wrapper"><table class="results-table">
                         <tr>
                             <th ${sortClick('item_name')}>Name ${sortIcon('item_name')}</th>
                             <th ${sortClick('site_url')}>Site ${sortIcon('site_url')}</th>
@@ -604,7 +801,7 @@
                             <th ${sortClick('delta')}>Over By ${sortIcon('delta')}</th>
                             <th>Type</th>
                             <th>Ext</th>
-                            <th ${sortClick('fix_status')}>Fix Status ${sortIcon('fix_status')}</th>
+                            <th class="fix-col" ${sortClick('fix_status')}>Fix Status ${sortIcon('fix_status')}</th>
                         </tr>`;
 
                     d.items.forEach(item => {
@@ -616,7 +813,7 @@
                             <td>${item.delta || ''}</td>
                             <td>${item.itemType || ''}</td>
                             <td>${item.itemExtension || ''}</td>
-                            <td class="fix-status-${item.fixStatus || 'pending'}">${item.fixStatus || 'pending'}</td>
+                            <td class="fix-col fix-status-${item.fixStatus || 'pending'}">${item.fixStatus || 'pending'}</td>
                         </tr>`;
                     });
                     html += '</table></div>';
@@ -668,6 +865,14 @@
     // ── Fix Page ───────────────────────────────────────────────
     // ═══════════════════════════════════════════════════════════
     let fixPollTimer = null;
+    const previewState = {
+        scanId: null,
+        batchId: null,
+        page: 1,
+        pageSize: 200,
+        totalCount: 0,
+        totalPages: 1
+    };
 
     async function renderFix() {
         const app = $('#app');
@@ -773,9 +978,12 @@
                 const res = await api.post(endpoint, fixBody);
                 if (res.success) {
                     if (whatIf) {
+                        previewState.scanId = scanId;
+                        previewState.batchId = res.data?.batchId || null;
+                        previewState.page = 1;
+                        await waitForPreviewCompletion();
                         showToast('Preview complete', 'success');
-                        // Preview runs almost instantly (no API calls). Fetch results with fixStatus=preview.
-                        await loadPreviewResults(scanId);
+                        await loadPreviewResults(scanId, 1);
                     } else {
                         showToast('Fix started!', 'success');
                         await refreshStatus();
@@ -790,17 +998,43 @@
         };
     }
 
-    async function loadPreviewResults(scanId) {
+    async function waitForPreviewCompletion(timeoutMs = 180000) {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            const progress = await api.get('/fix/progress');
+            if (!progress.success || !progress.data) {
+                await new Promise(r => setTimeout(r, 500));
+                continue;
+            }
+
+            const p = progress.data;
+            const sameBatch = !previewState.batchId || p.batchId === previewState.batchId;
+            if (sameBatch && (p.status === 'completed' || p.status === 'failed')) return;
+
+            await new Promise(r => setTimeout(r, 500));
+        }
+    }
+
+    async function loadPreviewResults(scanId, page = 1) {
         const container = document.getElementById('fixPreviewResults');
         if (!container) return;
         container.innerHTML = '<p>Loading preview results...</p>';
-        // Small delay to let the preview task finish writing to DB
-        await new Promise(r => setTimeout(r, 500));
+
+        previewState.scanId = scanId;
+        previewState.page = Math.max(1, page);
+
         try {
-            const res = await api.get(`/scans/${scanId}/results?fixStatus=preview&pageSize=500`);
+            const res = await api.get(`/scans/${scanId}/results?fixStatus=preview&page=${previewState.page}&pageSize=${previewState.pageSize}`);
             if (res.success && res.data.items && res.data.items.length > 0) {
                 const items = res.data.items;
-                let html = `<h3>Preview Results (${items.length} item${items.length > 1 ? 's' : ''})</h3>
+                previewState.totalCount = res.data.totalCount || items.length;
+                previewState.totalPages = res.data.totalPages || 1;
+
+                const startItem = ((previewState.page - 1) * previewState.pageSize) + 1;
+                const endItem = Math.min(previewState.page * previewState.pageSize, previewState.totalCount);
+
+                let html = `<h3>Preview Results</h3>
+                    <p style="color:var(--text-muted);font-size:0.85em;margin-bottom:8px">Showing ${formatNumber(startItem)}-${formatNumber(endItem)} of ${formatNumber(previewState.totalCount)} preview items.</p>
                     <p style="color:var(--text-muted);font-size:0.85em;margin-bottom:12px">This is a preview — no changes have been made. Click &quot;Apply These Changes&quot; to execute.</p>
                     <div class="table-wrapper"><table>
                         <tr><th>Item Name</th><th>Path</th><th>Length</th><th>New Name</th><th>Description</th></tr>`;
@@ -815,11 +1049,21 @@
                     </tr>`;
                 });
                 html += '</table></div>';
+                html += `<div class="pagination" style="margin-top:10px">
+                    <button ${previewState.page <= 1 ? 'disabled' : ''} onclick="window.__spfixPreviewPage(${previewState.page - 1})">← Prev</button>
+                    <span class="page-info">Page ${previewState.page} of ${previewState.totalPages}</span>
+                    <button ${previewState.page >= previewState.totalPages ? 'disabled' : ''} onclick="window.__spfixPreviewPage(${previewState.page + 1})">Next →</button>
+                </div>`;
                 html += `<div style="display:flex;gap:8px;margin-top:12px">
                     <button class="btn btn-primary" id="btnApplyFix">Apply These Changes</button>
                     <button class="btn btn-secondary" onclick="location.hash='#/results?scanId=${scanId}'">View in Results</button>
                 </div>`;
                 container.innerHTML = html;
+
+                window.__spfixPreviewPage = (nextPage) => {
+                    if (!previewState.scanId) return;
+                    loadPreviewResults(previewState.scanId, nextPage);
+                };
 
                 document.getElementById('btnApplyFix').onclick = async () => {
                     if (!confirm('Apply all previewed changes? This will modify files in SharePoint.')) return;
@@ -1047,7 +1291,7 @@
         } catch { }
 
         if (state.connected) {
-            document.getElementById('settingsConn').textContent = `Connected to ${state.tenantDomain} as ${state.upn || 'app'} (${state.authMode})`;
+            document.getElementById('settingsConn').textContent = `Connected to ${state.tenantDomain || 'unknown'} as ${state.userPrincipalName || 'app'} (${state.authMode || 'unknown'})`;
             const btn = document.getElementById('btnDisconnect');
             btn.style.display = 'inline-flex';
             btn.onclick = async () => {

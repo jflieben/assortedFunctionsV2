@@ -141,7 +141,7 @@ body {
 
 /* Main content */
 #app {
-    max-width: 1280px;
+    width: min(96vw, 1480px);
     margin: 0 auto;
     padding: 24px;
 }
@@ -201,6 +201,11 @@ table {
     border-collapse: collapse;
     font-size: 0.85em;
 }
+
+/* Results table needs a little extra width so the status column remains readable */
+table.results-table {
+    min-width: 1120px;
+}
 th, td {
     padding: 10px 12px;
     text-align: left;
@@ -217,6 +222,24 @@ th:hover { color: var(--text); }
 th .sort-arrow { margin-left: 4px; font-size: 0.8em; }
 
 tr:hover { background: var(--accent-light); }
+
+/* Keep Fix Status visible when horizontally scrolling long path rows */
+th.fix-col,
+td.fix-col {
+    position: sticky;
+    right: 0;
+    background: var(--bg-card);
+}
+
+th.fix-col {
+    z-index: 2;
+}
+
+td.fix-col {
+    z-index: 1;
+    min-width: 110px;
+    white-space: nowrap;
+}
 
 /* Stat grid */
 .stat-grid {

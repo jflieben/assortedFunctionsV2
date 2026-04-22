@@ -238,6 +238,66 @@ public sealed class Engine : IDisposable
 
     // ── Site Discovery ──────────────────────────────────────────
 
+    public async Task<SiteDiscoveryPage> DiscoverSitesPageAsync(
+        int pageSize = 100,
+        string? cursor = null,
+        string? query = null,
+        bool includeOneDrive = false,
+        CancellationToken ct = default)
+    {
+        if (_graphClient == null) throw new InvalidOperationException("Not connected.");
+
+        var boundedPageSize = Math.Clamp(pageSize, 10, 500);
+        var normalizedQuery = string.IsNullOrWhiteSpace(query) ? null : query.Trim();
+
+        var requestUrl = !string.IsNullOrWhiteSpace(cursor)
+            ? cursor
+            : $"sites?search={Uri.EscapeDataString(normalizedQuery ?? "*")}&$select=id,displayName,webUrl&$top={boundedPageSize}";
+
+        var result = await _graphClient.GetAsync(requestUrl, eventualConsistency: true, ct: ct);
+        var items = new List<SiteInfo>();
+        if (result?.TryGetProperty("value", out var values) == true)
+        {
+            foreach (var site in values.EnumerateArray())
+            {
+                var webUrl = site.TryGetProperty("webUrl", out var wu) ? wu.GetString() ?? "" : "";
+                if (string.IsNullOrEmpty(webUrl))
+                    continue;
+
+                if (!includeOneDrive && webUrl.Contains("-my.sharepoint.com", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var displayName = site.TryGetProperty("displayName", out var dn) ? dn.GetString() ?? "" : "";
+                if (!string.IsNullOrEmpty(normalizedQuery) &&
+                    !displayName.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase) &&
+                    !webUrl.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                items.Add(new SiteInfo
+                {
+                    Id = site.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
+                    DisplayName = displayName,
+                    WebUrl = webUrl
+                });
+            }
+        }
+
+        var nextCursor = result?.TryGetProperty("@odata.nextLink", out var nl) == true
+            ? NormalizeGraphNextLink(nl.GetString())
+            : null;
+
+        return new SiteDiscoveryPage
+        {
+            Items = items,
+            PageSize = boundedPageSize,
+            HasMore = !string.IsNullOrEmpty(nextCursor),
+            NextCursor = nextCursor,
+            Query = normalizedQuery
+        };
+    }
+
     public async Task<List<SiteInfo>> DiscoverSitesAsync(CancellationToken ct = default)
     {
         if (_graphClient == null) throw new InvalidOperationException("Not connected.");
@@ -245,7 +305,7 @@ public sealed class Engine : IDisposable
         var sites = new List<SiteInfo>();
 
         // Use search=* which works for both delegated and app-only auth
-        await foreach (var site in _graphClient.GetPagedAsync("sites?search=*&$select=id,displayName,webUrl&$top=999", ct))
+        await foreach (var site in _graphClient.GetPagedAsync("sites?search=*&$select=id,displayName,webUrl&$top=500", eventualConsistency: true, ct: ct))
         {
             var webUrl = site.TryGetProperty("webUrl", out var wu) ? wu.GetString() ?? "" : "";
             // Skip the root site and OneDrive personal sites
@@ -260,6 +320,18 @@ public sealed class Engine : IDisposable
             });
         }
         return sites.OrderBy(s => s.DisplayName).ToList();
+    }
+
+    private static string? NormalizeGraphNextLink(string? nextLink)
+    {
+        if (string.IsNullOrWhiteSpace(nextLink))
+            return null;
+
+        const string graphV1Prefix = "https://graph.microsoft.com/v1.0/";
+        if (nextLink.StartsWith(graphV1Prefix, StringComparison.OrdinalIgnoreCase))
+            return nextLink[graphV1Prefix.Length..];
+
+        return nextLink;
     }
 
     // ── HTTP Server ─────────────────────────────────────────────
@@ -298,4 +370,13 @@ public class SiteInfo
     public string Id { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public string WebUrl { get; set; } = "";
+}
+
+public class SiteDiscoveryPage
+{
+    public List<SiteInfo> Items { get; set; } = new();
+    public int PageSize { get; set; }
+    public bool HasMore { get; set; }
+    public string? NextCursor { get; set; }
+    public string? Query { get; set; }
 }

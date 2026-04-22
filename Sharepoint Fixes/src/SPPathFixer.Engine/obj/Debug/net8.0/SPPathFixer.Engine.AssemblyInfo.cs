@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyDescriptionAttribute("Core engine for SPPathFixer — SQLite storage, HTTP server, SharePoint REST scanni" +
     "ng, path fixing")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1f1a1008e93402a032a0607f3451bab74ffc1ec4")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+109dd50d88616e71a7e5fcfe6b7b703a23f039d6")]
 [assembly: System.Reflection.AssemblyProductAttribute("SPPathFixer.Engine")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SPPathFixer.Engine")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

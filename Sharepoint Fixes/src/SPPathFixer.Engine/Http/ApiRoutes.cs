@@ -159,8 +159,14 @@ public static class ApiRoutes
         // ── Sites discovery ───────────────────────────────────
         server.Route("GET", "/api/sites", async (ctx, _) =>
         {
-            var sites = await engine.DiscoverSitesAsync();
-            await WebServer.WriteJson(ctx.Response, 200, ApiResponse.Ok(sites));
+            var qs = ctx.Request.QueryString;
+            var pageSize = int.TryParse(qs["pageSize"], out var ps) ? ps : 100;
+            var cursor = qs["cursor"];
+            var query = qs["query"];
+            var includeOneDrive = bool.TryParse(qs["includeOneDrive"], out var iod) && iod;
+
+            var page = await engine.DiscoverSitesPageAsync(pageSize, cursor, query, includeOneDrive);
+            await WebServer.WriteJson(ctx.Response, 200, ApiResponse.Ok(page));
         });
     }
 

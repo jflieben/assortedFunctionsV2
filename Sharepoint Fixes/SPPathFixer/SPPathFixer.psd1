@@ -1,6 +1,6 @@
 @{
     RootModule           = 'SPPathFixer.psm1'
-    ModuleVersion        = '1.0.0'
+    ModuleVersion        = '1.0.1'
     CompatiblePSEditions = @('Core')
     GUID                 = 'f7a3c2e1-4b8d-4e6f-9a1c-3d5e7f2b8c4a'
     Author               = 'Jos Lieben (jos@lieben.nu)'
@@ -11,7 +11,6 @@ SPPathFixer - SharePoint Online Long Path Scanner & Fixer
 
 Scans SharePoint Online sites for files and folders exceeding path length limits.
 Provides multiple fix strategies: shorten names, move up hierarchy, flatten paths.
-Built on .NET 8 with embedded SQLite database and web GUI.
 
 USAGE:
     Import-Module SPPathFixer   # Opens GUI automatically
@@ -54,7 +53,7 @@ Use at own risk
         PSData = @{
             Tags         = @('SharePoint', 'PathLength', 'LongPath', 'Fix', 'Scanner', 'Office365')
             LicenseUri   = 'https://www.lieben.nu/liebensraum/commercial-use/'
-            ReleaseNotes = 'Initial release - .NET 8 engine with SQLite, embedded GUI, multiple fix strategies.'
+            ReleaseNotes = 'Improve performance, visibility of intermediate results and reliability'
         }
     }
 }

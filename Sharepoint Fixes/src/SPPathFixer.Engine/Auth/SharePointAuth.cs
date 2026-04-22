@@ -28,7 +28,9 @@ public sealed class SharePointAuth
     private string? _certClientId;
     private string? _certTenantId;
 
-    public bool IsConnected => _tokenCache.HasValidToken("graph") || _tokenCache.GetRefreshToken() != null || _certificate != null;
+    // A session is considered connected only after auth mode has been established.
+    // This avoids transient UI states like "Connected ... (None)" during startup restore.
+    public bool IsConnected => !string.Equals(_authMode, "None", StringComparison.OrdinalIgnoreCase);
     public string? TenantId => _tenantId;
     public string? TenantDomain => _tenantDomain;
     public string? UserPrincipalName => _userPrincipalName;
