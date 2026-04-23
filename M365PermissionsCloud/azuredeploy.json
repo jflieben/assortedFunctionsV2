@@ -80,7 +80,49 @@
                 "maximumJitAccessDuration": "PT8H",
                 "jitApprovers": []
             }
-        }        
+        },
+        "enableMsp": {
+            "type": "bool",
+            "defaultValue": false,
+            "metadata": {
+                "description": "Enable cross-tenant scanning with your own Entra ID service principal (Managed Service Provider scenario). If enabled, please make sure to grant the service principal the required permissions as described in the documentation here: https://m365permissions.com/docs/msp-cross-tenant"
+            }
+        },
+        "mspClientId": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The Application (Client) ID of the MSP backend service principal for cross-tenant scanning"
+            }
+        },
+        "mspFrontendClientId": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The Application (Client) ID of the MSP frontend app registration for SSO"
+            }
+        },
+        "mspCertificate": {
+            "type": "securestring",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Base64-encoded PFX certificate content for MSP authentication"
+            }
+        },
+        "mspCertPassword": {
+            "type": "securestring",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Password for the PFX certificate"
+            }
+        },
+        "useB1WebApp": {
+            "type": "bool",
+            "defaultValue": false,
+            "metadata": {
+                "description": "If true, deploys the web app on Basic (B1) tier with Always On instead of Free (F1)"
+            }
+        }
     },
     "variables": {
         "managedResourceGroupId": "[if(empty(parameters('managedResourceGroupId')),concat(subscription().id,'/resourceGroups/',take(concat(resourceGroup().name,'-',uniquestring(resourceGroup().id),uniquestring(parameters('applicationResourceName'))),90)),concat(subscription().id,'/resourceGroups/',parameters('managedResourceGroupId')))]",
@@ -133,6 +175,24 @@
                     },
                     "customTags": {
                         "value": "[parameters('customTags')]"
+                    },
+                    "enableMsp": {
+                        "value": "[parameters('enableMsp')]"
+                    },
+                    "mspClientId": {
+                        "value": "[parameters('mspClientId')]"
+                    },
+                    "mspFrontendClientId": {
+                        "value": "[parameters('mspFrontendClientId')]"
+                    },
+                    "mspCertificate": {
+                        "value": "[parameters('mspCertificate')]"
+                    },
+                    "mspCertPassword": {
+                        "value": "[parameters('mspCertPassword')]"
+                    },
+                    "useB1WebApp": {
+                        "value": "[parameters('useB1WebApp')]"
                     }
                 },
                 "jitAccessPolicy": "[if(equals(parameters('version'), 'standard'), json('null'), parameters('jitAccessPolicy'))]"
