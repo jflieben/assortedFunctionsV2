@@ -116,6 +116,13 @@
                 "description": "Password for the PFX certificate"
             }
         },
+        "mspTenantId": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The Tennat ID of the customer"
+            }
+        },
         "useB1WebApp": {
             "type": "bool",
             "defaultValue": false,
@@ -190,6 +197,9 @@
                     },
                     "mspCertPassword": {
                         "value": "[parameters('mspCertPassword')]"
+                    },
+                    "mspTenantId": {
+                        "value": "[parameters('mspTenantId')]"
                     },
                     "useB1WebApp": {
                         "value": "[parameters('useB1WebApp')]"

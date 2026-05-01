@@ -553,6 +553,7 @@
         Write-Host "  4. Enter Frontend Client ID: $frontendClientId"
         Write-Host "  5. Upload the PFX file: $pfxFilePath"
         Write-Host "  6. Enter the PFX password: $PfxPassword"
+        Write-Host "  7. Enter the tenant ID: $tenantId"
     } else {
         Write-Host "Permissions and roles have been validated/updated." -ForegroundColor Cyan
         Write-Host "Certificate was not regenerated (app already existed)." -ForegroundColor Yellow
