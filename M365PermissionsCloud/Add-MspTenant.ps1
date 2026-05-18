@@ -42,7 +42,7 @@
 
     # Get Graph token
     try {
-        $graphToken = (Get-AzAccessToken -ResourceUrl "https://graph.microsoft.com" -ErrorAction Stop).Token | ConvertFrom-SecureString -AsPlainText
+        $graphToken = (Get-AzAccessToken -ResourceUrl "https://graph.microsoft.com" -ErrorAction Stop -AsSecureString).Token | ConvertFrom-SecureString -AsPlainText
         $graphHeaders = @{ "Authorization" = "Bearer $graphToken" }
     } catch {
         Write-Error "Failed to get Graph API token: $_"
