@@ -62,14 +62,14 @@
       ]
     },
     "outputs": {
+      "kind": "ResourceGroup",
+      "location": "[steps('basics').resourceScope.location.name]",
+      "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]",
       "parameters": {
         "location": "[steps('basics').resourceScope.location.name]",
         "storageAccountNamePrefix": "[steps('deploymentSettings').storageAccountNamePrefix]",
         "selectedSubscriptionIds": "[steps('deploymentSettings').selectedSubscriptionIds]"
-      },
-      "kind": "ResourceGroup",
-      "location": "[steps('basics').resourceScope.location.name]",
-      "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]"
+      }
     }
   }
 }
