@@ -10,22 +10,21 @@
           "label": "Basics",
           "elements": [
             {
-              "name": "subscription",
-              "type": "Microsoft.Common.SubscriptionSelector",
-              "label": "Subscription",
-              "toolTip": "Subscription where the storage account + resource group will be created."
-            },
-            {
-              "name": "location",
-              "type": "Microsoft.Common.LocationSelector",
-              "label": "Region",
-              "toolTip": "Region for the resource group and storage account.",
-              "scope": {
-                "subscriptionId": "[steps('basics').subscription.id]"
+              "name": "resourceScope",
+              "type": "Microsoft.Common.ResourceScope",
+              "location": {
+                "label": "Region",
+                "toolTip": "Region for the resource group and storage account.",
+                "resourceTypes": [
+                  "Microsoft.Storage/storageAccounts"
+                ]
               },
-              "resourceTypes": [
-                "Microsoft.Storage/storageAccounts"
-              ]
+              "subscription": {
+                "resourceProviders": [
+                  "Microsoft.Storage",
+                  "Microsoft.Authorization"
+                ]
+              }
             }
           ]
         },
@@ -39,19 +38,7 @@
               "visible": true,
               "options": {
                 "icon": "Info",
-                "text": "The storage account + resource group are created in the subscription selected in the Basics step. The final storage account name is auto-generated from your prefix."
-              }
-            },
-            {
-              "name": "storageResourceGroupName",
-              "type": "Microsoft.Common.TextBox",
-              "label": "Resource group name (created if missing)",
-              "defaultValue": "rg-ccs",
-              "toolTip": "Name of the resource group to create or reuse for the storage account.",
-              "constraints": {
-                "required": true,
-                "regex": "^[a-zA-Z0-9._()-]{1,90}$",
-                "validationMessage": "1-90 chars, letters/digits/._()- only."
+                "text": "The storage account is created in the resource group + region selected in the Basics step. The final storage account name is auto-generated from your prefix."
               }
             },
             {
@@ -141,12 +128,11 @@
       ]
     },
     "outputs": {
-      "kind": "Subscription",
-      "location": "[steps('basics').location]",
-      "subscriptionId": "[steps('basics').subscription.subscriptionId]",
+      "kind": "ResourceGroup",
+      "location": "[steps('basics').resourceScope.location.name]",
+      "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]",
       "parameters": {
-        "location": "[steps('basics').location]",
-        "storageResourceGroupName": "[steps('storage').storageResourceGroupName]",
+        "location": "[steps('basics').resourceScope.location.name]",
         "storageAccountNamePrefix": "[steps('storage').storageAccountNamePrefix]",
         "selectedSubscriptionIdsRaw": "[if(empty(steps('permissions').selectedSubscriptionIds), '', string(steps('permissions').selectedSubscriptionIds))]"
       }
