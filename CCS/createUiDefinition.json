@@ -10,14 +10,22 @@
           "label": "Basics",
           "elements": [
             {
-              "name": "resourceScope",
-              "type": "Microsoft.Common.ResourceScope",
-              "location": {
-                "resourceTypes": [
-                  "Microsoft.Storage/storageAccounts",
-                  "Microsoft.Resources/resourceGroups"
-                ]
-              }
+              "name": "subscription",
+              "type": "Microsoft.Common.SubscriptionSelector",
+              "label": "Subscription",
+              "toolTip": "Subscription where the storage account + resource group will be created."
+            },
+            {
+              "name": "location",
+              "type": "Microsoft.Common.LocationSelector",
+              "label": "Region",
+              "toolTip": "Region for the resource group and storage account.",
+              "scope": {
+                "subscriptionId": "[steps('basics').subscription.id]"
+              },
+              "resourceTypes": [
+                "Microsoft.Storage/storageAccounts"
+              ]
             }
           ]
         },
@@ -134,10 +142,10 @@
     },
     "outputs": {
       "kind": "Subscription",
-      "location": "[steps('basics').resourceScope.location.name]",
-      "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
+      "location": "[steps('basics').location]",
+      "subscriptionId": "[steps('basics').subscription.subscriptionId]",
       "parameters": {
-        "location": "[steps('basics').resourceScope.location.name]",
+        "location": "[steps('basics').location]",
         "storageResourceGroupName": "[steps('storage').storageResourceGroupName]",
         "storageAccountNamePrefix": "[steps('storage').storageAccountNamePrefix]",
         "selectedSubscriptionIdsRaw": "[if(empty(steps('permissions').selectedSubscriptionIds), '', string(steps('permissions').selectedSubscriptionIds))]"
