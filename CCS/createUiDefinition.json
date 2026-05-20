@@ -6,6 +6,21 @@
       "title": "CCS Storage + RBAC Deployment",
       "steps": [
         {
+          "name": "basics",
+          "label": "Basics",
+          "elements": [
+            {
+              "name": "resourceScope",
+              "type": "Microsoft.Common.ResourceScope",
+              "location": {
+                "resourceTypes": [
+                  "microsoft.resources/resourcegroups"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "deploymentSettings",
           "label": "Deployment settings",
           "elements": [
@@ -47,8 +62,14 @@
       ]
     },
     "outputs": {
-      "storageAccountNamePrefix": "[steps('deploymentSettings').storageAccountNamePrefix]",
-      "selectedSubscriptionIds": "[steps('deploymentSettings').selectedSubscriptionIds]"
+      "parameters": {
+        "location": "[steps('basics').resourceScope.location.name]",
+        "storageAccountNamePrefix": "[steps('deploymentSettings').storageAccountNamePrefix]",
+        "selectedSubscriptionIds": "[steps('deploymentSettings').selectedSubscriptionIds]"
+      },
+      "kind": "ResourceGroup",
+      "location": "[steps('basics').resourceScope.location.name]",
+      "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]"
     }
   }
 }
