@@ -44,11 +44,11 @@
             }
           ]
         }
-      ]
+      ],
+      "outputs": {
+        "storageAccountNamePrefix": "[steps('deploymentSettings').storageAccountNamePrefix]",
+        "selectedSubscriptionIds": "[steps('deploymentSettings').selectedSubscriptionIds]"
+      }
     }
-  },
-  "outputs": {
-    "storageAccountNamePrefix": "[steps('deploymentSettings').storageAccountNamePrefix]",
-    "selectedSubscriptionIds": "[steps('deploymentSettings').selectedSubscriptionIds]"
   }
 }
