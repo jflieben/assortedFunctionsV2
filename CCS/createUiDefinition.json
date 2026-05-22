@@ -25,16 +25,16 @@
                   "Microsoft.Authorization"
                 ]
               }
-              },
-              {
-                "name": "basicsInfo",
-                "type": "Microsoft.Common.InfoBox",
-                "visible": true,
-                "options": {
-                  "icon": "Info",
-                  "text": "Welcome to Eden Akers Cloud Custodian! This form will guide you through the deployment of a storage account with appropriate RBAC permissions for CCS. Fill out the required fields and click 'Review + Create' to deploy. For more details, visit our documentation.",
-                  "uri": "https://www.eden-akers.com"
-                }
+            },
+            {
+              "name": "basicsInfo",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Info",
+                "text": "Welcome to Eden Akers Cloud Custodian! This form will guide you through the deployment of a storage account with appropriate RBAC permissions for CCS. Fill out the required fields and click 'Review + Create' to deploy. For more details, visit our documentation.",
+                "uri": "https://www.eden-akers.com"
+              }
             }
           ]
         },
