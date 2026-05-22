@@ -3,7 +3,7 @@
   "view": {
     "kind": "Form",
     "properties": {
-      "title": "CCS Storage + RBAC Deployment",
+      "title": "Cloud Custodian Setup",
       "steps": [
         {
           "name": "basics",
@@ -35,47 +35,6 @@
                   "text": "Welcome to Eden Akers Cloud Custodian! This form will guide you through the deployment of a storage account with appropriate RBAC permissions for CCS. Fill out the required fields and click 'Review + Create' to deploy. For more details, visit our documentation.",
                   "uri": "https://www.eden-akers.com"
                 }
-            }
-          ]
-        },
-        {
-          "name": "tags",
-          "label": "Tags (optional)",
-          "elements": [
-            {
-              "name": "tagsInfo",
-              "type": "Microsoft.Common.InfoBox",
-              "visible": true,
-              "options": {
-                "icon": "Info",
-                "text": "Use this step only if your governance policy requires tags. You can apply tags to the main resource group and/or the deployed storage account."
-              }
-            },
-            {
-              "name": "tagResourceGroup",
-              "type": "Microsoft.Common.CheckBox",
-              "label": "Apply tags to the main resource group",
-              "constraints": {
-                "required": false
-              }
-            },
-            {
-              "name": "tagAllResources",
-              "type": "Microsoft.Common.CheckBox",
-              "label": "Apply tags to deployed resources",
-              "constraints": {
-                "required": false
-              }
-            },
-            {
-              "name": "customTags",
-              "type": "Microsoft.Common.TagsByResource",
-              "visible": "[or(equals(steps('tags').tagResourceGroup,true), equals(steps('tags').tagAllResources,true))]",
-              "toolTip": "Set tags per resource type.",
-              "resources": [
-                "Microsoft.Resources/resourceGroups",
-                "Microsoft.Storage/storageAccounts"
-              ]
             }
           ]
         },
@@ -157,7 +116,48 @@
               }
             }
           ]
-        }
+        },
+        {
+          "name": "tags",
+          "label": "Tags (optional)",
+          "elements": [
+            {
+              "name": "tagsInfo",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Info",
+                "text": "Use this step only if your governance policy requires tags. You can apply tags to the main resource group and/or the deployed storage account."
+              }
+            },
+            {
+              "name": "tagResourceGroup",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "Apply tags to the main resource group",
+              "constraints": {
+                "required": false
+              }
+            },
+            {
+              "name": "tagAllResources",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "Apply tags to deployed resources",
+              "constraints": {
+                "required": false
+              }
+            },
+            {
+              "name": "customTags",
+              "type": "Microsoft.Common.TagsByResource",
+              "visible": "[or(equals(steps('tags').tagResourceGroup,true), equals(steps('tags').tagAllResources,true))]",
+              "toolTip": "Set tags per resource type.",
+              "resources": [
+                "Microsoft.Resources/resourceGroups",
+                "Microsoft.Storage/storageAccounts"
+              ]
+            }
+          ]
+        }        
       ]
     },
     "outputs": {
