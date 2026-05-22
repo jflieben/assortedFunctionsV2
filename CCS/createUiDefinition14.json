@@ -162,9 +162,7 @@
     },
     "outputs": {
       "kind": "ResourceGroup",
-      "subscriptionId": "[subscription().subscriptionId]",
       "location": "[steps('basics').resourceScope.location.name]",
-      "resourceGroupId": "[format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name)]",
       "parameters": {
         "location": "[steps('basics').resourceScope.location.name]",
         "applyTagsToResourceGroup": "[steps('tags').tagResourceGroup]",
