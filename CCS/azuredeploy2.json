@@ -2,15 +2,6 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "storageAccountNamePrefix": {
-      "type": "string",
-      "defaultValue": "ccs",
-      "minLength": 3,
-      "maxLength": 11,
-      "metadata": {
-        "description": "Prefix used to auto-generate a globally unique storage account name."
-      }
-    },
     "location": {
       "type": "string",
       "defaultValue": "[resourceGroup().location]",
@@ -32,7 +23,7 @@
     "tableRoleId": "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3",
     "readerRoleId": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
     "costReaderRoleId": "72fafb9e-0641-4937-9268-a91bfd8191a3",
-    "storageAccountName": "[toLower(take(concat(parameters('storageAccountNamePrefix'), uniqueString(resourceGroup().id, variables('spnObjectId'))), 24))]",
+    "storageAccountName": "[toLower(take(concat('ccs', uniqueString(resourceGroup().id, variables('spnObjectId'))), 24))]",
     "selectedSubscriptionIds": "[if(empty(parameters('selectedSubscriptionIdsRaw')), createArray(), if(startsWith(parameters('selectedSubscriptionIdsRaw'), '['), json(parameters('selectedSubscriptionIdsRaw')), createArray(parameters('selectedSubscriptionIdsRaw'))))]"
   },
   "resources": [
