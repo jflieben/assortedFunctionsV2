@@ -40,7 +40,7 @@
         },
         {
           "name": "permissions",
-          "label": "Subscription permissions",
+          "label": "Subscriptions to monitor",
           "elements": [
             {
               "name": "permsInfo",
@@ -76,7 +76,7 @@
         },
         {
           "name": "tenantRoot",
-          "label": "Tenant-wide (optional)",
+          "label": "All subscriptions (optional)",
           "elements": [
             {
               "name": "tenantInfo",
