@@ -8,6 +8,7 @@
         {
           "name": "basics",
           "label": "Basics",
+          "description": "You're about to deploy **Cloud Custodian**! If you need additional guidance, visit our [Getting Started](https://eden-akers.com/) page.",
           "elements": [
             {
               "name": "resourceScope",
@@ -116,30 +117,6 @@
               }
             }
           ]
-        },
-        {
-          "name": "tags",
-          "label": "Tags (optional)",
-          "elements": [
-            {
-              "name": "tagsInfo",
-              "type": "Microsoft.Common.InfoBox",
-              "visible": true,
-              "options": {
-                "icon": "Info",
-                "text": "Use this step only if your governance policy requires tags. You can apply tags to the main resource group and/or the deployed storage account."
-              }
-            },
-            {
-              "name": "customTags",
-              "type": "Microsoft.Common.TagsByResource",
-              "toolTip": "Set tags per resource type.",
-              "resources": [
-                "Microsoft.Resources/resourceGroups",
-                "Microsoft.Storage/storageAccounts"
-              ]
-            }
-          ]
         }
       ]
     },
@@ -148,9 +125,6 @@
       "location": "[steps('basics').resourceScope.location.name]",
       "parameters": {
         "location": "[steps('basics').resourceScope.location.name]",
-        "applyTagsToResourceGroup": "[steps('tags').tagResourceGroup]",
-        "applyTagsToAllResources": "[steps('tags').tagAllResources]",
-        "customTags": "[steps('tags').customTags]",
         "selectedSubscriptionIdsRaw": "[if(equals(steps('tenantRoot').confirmTenantWideScriptRun, true), '', if(empty(steps('permissions').selectedSubscriptionIds), '', string(steps('permissions').selectedSubscriptionIds)))]"
       }
     }

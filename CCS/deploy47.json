@@ -9,13 +9,6 @@
         "description": "Azure region for the storage account."
       }
     },
-    "customTags": {
-      "type": "object",
-      "defaultValue": {},
-      "metadata": {
-        "description": "Tags payload from the wizard's TagsByResource control."
-      }
-    },
     "selectedSubscriptionIdsRaw": {
       "type": "string",
       "defaultValue": "",
@@ -36,23 +29,12 @@
   },
   "resources": [
     {
-      "condition": "[contains(parameters('customTags'), 'Microsoft.Resources/resourceGroups')]",
-      "type": "Microsoft.Resources/tags",
-      "apiVersion": "2021-04-01",
-      "name": "default",
-      "scope": "[format('subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name)]",
-      "properties": {
-        "tags": "[parameters('customTags')['Microsoft.Resources/resourceGroups']]"
-      }
-    },
-    {
       "type": "Microsoft.Storage/storageAccounts",
       "apiVersion": "2023-05-01",
       "name": "[variables('storageAccountName')]",
       "location": "[parameters('location')]",
       "sku": { "name": "Standard_LRS" },
       "kind": "StorageV2",
-      "tags": "[if(contains(parameters('customTags'), 'Microsoft.Storage/storageAccounts'), parameters('customTags')['Microsoft.Storage/storageAccounts'], json('{}'))]",
       "properties": {
         "accessTier": "Hot",
         "minimumTlsVersion": "TLS1_2",
