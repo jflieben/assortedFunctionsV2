@@ -8,6 +8,7 @@
         {
           "name": "basics",
           "label": "Basics",
+          "description": "You're about to deploy **Cloud Custodian**! If you need additional guidance, visit our [Getting Started](https://eden-akers.com/) page.",
           "elements": [
             {
               "name": "resourceScope",
@@ -131,25 +132,8 @@
               }
             },
             {
-              "name": "tagResourceGroup",
-              "type": "Microsoft.Common.CheckBox",
-              "label": "Apply tags to the main resource group",
-              "constraints": {
-                "required": false
-              }
-            },
-            {
-              "name": "tagAllResources",
-              "type": "Microsoft.Common.CheckBox",
-              "label": "Apply tags to deployed resources",
-              "constraints": {
-                "required": false
-              }
-            },
-            {
               "name": "customTags",
               "type": "Microsoft.Common.TagsByResource",
-              "visible": "[or(equals(steps('tags').tagResourceGroup,true), equals(steps('tags').tagAllResources,true))]",
               "toolTip": "Set tags per resource type.",
               "resources": [
                 "Microsoft.Resources/resourceGroups",

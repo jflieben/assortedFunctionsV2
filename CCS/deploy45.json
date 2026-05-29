@@ -9,20 +9,6 @@
         "description": "Azure region for the storage account."
       }
     },
-    "applyTagsToResourceGroup": {
-      "type": "bool",
-      "defaultValue": false,
-      "metadata": {
-        "description": "When true, apply tags to the main resource group."
-      }
-    },
-    "applyTagsToAllResources": {
-      "type": "bool",
-      "defaultValue": false,
-      "metadata": {
-        "description": "When true, apply tags to deployed resources."
-      }
-    },
     "customTags": {
       "type": "object",
       "defaultValue": {},
@@ -50,7 +36,7 @@
   },
   "resources": [
     {
-      "condition": "[and(parameters('applyTagsToResourceGroup'), contains(parameters('customTags'), 'Microsoft.Resources/resourceGroups'))]",
+      "condition": "[contains(parameters('customTags'), 'Microsoft.Resources/resourceGroups')]",
       "type": "Microsoft.Resources/tags",
       "apiVersion": "2021-04-01",
       "name": "default",
@@ -66,7 +52,7 @@
       "location": "[parameters('location')]",
       "sku": { "name": "Standard_LRS" },
       "kind": "StorageV2",
-      "tags": "[if(and(parameters('applyTagsToAllResources'), contains(parameters('customTags'), 'Microsoft.Storage/storageAccounts')), parameters('customTags')['Microsoft.Storage/storageAccounts'], json('{}'))]",
+      "tags": "[if(contains(parameters('customTags'), 'Microsoft.Storage/storageAccounts'), parameters('customTags')['Microsoft.Storage/storageAccounts'], json('{}'))]",
       "properties": {
         "accessTier": "Hot",
         "minimumTlsVersion": "TLS1_2",
