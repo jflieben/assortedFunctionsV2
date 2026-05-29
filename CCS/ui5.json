@@ -146,7 +146,7 @@
         "location": "[steps('basics').resourceScope.location.name]",
         "applyTagsToResourceGroup": "[steps('tags').tagResourceGroup]",
         "applyTagsToAllResources": "[steps('tags').tagAllResources]",
-        "customTags": "[if(or(equals(steps('tags').tagResourceGroup,true), equals(steps('tags').tagAllResources,true)), steps('tags').customTags, json('{}'))]"}
+        "customTags": "[steps('tags').customTags]"}
     }
   }
 }
