@@ -8,7 +8,6 @@
         {
           "name": "basics",
           "label": "Basics",
-          "description": "You're about to deploy **Cloud Custodian**! If you need additional guidance, visit our [Getting Started](https://eden-akers.com/) page.",
           "elements": [
             {
               "name": "resourceScope",
