@@ -167,7 +167,7 @@
         "location": "[steps('basics').resourceScope.location.name]",
         "applyTagsToResourceGroup": "[steps('tags').tagResourceGroup]",
         "applyTagsToAllResources": "[steps('tags').tagAllResources]",
-        "customTags": "[steps('tags').customTags]"},
+        "customTags": "[steps('tags').customTags]",
         "selectedSubscriptionIdsRaw": "[if(equals(steps('tenantRoot').confirmTenantWideScriptRun, true), '', if(empty(steps('permissions').selectedSubscriptionIds), '', string(steps('permissions').selectedSubscriptionIds)))]"
       }
     }
