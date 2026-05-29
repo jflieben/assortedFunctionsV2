@@ -29,24 +29,17 @@
       "metadata": {
         "description": "Tags payload from the wizard's TagsByResource control."
       }
-    },
-    "selectedSubscriptionIdsRaw": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Either a single subscription ID, or a JSON array string (e.g. [\"id1\",\"id2\"]) of subscription IDs to receive Reader + Cost Management Reader. Empty = none."
-      }
     }
   },
   "variables": {
-    "spnObjectId": "4bc18533-99fb-401d-9ef1-b9e03b4ca51b",
+    "spnObjectId": "9bbe10c7-e81b-407f-a8a8-79837a6e35b1",
     "blobRoleId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
     "tableRoleId": "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3",
     "readerRoleId": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+    "monitorRoleId": "43d0d8ad-25c7-4714-9337-8ba259a9fe05",
     "costReaderRoleId": "72fafb9e-0641-4937-9268-a91bfd8191a3",
     "storageAccountName": "[toLower(take(concat('saeacc', uniqueString(resourceGroup().id, variables('spnObjectId'))), 24))]",
-    "selectedSubscriptionIds": "[if(empty(parameters('selectedSubscriptionIdsRaw')), createArray(), if(startsWith(parameters('selectedSubscriptionIdsRaw'), '['), json(parameters('selectedSubscriptionIdsRaw')), createArray(parameters('selectedSubscriptionIdsRaw'))))]"
-  },
+    },
   "resources": [
     {
       "condition": "[and(parameters('applyTagsToResourceGroup'), contains(parameters('customTags'), 'Microsoft.Resources/resourceGroups'))]",
@@ -82,6 +75,17 @@
       }
     },
     {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/default/cloud-custodian-landing', variables('storageAccountName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "properties": {
+        "publicAccess": "None"
+      }
+    },
+    {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), variables('spnObjectId'), variables('blobRoleId'))]",
@@ -107,52 +111,6 @@
         "principalId": "[variables('spnObjectId')]",
         "principalType": "ServicePrincipal",
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('tableRoleId'))]"
-      }
-    },
-    {
-      "condition": "[greater(length(variables('selectedSubscriptionIds')), 0)]",
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2021-04-01",
-      "name": "[concat('ccs-sub-roles-', variables('selectedSubscriptionIds')[copyIndex()])]",
-      "location": "[parameters('location')]",
-      "subscriptionId": "[variables('selectedSubscriptionIds')[copyIndex()]]",
-      "copy": {
-        "name": "subRoleAssignments",
-        "count": "[if(equals(length(variables('selectedSubscriptionIds')), 0), 1, length(variables('selectedSubscriptionIds')))]"
-      },
-      "properties": {
-        "mode": "Incremental",
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "variables": {
-            "spnObjectId": "4bc18533-99fb-401d-9ef1-b9e03b4ca51b",
-            "readerRoleId": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
-            "costReaderRoleId": "72fafb9e-0641-4937-9268-a91bfd8191a3"
-          },
-          "resources": [
-            {
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "name": "[guid(subscription().subscriptionId, variables('spnObjectId'), variables('readerRoleId'))]",
-              "properties": {
-                "principalId": "[variables('spnObjectId')]",
-                "principalType": "ServicePrincipal",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('readerRoleId'))]"
-              }
-            },
-            {
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "name": "[guid(subscription().subscriptionId, variables('spnObjectId'), variables('costReaderRoleId'))]",
-              "properties": {
-                "principalId": "[variables('spnObjectId')]",
-                "principalType": "ServicePrincipal",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('costReaderRoleId'))]"
-              }
-            }
-          ]
-        }
       }
     }
   ],
