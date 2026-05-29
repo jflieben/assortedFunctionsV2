@@ -1,0 +1,157 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json#",
+  "view": {
+    "kind": "Form",
+    "properties": {
+      "title": "Cloud Custodian Setup",
+      "steps": [
+        {
+          "name": "basics",
+          "label": "Basics",
+          "description": "You're about to deploy **Cloud Custodian**! If you need additional guidance, visit our [Getting Started](https://eden-akers.com/) page.",
+          "elements": [
+            {
+              "name": "resourceScope",
+              "type": "Microsoft.Common.ResourceScope",
+              "location": {
+                "label": "Region",
+                "toolTip": "Region for the resource group and storage account.",
+                "resourceTypes": [
+                  "Microsoft.Storage/storageAccounts"
+                ]
+              },
+              "subscription": {
+                "resourceProviders": [
+                  "Microsoft.Storage",
+                  "Microsoft.Authorization"
+                ]
+              }
+            },
+            {
+              "name": "basicsInfo",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Info",
+                "text": "Welcome to Eden Akers Cloud Custodian! This form will guide you through the deployment of a storage account with appropriate RBAC permissions for CCS. Fill out the required fields and click 'Review + Create' to deploy. For more details, visit our documentation.",
+                "uri": "https://www.eden-akers.com"
+              }
+            }
+          ]
+        },
+        {
+          "name": "permissions",
+          "label": "Subscriptions to monitor",
+          "elements": [
+            {
+              "name": "permsInfo",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Info",
+                "text": "Select below which subscriptions we should monitor for you (we'll assign Reader + Cost Management Reader). For tenant-wide coverage instead, see the next step."
+              }
+            },
+            {
+              "name": "subscriptionsApi",
+              "type": "Microsoft.Solutions.ArmApiControl",
+              "request": {
+                "method": "GET",
+                "path": "/subscriptions?api-version=2020-01-01"
+              }
+            },
+            {
+              "name": "selectedSubscriptionIds",
+              "type": "Microsoft.Common.DropDown",
+              "label": "Subscriptions to monitor",
+              "toolTip": "Select subscriptions where the SPN should get Reader + Cost Management Reader. Leave empty to skip per-subscription assignments.",
+              "multiselect": true,
+              "selectAll": true,
+              "filter": true,
+              "constraints": {
+                "required": false,
+                "allowedValues": "[map(steps('permissions').subscriptionsApi.value, (item) => parse(concat('{\"label\":\"', item.displayName, ' (', item.subscriptionId, ')\",\"value\":\"', item.subscriptionId, '\"}')))]"
+              }
+            }
+          ]
+        },
+        {
+          "name": "tenantRoot",
+          "label": "All subscriptions (optional)",
+          "elements": [
+            {
+              "name": "tenantInfo",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Warning",
+                "text": "Want us to monitor every current and future subscription? That requires assigning roles at the tenant root management group, which Azure Portal deployments cannot do without elevated permissions. Run the PowerShell snippet below in Azure Cloud Shell instead."
+              }
+            },
+            {
+              "name": "shellHint",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Info",
+                "text": "Open Azure Cloud Shell via the >_ icon at the top-right of the portal, then paste the script below and press enter to allow reader access to all subscriptions at once."
+              }
+            },
+            {
+              "name": "psScript",
+              "type": "Microsoft.Common.TextBox",
+              "label": "PowerShell snippet (copy + paste into Cloud Shell)",
+              "defaultValue": "$spn = '9bbe10c7-e81b-407f-a8a8-79837a6e35b1'; $myObjectId = (Get-AzADUser -SignedIn).Id; $tenantRoot = \"/providers/Microsoft.Management/managementGroups/$((Get-AzContext).Tenant.Id)\"; $hadAccess = [bool](Get-AzRoleAssignment -ObjectId $myObjectId -Scope '/' -RoleDefinitionName 'User Access Administrator' -ErrorAction SilentlyContinue); if (-not $hadAccess) { Invoke-AzRestMethod -Path '/providers/Microsoft.Authorization/elevateAccess?api-version=2016-07-01' -Method POST | Out-Null; Start-Sleep 30 }; foreach ($r in 'Reader','Cost Management Reader') { New-AzRoleAssignment -ObjectId $spn -RoleDefinitionName $r -Scope $tenantRoot -ErrorAction SilentlyContinue }; if (-not $hadAccess) { Get-AzRoleAssignment -ObjectId $myObjectId -Scope '/' -RoleDefinitionName 'User Access Administrator' | Remove-AzRoleAssignment }",
+              "multiLine": true,
+              "constraints": {
+                "required": false
+              }
+            },
+            {
+              "name": "confirmTenantWideScriptRun",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "I confirm I have run the script above",
+              "toolTip": "When checked, subscription selections from the previous step are ignored and no per-subscription role assignments are deployed.",
+              "constraints": {
+                "required": false
+              }
+            }
+          ]
+        },
+        {
+          "name": "tags",
+          "label": "Tags (optional)",
+          "elements": [
+            {
+              "name": "tagsInfo",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Info",
+                "text": "Use this step only if your governance policy requires tags. You can apply tags to the main resource group and/or the deployed storage account."
+              }
+            },
+            {
+              "name": "customTags",
+              "type": "Microsoft.Common.TagsByResource",
+              "toolTip": "Set tags per resource type.",
+              "resources": [
+                "Microsoft.Resources/resourceGroups",
+                "Microsoft.Storage/storageAccounts"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "outputs": {
+      "kind": "ResourceGroup",
+      "location": "[steps('basics').resourceScope.location.name]",
+      "parameters": {
+        "location": "[steps('basics').resourceScope.location.name]",
+        "customTags": "[steps('tags').customTags]",
+        "selectedSubscriptionIdsRaw": "[if(equals(steps('tenantRoot').confirmTenantWideScriptRun, true), '', if(empty(steps('permissions').selectedSubscriptionIds), '', string(steps('permissions').selectedSubscriptionIds)))]"
+      }
+    }
+  }
+}
