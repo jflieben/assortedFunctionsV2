@@ -1,14 +1,12 @@
 # Detect Extra OneDrive Sync
 
-Finds Intune-managed devices where the **logged-on user** is synchronizing **more than just their personal OneDrive for Business** — i.e. they've used the OneDrive client's **Sync** button to add SharePoint / Teams document libraries as separate sync roots.
+Finds Intune-managed devices where the **logged-on user** is synchronizing **more than just their personal OneDrive for Business**.
+
+i.e. they've used the OneDrive client's **Sync** button to add SharePoint / Teams document libraries as separate sync roots.
 
 Deployed as an **Intune Remediation** in *detection-only* mode: it never changes anything on the device. The list of separately-synced sites is written to the script's output, which Intune captures as the **pre-remediation detection output**, giving you a per-device overview directly in the Intune portal.
 
-## Why a remediation script (and not central Graph)?
-
-Which SharePoint sites a user syncs lives **only in that user's `HKCU` registry** (`HKCU:\Software\SyncEngines\Providers\OneDrive`). There is no Graph/Intune inventory for it, and `HKCU` can only be read reliably in the logged-on user's context — hence an on-device remediation detection script run as the user.
-
-## How it works
+## How it detects this
 
 For each sync scope under `HKCU:\Software\SyncEngines\Providers\OneDrive` the detection script reads `LibraryType`, `UrlNamespace` and **`MountPoint`**. The `MountPoint` is what separates a real separate sync from a harmless shortcut:
 
@@ -38,16 +36,18 @@ For each sync scope under `HKCU:\Software\SyncEngines\Providers\OneDrive` the de
 
 1. **Intune admin center** → *Devices* → *Remediations* → **Create**.
 2. Give it a name, e.g. `Extra OneDrive Sync Detection`.
-3. Upload `Detect-ExtraOneDriveSync.ps1` as the **detection** script. Optionally upload `Remediate-ExtraOneDriveSync.ps1` as the remediation script (or leave it empty — it isn't required).
+3. Upload `Detect-ExtraOneDriveSync.ps1` as the **detection** script. Optionally upload `Remediate-ExtraOneDriveSync.ps1` as the remediation script (or leave it empty, it isn't required).
 4. **Settings:**
-   - **Run this script using the logged-on credentials:** **Yes** *(required — reads `HKCU`)*
+   - **Run this script using the logged-on credentials:** **Yes** *(required, reads `HKCU`)*
    - **Run script in 64-bit PowerShell:** Yes
    - **Enforce script signature check:** No *(unless you sign the scripts)*
 5. **Assign** to the device/user groups in scope and set a schedule (daily is fine).
 
 ## Viewing results
 
-In the Intune portal open the remediation → **Device status**. Each device shows its detection state and the **pre-remediation detection output** — the `EXTRASYNC (n): ...` line lists exactly which SharePoint/Teams libraries that user is syncing. Filter on devices with detection output starting with `EXTRASYNC` to get your overview. (Export to CSV from this view if you want it offline.)
+In the Intune portal open the remediation → **Device status**. Each device shows its detection state and the **pre-remediation detection output**. 
+
+The `EXTRASYNC (n): ...` line lists which SharePoint/Teams libraries that user is syncing. Filter on devices with detection output starting with `EXTRASYNC` to get your overview. (Export to CSV from this view if you want it offline.)
 
 ## Notes & limits
 
