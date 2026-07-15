@@ -4,7 +4,7 @@
     Reduces file/folder paths and file names to comply with SharePoint Online limits.
     Author: Jos Lieben (Lieben Consultancy)
     Copyright/License: https://www.lieben.nu/liebensraum/commercial-use/ (Pure commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
-    Git: 
+    Git: https://github.com/jflieben/assortedFunctionsV2/blob/main/FileServerToSPO/PreMigrationReport.ps1
 #>
 param(
     [Parameter(Mandatory = $true)][String]$RootPath, #e.g g:\Finance
