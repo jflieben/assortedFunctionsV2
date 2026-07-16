@@ -935,21 +935,27 @@ $folderColumnOrder = @(
 )
 Write-Host "Exporting annotated Excel workbook..." -ForegroundColor Cyan
 
-# The XLSX is a convenience copy for annotation; it must never take the whole report down.
-# EPPlus holds the entire workbook in memory and -AutoSize touches every cell, so at millions
-# of rows an unbounded export runs for hours or OOMs the worker. Strategy:
-#  - cap the exported rows at $MaxXlsxRows (sourcedata.csv keeps the full dataset),
-#  - drop -AutoSize above 50k rows,
+# The XLSX is a convenience copy for annotation; it must never take the whole report down in larger source folders
+# EPPlus holds the entire workbook in memory, so at millions of rows an unbounded export runs
+# for hours or OOMs the worker. Strategy:
+#  - cap the exported rows at $MaxXlsxRows (brondata.csv keeps the full dataset),
+#  - write cells in bulk via EPPlus LoadFromArrays instead of piping into Export-Excel. The
+#    pipeline path inserts every cell individually (~30M try/catch'd assignments at 1M rows) and
+#    is what makes the export take hours; it is also the source of the "Could not insert the
+#    'LastAccessUtc' property at Row N" warnings (EPPlus rejects DateTimes before the 1900 Excel
+#    epoch, e.g. FILETIME-zero timestamps). LoadFromArrays is one managed call and we coerce
+#    pre-1900 dates to text so no row is dropped,
+#  - only AutoFit columns below 50k rows (per-cell measurement is itself O(cells)),
 #  - run the export on a worker thread and abandon it after $XlsxTimeoutMinutes,
 #  - any failure degrades to "no XLSX this run" instead of a failed runbook.
 $xlsxOk = $false
 $exportItems = $fileItems
-$xlsxFullPath = $OutputXlsx
+$xlsxFullPath = [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $OutputXlsx))
 try {
     if (Test-Path -LiteralPath $xlsxFullPath) { Remove-Item -LiteralPath $xlsxFullPath -Force }
 
     if ($fileItems.Count -gt $MaxXlsxRows) {
-        Write-Warning "  $($fileItems.Count) rows exceed MaxXlsxRows ($MaxXlsxRows); exporting the first $MaxXlsxRows (most-duplicated/oldest/largest first). Full dataset remains in sourcedata.csv."
+        Write-Warning "  $($fileItems.Count) rows exceed MaxXlsxRows ($MaxXlsxRows); exporting the first $MaxXlsxRows (most-duplicated/oldest/largest first). Full dataset remains in brondata.csv."
         $exportItems = $fileItems[0..($MaxXlsxRows - 1)]
     }
 
@@ -958,24 +964,76 @@ try {
         $ErrorActionPreference = 'Stop'
         Import-Module ImportExcel
         $maxRowsPerSheet = 1048575  # Excel max rows minus header
-        $autoSize = if ($fileItems.Count -le 50000) { @{ AutoSize = $true } } else { @{} }
 
-        if ($fileItems.Count -le $maxRowsPerSheet) {
-            $fileItems | Select-Object $fileColumnOrder | Export-Excel -Path $xlsxPath -WorksheetName 'Files' -TableName 'FileAnalysis' -TableStyle Medium2 @autoSize
-        } else {
-            $sheetNum = 1
-            for ($offset = 0; $offset -lt $fileItems.Count; $offset += $maxRowsPerSheet) {
-                $end   = [math]::Min($offset + $maxRowsPerSheet, $fileItems.Count)
-                $chunk = $fileItems[$offset..($end - 1)]
-                Write-Host "  Writing sheet Files_$sheetNum (rows $($offset+1) - $end)..." -ForegroundColor Cyan
-                $chunk | Select-Object $fileColumnOrder | Export-Excel -Path $xlsxPath -WorksheetName "Files_$sheetNum" -TableName "FileAnalysis_$sheetNum" -TableStyle Medium2 @autoSize
-                $sheetNum++
+        # Columns holding DateTime values; they need an Excel date number-format after bulk load
+        # (LoadFromArrays stores the raw serial, so without this they'd render as numbers).
+        $dateColumns = @('CreatedUtc', 'LastWriteUtc', 'LastAccessUtc')
+
+        # Bulk-write one sheet using EPPlus LoadFromArrays. Orders of magnitude faster than
+        # piping into Export-Excel, and it never drops rows: values EPPlus can't store as a date
+        # (pre-1900 timestamps) are coerced to text instead of triggering per-cell warnings.
+        function Write-BulkSheet {
+            param($Package, $Items, [string[]]$Columns, [string]$SheetName, [string]$TableName, [string]$TableStyle)
+
+            $ws = $Package.Workbook.Worksheets.Add($SheetName)
+            $colCount = $Columns.Count
+
+            # Header row.
+            for ($c = 0; $c -lt $colCount; $c++) { $ws.Cells[1, $c + 1].Value = $Columns[$c] }
+
+            # Build one object[] per row in column order.
+            $rows = [System.Collections.Generic.List[object[]]]::new()
+            foreach ($it in $Items) {
+                $arr = [object[]]::new($colCount)
+                for ($c = 0; $c -lt $colCount; $c++) {
+                    $v = $it.($Columns[$c])
+                    # Excel's date system starts at 1900; EPPlus throws on earlier DateTimes.
+                    if ($v -is [datetime] -and $v.Year -lt 1900) { $v = $v.ToString('o') }
+                    $arr[$c] = $v
+                }
+                $rows.Add($arr)
             }
+            if ($rows.Count -gt 0) { $null = $ws.Cells[2, 1].LoadFromArrays($rows) }
+            $lastRow = [math]::Max($rows.Count + 1, 2)
+
+            # Date number-format on any DateTime columns.
+            for ($c = 0; $c -lt $colCount; $c++) {
+                if ($dateColumns -contains $Columns[$c]) {
+                    $ws.Column($c + 1).Style.Numberformat.Format = 'yyyy-mm-dd hh:mm:ss'
+                }
+            }
+
+            # Styled table for filtering/sorting parity with the previous output.
+            $range = $ws.Cells[1, 1, $lastRow, $colCount]
+            $tbl = $ws.Tables.Add($range, $TableName)
+            $tbl.TableStyle = [OfficeOpenXml.Table.TableStyles]$TableStyle
+
+            # AutoFit is per-cell measurement (O(cells)); only affordable on small sheets.
+            if ($rows.Count -le 50000) { $ws.Cells[$ws.Dimension.Address].AutoFitColumns() }
         }
-        if ($folderItems.Count -gt 0) {
-            $folderAutoSize = if ($folderItems.Count -le 50000) { @{ AutoSize = $true } } else { @{} }
-            $folderItems | Select-Object $folderColumnOrder | Export-Excel -Path $xlsxPath -WorksheetName 'FolderPermissions' -TableName 'FolderPermissions' -TableStyle Medium6 @folderAutoSize
-            Write-Host "  Written $($folderItems.Count) folder permission rows" -ForegroundColor Cyan
+
+        $pkg = Open-ExcelPackage -Path $xlsxPath -Create
+        try {
+            if ($fileItems.Count -le $maxRowsPerSheet) {
+                Write-BulkSheet -Package $pkg -Items $fileItems -Columns $fileColumnOrder -SheetName 'Files' -TableName 'FileAnalysis' -TableStyle 'Medium2'
+            } else {
+                $sheetNum = 1
+                for ($offset = 0; $offset -lt $fileItems.Count; $offset += $maxRowsPerSheet) {
+                    $end   = [math]::Min($offset + $maxRowsPerSheet, $fileItems.Count)
+                    $chunk = $fileItems[$offset..($end - 1)]
+                    Write-Host "  Writing sheet Files_$sheetNum (rows $($offset+1) - $end)..." -ForegroundColor Cyan
+                    Write-BulkSheet -Package $pkg -Items $chunk -Columns $fileColumnOrder -SheetName "Files_$sheetNum" -TableName "FileAnalysis_$sheetNum" -TableStyle 'Medium2'
+                    $sheetNum++
+                }
+            }
+            if ($folderItems.Count -gt 0) {
+                Write-BulkSheet -Package $pkg -Items $folderItems -Columns $folderColumnOrder -SheetName 'FolderPermissions' -TableName 'FolderPermissions' -TableStyle 'Medium6'
+                Write-Host "  Written $($folderItems.Count) folder permission rows" -ForegroundColor Cyan
+            }
+            Close-ExcelPackage $pkg
+        } catch {
+            try { Close-ExcelPackage $pkg -NoSave } catch { }
+            throw
         }
     }
     $exportArgs = @($exportItems, $folderItems, $fileColumnOrder, $folderColumnOrder, $xlsxFullPath)
@@ -987,7 +1045,7 @@ try {
         if ($exportJob.State -eq 'Running') {
             # EPPlus cannot be interrupted mid-operation; request a stop and move on. The
             # abandoned thread dies with the process and the partial file is not uploaded.
-            Write-Warning "  Excel export still running after $XlsxTimeoutMinutes minutes; continuing without XLSX. Full dataset remains in sourcedata.csv."
+            Write-Warning "  Excel export still running after $XlsxTimeoutMinutes minutes; continuing without XLSX. Full dataset remains in brondata.csv."
             $null = $exportJob.StopJobAsync()
         } elseif ($exportJob.State -eq 'Completed') {
             # Host output already streamed live via -StreamingHost; the job runs with
@@ -1008,7 +1066,7 @@ try {
         Write-Host "  Saved: $OutputXlsx ($([math]::Round((Get-Item -LiteralPath $xlsxFullPath).Length / 1KB, 0)) KB)"
     }
 } catch {
-    Write-Warning "  Excel export failed: $($_.Exception.Message). Continuing without XLSX; full dataset remains in sourcedata.csv."
+    Write-Warning "  Excel export failed: $($_.Exception.Message). Continuing without XLSX; full dataset remains in brondata.csv."
 }
 if (-not $xlsxOk) {
     try { if (Test-Path -LiteralPath $xlsxFullPath) { Remove-Item -LiteralPath $xlsxFullPath -Force -ErrorAction Stop } } catch { }
