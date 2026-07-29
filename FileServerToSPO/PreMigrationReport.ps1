@@ -979,7 +979,7 @@ try {
             $colCount = $Columns.Count
 
             # Header row.
-            for ($c = 0; $c -lt $colCount; $c++) { $ws.Cells[1, $c + 1].Value = $Columns[$c] }
+            for ($c = 0; $c -lt $colCount; $c++) { $ws.Cells[1, ($c + 1)].Value = $Columns[$c] }
 
             # Build one object[] per row in column order.
             $rows = [System.Collections.Generic.List[object[]]]::new()
