@@ -1,34 +1,11 @@
 {
   "$comment": [
     "Central definition of every permission M365Permissions Cloud needs.",
-    "This file is the single source of truth for:",
-    "  - authorize.ps1 (grants them)",
-    "  - the scanner VM (audits them into the permissionState table)",
-    "  - the portal (gates features on them)",
-    "  - m365permissions.com (documents them)",
     "Master copy: https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/main/M365PermissionsCloud/permissions.json",
-    "Mirror: https://m365permissions.com/permissions.json",
-    "",
-    "CUTOVER RULE: every grant marked 'required' must be part of the set that the",
-    "frozen Finalize-M365PermissionsV2 Azure Function already grants. Anything new",
-    "ships as 'recommended' until that Function is deleted, otherwise installs that",
-    "were onboarded by the old Function fail Test-ArePermissionsPresent and end up",
-    "in a permanent re-auth loop.",
-    "",
-    "gatesUpdate: whether a missing grant blocks the auto update and triggers the re-auth",
-    "mail. Defaults to true for 'required' and false otherwise. It is pinned to false on a",
-    "handful of required grants so that the update gate stays byte identical to the set that",
-    "defs/requiredpermissionsV2.json checked before this file existed. Flip them to true in",
-    "the release that deletes the Azure Function.",
-    "",
-    "Deliberately NOT changed yet (would break the cutover rule):",
-    "  - graph/spo Sites.FullControl.All is not yet downgraded to Sites.Read.All",
-    "  - exo full_access_as_app is not yet dropped",
-    "  - graph Mail.Send is not yet dropped in favour of exo.mail.send.scoped",
-    "All three land in the release that deletes the Function."
+    "Mirror: https://m365permissions.com/permissions.json"
   ],
   "revision": 1,
-  "minimumProductVersion": "1.5.0",
+  "minimumProductVersion": "1.4.9",
 
   "resources": {
     "graph": {
@@ -84,6 +61,90 @@
   ],
 
   "grants": [
+    {
+      "key": "graph.crosstenantinformation.readbasic",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "recommended",
+      "resource": "graph",
+      "value": "CrossTenantInformation.ReadBasic.All",
+      "categories": [ "EntraUsers", "EntraGroups", "EntraSPNs", "Entra", "Admins", "Devices" ],
+      "docs": {
+        "title": "Read basic cross tenant information",
+        "why": "If this is granted, permissions granted to entities in other tenants can be enriched with that tenant's actual company name/ownership",
+        "url": "https://m365permissions.com/docs/permissions#graph.crosstenantinformation.readbasic"
+      }
+    },    
+    {
+      "key": "graph.auditlog.readall",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "recommended",
+      "resource": "graph",
+      "value": "AuditLog.Read.All",
+      "categories": [ "ExoRecipients", "Entra", "Admins", "Azure", "Sharepoint", "Onedrive", "Teams", "O365Group" ],
+      "docs": {
+        "title": "Read the entra audit log",
+        "why": "If this is granted, the tool can include extra data in reports, such as if the user granted permissions is actually logging in or stale / inactive",
+        "url": "https://m365permissions.com/docs/permissions#graph.auditlog.readall"
+      }
+    },       
+    {
+      "key": "graph.auditlogsquery.readall",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "recommended",
+      "resource": "graph",
+      "value": "AuditLogsQuery.Read.All",
+      "categories": [ "ExoRecipients", "Entra", "Admins", "Azure", "Sharepoint", "Onedrive", "Teams", "O365Group" ],
+      "docs": {
+        "title": "Read the universal audit log",
+        "why": "If this is granted, the tool can include extra data in reports, such as if sharing links were used and when, if permissions are still actively used etc",
+        "url": "https://m365permissions.com/docs/permissions#graph.auditlogsquery.readall"
+      }
+    },    
+    {
+      "key": "graph.devicemanagementconfiguration.readall",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "recommended",
+      "resource": "graph",
+      "value": "DeviceManagementConfiguration.Read.All",
+      "categories": [ "Admins"],
+      "docs": {
+        "title": "Read app and other assignments from intune",
+        "why": "Read app and other assignments from intune to determine which users get what applications",
+        "url": "https://m365permissions.com/docs/permissions#graph.devicemanagementconfiguration.readall"
+      }
+    },     
+    {
+      "key": "graph.policy.readall",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "recommended",
+      "resource": "graph",
+      "value": "Policy.Read.All",
+      "categories": [ "Admins", "Azure"],
+      "docs": {
+        "title": "Read per user authentication configuration",
+        "why": "This can be used to identify users with lacking MFA config, flagging high risk if they are overprivileged",
+        "url": "https://m365permissions.com/docs/permissions#graph.policy.readall"
+      }
+    },         
+    {
+      "key": "graph.devicemanagementserviceconfiguration.readall",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "recommended",
+      "resource": "graph",
+      "value": "DeviceManagementServiceConfiguration.Read.All",
+      "categories": [ "Admins"],
+      "docs": {
+        "title": "Read device enrollment managers",
+        "why": "Standard read permissions don't allow this, if granted we can report on entities holding this special enrollment privilege",
+        "url": "https://m365permissions.com/docs/permissions#graph.devicemanagementserviceconfiguration.readall"
+      }
+    },           
     {
       "key": "spo.sites.fullcontrol",
       "principal": "scanner",
@@ -255,7 +316,6 @@
 
     {
       "key": "graph.application.readwrite.all",
-      "gatesUpdate": false,
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
@@ -271,7 +331,6 @@
     },
     {
       "key": "graph.approleassignment.readwrite.all",
-      "gatesUpdate": false,
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
@@ -287,7 +346,6 @@
     },
     {
       "key": "graph.directory.readwrite.all",
-      "gatesUpdate": false,
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
@@ -303,7 +361,6 @@
     },
     {
       "key": "graph.rolemanagement.readwrite.directory",
-      "gatesUpdate": false,
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
@@ -320,7 +377,6 @@
     {
       "key": "entra.group.admins",
       "nodeScoped": false,
-      "gatesUpdate": false,
       "principal": "scanner",
       "provider": "entraGroup",
       "necessity": "required",
@@ -331,14 +387,13 @@
       "categories": [],
       "docs": {
         "title": "Portal administrators group",
-        "why": "Members of this group get the Admin.Full role in the portal. Created and owned by the scanner so it can keep the app role assignment in sync.",
+        "why": "Members of SEC-APP-M365Permissions-Admins get the Admin.Full role in the portal. Created and owned by the scanner so it can keep the app role assignment in sync.",
         "url": "https://m365permissions.com/docs/permissions#entra.group.admins"
       }
     },
     {
       "key": "entra.group.users",
       "nodeScoped": false,
-      "gatesUpdate": false,
       "principal": "scanner",
       "provider": "entraGroup",
       "necessity": "required",
@@ -348,13 +403,12 @@
       "categories": [],
       "docs": {
         "title": "Portal readers group",
-        "why": "Members of this group get the read-only User.Read role in the portal.",
+        "why": "Members of SEC-APP-M365Permissions-Users group get the read-only User.Read role in the portal.",
         "url": "https://m365permissions.com/docs/permissions#entra.group.users"
       }
     },
     {
       "key": "entra.group.service",
-      "gatesUpdate": false,
       "principal": "scanner",
       "provider": "entraGroup",
       "necessity": "required",
@@ -365,7 +419,7 @@
       "categories": [ "PowerBI" ],
       "docs": {
         "title": "Service group",
-        "why": "Holds the scanner identity itself. Tenant settings that can only be delegated to a security group (such as the Fabric read-only admin APIs) point at this group.",
+        "why": "SEC-SVC-M365Permissions holds the scanner identity itself. Tenant settings that can only be delegated to a security group (such as the Fabric read-only admin APIs) point at this group.",
         "url": "https://m365permissions.com/docs/permissions#entra.group.service"
       }
     },
@@ -443,7 +497,6 @@
 
     {
       "key": "frontend.approle.user",
-      "gatesUpdate": false,
       "principal": "frontend",
       "provider": "entraAppRoleDefinition",
       "necessity": "required",
@@ -460,7 +513,6 @@
     },
     {
       "key": "frontend.approle.admin",
-      "gatesUpdate": false,
       "principal": "frontend",
       "provider": "entraAppRoleDefinition",
       "necessity": "required",
@@ -482,7 +534,6 @@
       "provider": "exoRoleAssignment",
       "necessity": "recommended",
       "role": "View-Only Recipients",
-      "replaces": "entra.role.exchangeAdministrator",
       "condition": { "surfaces": "Exchange" },
       "categories": [ "ExoRecipients", "O365Group", "Teams" ],
       "docs": {
@@ -497,7 +548,6 @@
       "provider": "exoRoleAssignment",
       "necessity": "recommended",
       "role": "View-Only Configuration",
-      "replaces": "entra.role.exchangeAdministrator",
       "condition": { "surfaces": "Exchange" },
       "categories": [ "Admins", "ExoRecipients" ],
       "docs": {

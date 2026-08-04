@@ -392,6 +392,38 @@ function Get-M365PGroup {
     return $group
 }
 
+function Get-M365PDirectoryObjectIds {
+    <#
+        .SYNOPSIS
+        Reads the object ids out of a directory object collection such as a group's owners or members.
+
+        .DESCRIPTION
+        Uses beta, deliberately. The v1.0 owners and members navigations do not return service principal
+        entries, they silently come back as if the service principal were not there at all. Since the
+        scanner identity IS a service principal, reading these on v1.0 reports every group as unowned
+        and produces a confident wrong answer with no error to notice. The product's own group scanning
+        code hit this years ago and settled on beta for the same reason.
+
+        v1.0 is kept as a fallback only for the case where beta is unavailable, where a missing service
+        principal is still better than no answer.
+    #>
+    Param(
+        [Parameter(Mandatory = $true)]$Context,
+        [Parameter(Mandatory = $true)][String]$CollectionUri
+    )
+
+    if ($CollectionUri -notlike "*?*") { $CollectionUri = "$($CollectionUri)?`$select=id" }
+
+    try {
+        return @((Invoke-M365PRest -Context $Context -Uri ($CollectionUri -replace "/v1\.0/", "/beta/")).id)
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        Write-M365PLog -Level Verbose -Message "beta read of $CollectionUri failed ($($_.Exception.Message)), falling back to v1.0"
+        return @((Invoke-M365PRest -Context $Context -Uri $CollectionUri).id)
+    }
+}
+
 function Add-M365PDirectoryObjectRef {
     <#
         .SYNOPSIS
@@ -582,14 +614,16 @@ function Test-M365PGrant_entraGroup {
     $group = Get-M365PGroup -Context $Context -GroupRef $Grant.groupRef
     if (!$group) { return @{ state = "missing"; detail = "Group $($Context.definition.groups.PSObject.Properties[$Grant.groupRef].Value) does not exist" } }
 
-    # only the scanner's own membership is testable: the VM has no idea who ran the onboarding script
+    # Only the scanner's own membership is testable: the VM has no idea who ran the onboarding script.
+    # These go through Get-M365PDirectoryObjectIds because v1.0 omits service principals from owners and
+    # members, and the scanner is one, so v1.0 would report every group as unowned with no error at all.
     if ($Grant.scannerIsOwner) {
-        $owners = @(Invoke-M365PRest -Context $Context -Uri "https://graph.microsoft.com/v1.0/groups/$($group.id)/owners")
-        if ($owners.id -notcontains $Context.scannerSpnObjectId) { return @{ state = "missing"; detail = "The scanner is not an owner of $($group.displayName)" } }
+        $owners = Get-M365PDirectoryObjectIds -Context $Context -CollectionUri "https://graph.microsoft.com/v1.0/groups/$($group.id)/owners"
+        if ($owners -notcontains $Context.scannerSpnObjectId) { return @{ state = "missing"; detail = "The scanner is not an owner of $($group.displayName) ($($group.id))" } }
     }
     if ($Grant.scannerIsMember) {
-        $members = @(Invoke-M365PRest -Context $Context -Uri "https://graph.microsoft.com/v1.0/groups/$($group.id)/members")
-        if ($members.id -notcontains $Context.scannerSpnObjectId) { return @{ state = "missing"; detail = "The scanner is not a member of $($group.displayName)" } }
+        $members = Get-M365PDirectoryObjectIds -Context $Context -CollectionUri "https://graph.microsoft.com/v1.0/groups/$($group.id)/members"
+        if ($members -notcontains $Context.scannerSpnObjectId) { return @{ state = "missing"; detail = "The scanner is not a member of $($group.displayName) ($($group.id))" } }
     }
 
     return @{ state = "granted"; detail = $group.id }
@@ -611,6 +645,20 @@ function Set-M365PGrant_entraGroup {
 }
 
 function Test-M365PGrant_entraDelegatedScope {
+    <#
+        .SYNOPSIS
+        Checks that a delegated scope is declared on the single sign-on application.
+
+        .DESCRIPTION
+        Declaring it is the whole test for a user consentable scope. Tenant wide admin consent is nice
+        to have, because it saves every user a consent prompt on first sign in, but it is not required:
+        without it each user simply consents for themselves. Treating a missing consent grant as a
+        missing permission would put the portal into a re-authorization loop over something that works.
+
+        Whether a scope needs an administrator is not hardcoded here, it is read from the scope's own
+        'type' as Entra reports it. So an admin only delegated scope added later is handled correctly
+        without anyone having to remember this distinction.
+    #>
     Param($Grant, $Context)
 
     if (!$Context.frontendAppObjectId -or !$Context.frontendSpnObjectId) {
@@ -629,9 +677,15 @@ function Test-M365PGrant_entraDelegatedScope {
 
     $consents = @(Invoke-M365PRest -Context $Context -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=clientId eq '$($Context.frontendSpnObjectId)'")
     $consent = $consents | Where-Object { $_.resourceId -eq $spn.id } | Select-Object -First 1
-    if (!$consent -or ($consent.scope -split "\s+") -notcontains $Grant.value) { return @{ state = "missing"; detail = "$($Grant.value) has not been consented" } }
+    $isConsented = ($consent -and ($consent.scope -split "\s+") -contains $Grant.value)
 
-    return @{ state = "granted"; detail = $null }
+    if ($isConsented) { return @{ state = "granted"; detail = $null } }
+
+    if ($scope.type -eq "User") {
+        return @{ state = "granted"; detail = "Declared. No tenant wide consent, so each user consents at first sign in." }
+    }
+
+    return @{ state = "missing"; detail = "$($Grant.value) needs administrator consent and has not been consented" }
 }
 
 function Set-M365PGrant_entraDelegatedScope {
@@ -663,20 +717,28 @@ function Set-M365PGrant_entraDelegatedScope {
     if ($Context.frontendUrl) { $patch.publicClient = @{ redirectUris = @("$($Context.frontendUrl)/api/entra/response") } }
     $null = Invoke-M365PRest -Context $Context -Method PATCH -Raw -Uri "https://graph.microsoft.com/v1.0/applications/$($Context.frontendAppObjectId)" -Body $patch
 
+    # Tenant wide consent is a courtesy, not a requirement: these are user consentable scopes, so
+    # without it each user simply consents for themselves at first sign in. Best effort on purpose,
+    # since a tenant that restricts who may grant consent must not fail the whole onboarding run.
     $desiredScope = ($scopeNames | Sort-Object -Unique) -join " "
-    $consents = @(Invoke-M365PRest -Context $Context -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=clientId eq '$($Context.frontendSpnObjectId)'")
-    $consent = $consents | Where-Object { $_.resourceId -eq $spn.id } | Select-Object -First 1
+    try {
+        $consents = @(Invoke-M365PRest -Context $Context -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=clientId eq '$($Context.frontendSpnObjectId)'")
+        $consent = $consents | Where-Object { $_.resourceId -eq $spn.id } | Select-Object -First 1
 
-    if ($consent) {
-        $null = Invoke-M365PRest -Context $Context -Method PATCH -Raw -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants/$($consent.id)" -Body @{ scope = $desiredScope }
-    }
-    else {
-        $null = Invoke-M365PRest -Context $Context -Method POST -Raw -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" -Body @{
-            clientId    = $Context.frontendSpnObjectId
-            consentType = "AllPrincipals"
-            resourceId  = $spn.id
-            scope       = $desiredScope
+        if ($consent) {
+            $null = Invoke-M365PRest -Context $Context -Method PATCH -Raw -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants/$($consent.id)" -Body @{ scope = $desiredScope }
         }
+        else {
+            $null = Invoke-M365PRest -Context $Context -Method POST -Raw -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" -Body @{
+                clientId    = $Context.frontendSpnObjectId
+                consentType = "AllPrincipals"
+                resourceId  = $spn.id
+                scope       = $desiredScope
+            }
+        }
+    }
+    catch {
+        Write-M365PLog -Level Warning -Message "Could not grant tenant wide consent for the portal sign-in scopes ($($_.Exception.Message)). This is not a problem: users will be asked to consent once each, at their first sign in."
     }
 }
 
@@ -694,7 +756,8 @@ function Test-M365PGrant_entraAppRoleDefinition {
     $group = Get-M365PGroup -Context $Context -GroupRef $Grant.groupRef
     if (!$group) { return @{ state = "missing"; detail = "The group that should hold $($Grant.value) does not exist" } }
 
-    $assignments = @(Invoke-M365PRest -Context $Context -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($Context.frontendSpnObjectId)/appRoleAssignedTo")
+    # beta, for the same reason as the group reads and to match how setup.ps1 already reads this
+    $assignments = @(Invoke-M365PRest -Context $Context -Uri "https://graph.microsoft.com/beta/servicePrincipals/$($Context.frontendSpnObjectId)/appRoleAssignedTo")
     $match = $assignments | Where-Object { $_.appRoleId -eq $appRole.id -and $_.principalId -eq $group.id } | Select-Object -First 1
     if (!$match) { return @{ state = "missing"; detail = "$($group.displayName) is not assigned to the $($Grant.value) role" } }
 
@@ -1348,15 +1411,11 @@ function Invoke-M365PSync {
             }
         }
 
-        $gatesUpdate = ($grant.necessity -eq "required")
-        if ($null -ne $grant.PSObject.Properties["gatesUpdate"]) { $gatesUpdate = [Boolean]$grant.gatesUpdate }
-
         $results += [PSCustomObject]@{
             key          = $grant.key
             principal    = $grant.principal
             provider     = $grant.provider
             necessity    = $grant.necessity
-            gatesUpdate  = $gatesUpdate
             displayName  = if ($grant.docs.title) { $grant.docs.title } else { $grant.key }
             why          = $grant.docs.why
             docsUrl      = $grant.docs.url
@@ -1416,20 +1475,12 @@ function Test-M365PRequiredGrantsPresent {
 
         .DESCRIPTION
         Recommended grants never gate at this level, they only gate their own categories.
-
-        -UpdateGateOnly narrows further, to the grants whose gatesUpdate flag is set. That subset is
-        deliberately identical to what defs/requiredpermissionsV2.json checked before this file
-        existed, so an unattended auto update can never be blocked by a permission the previous
-        checker never looked at. Install time verification uses the full required set instead,
-        because the customer is right there and can re-run the command.
     #>
     Param(
-        [Parameter(Mandatory = $true)]$Results,
-        [Switch]$UpdateGateOnly
+        [Parameter(Mandatory = $true)]$Results
     )
 
     $candidates = @($Results | Where-Object { $_.necessity -eq "required" })
-    if ($UpdateGateOnly) { $candidates = @($candidates | Where-Object { $_.gatesUpdate }) }
 
     $missing = @($candidates | Where-Object { $_.state -ne "granted" -and $_.state -ne "notApplicable" })
     if ($missing.Count -eq 0) { return $true }
