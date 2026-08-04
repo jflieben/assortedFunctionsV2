@@ -629,8 +629,8 @@
       "condition": { "surfaces": "Azure" },
       "categories": [ "Azure" ],
       "docs": {
-        "title": "Azure Reader at the root management group",
-        "why": "Reads Azure role assignments across every subscription. Reader grants no access to data inside the resources, only to the assignments themselves.",
+        "title": "Azure Reader at the root scope",
+        "why": "Reads Azure role assignments across every subscription, including the ones made at the root scope itself, which an assignment lower down cannot see. Reader grants no access to data inside the resources, only to the assignments themselves.",
         "url": "https://m365permissions.com/docs/scanning-azure"
       }
     },

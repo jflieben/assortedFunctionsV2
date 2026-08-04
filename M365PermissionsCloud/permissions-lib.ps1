@@ -944,10 +944,155 @@ function Set-M365PGrant_exoMailbox {
     Start-Sleep -Seconds 10
 }
 
+$Script:M365PUserAccessAdminRoleId = "18d7d88d-d35e-4fb5-a5c3-7773c20a72d9"
+
+function Get-M365PArmScopeUri {
+    <#
+        .SYNOPSIS
+        Turns an ARM scope into the URI it hangs off. The root scope is the empty prefix, everything else
+        is the scope itself.
+    #>
+    Param([Parameter(Mandatory = $true)][String]$Scope)
+
+    if ($Scope -eq "/") { return "https://management.azure.com" }
+    return "https://management.azure.com$Scope"
+}
+
+function Get-M365PAzureScopePreference {
+    <#
+        .SYNOPSIS
+        The scopes to assign at, best first.
+
+        .DESCRIPTION
+        The root scope is what the manual instructions use and is the only place from which assignments
+        made directly at the root are visible, which the tenant wide report needs. The root management
+        group is the next best thing and still covers every current and future subscription. Individual
+        subscriptions are the last resort and miss anything above them.
+    #>
+    Param($Context)
+
+    return @("/", "/providers/Microsoft.Management/managementGroups/$($Context.tenantId)")
+}
+
+function Get-M365PRootElevationAssignment {
+    <#
+        .SYNOPSIS
+        The User Access Administrator assignment at the root scope held by the account running this, if
+        any. That assignment is what elevateAccess creates, and it is the only thing that makes a root
+        management group role assignment possible for a Global Administrator.
+    #>
+    Param($Context)
+
+    $assignments = @(Invoke-M365PRest -Context $Context -ResourceKey "arm" -Uri "https://management.azure.com/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01&`$filter=principalId eq '$($Context.runningUserId)'")
+    return $assignments |
+        Where-Object { $_.properties.scope -eq "/" -and $_.properties.roleDefinitionId -like "*$($Script:M365PUserAccessAdminRoleId)" } |
+        Select-Object -First 1
+}
+
+function Enable-M365PAzureElevation {
+    <#
+        .SYNOPSIS
+        Grants the running Global Administrator access to Azure at the root scope, the manual equivalent
+        of the elevateAccess button in the portal.
+
+        .DESCRIPTION
+        A Global Administrator has no Azure permissions at all until they elevate, so a tenant that has
+        never done this cannot assign anything above the resource group the product was deployed to.
+        Returns whether elevation is in place and whether we are the ones who put it there, because
+        access that was already standing is not ours to hand back.
+    #>
+    Param($Context)
+
+    if (!$Context.runningUserId) {
+        Throw "M365PUNAVAILABLE: cannot elevate Azure access without knowing which account is running this"
+    }
+
+    try {
+        if (Get-M365PRootElevationAssignment -Context $Context) {
+            Write-M365PLog -Level Verbose -Message "Root scope access is already in place, leaving it alone"
+            return @{ elevated = $true; revoke = $false }
+        }
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        Write-M365PLog -Level Verbose -Message "Could not read root scope assignments before elevating: $($_.Exception.Message)"
+    }
+
+    Write-M365PLog -Message "Elevating your access to the Azure root scope, this is undone again at the end"
+
+    $elevated = $false
+    $lastError = $null
+    # the api-version for this endpoint differs between the documentation and what tenants actually accept
+    foreach ($apiVersion in @("2016-07-01", "2017-05-01")) {
+        try {
+            $null = Invoke-M365PRest -Context $Context -ResourceKey "arm" -Method POST -Raw -Body "{}" -Uri "https://management.azure.com/providers/Microsoft.Authorization/elevateAccess?api-version=$apiVersion"
+            $elevated = $true
+            break
+        }
+        catch {
+            if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+            $lastError = $_.Exception.Message
+            $status = $null
+            try { $status = [int]$_.Exception.Response.StatusCode } catch {}
+            # a refusal here means the account is not a Global Administrator, which no other api-version fixes
+            if ($status -eq 403 -or $lastError -like "*AuthorizationFailed*" -or $lastError -like "*Forbidden*") {
+                Throw "M365PUNAVAILABLE: elevating access to the Azure root scope needs a Global Administrator, and the account running this is not one. Either re-run this as a Global Administrator or assign the role by hand, see the documentation link."
+            }
+        }
+    }
+
+    if (!$elevated) { Throw "M365PUNAVAILABLE: could not elevate access to the Azure root scope: $lastError" }
+
+    # the assignment is created asynchronously, so it is not usable the instant the call returns
+    foreach ($attempt in 1..12) {
+        Start-Sleep -Seconds 5
+        try {
+            if (Get-M365PRootElevationAssignment -Context $Context) {
+                Write-M365PLog -Level Verbose -Message "Root scope access became readable after $($attempt * 5) seconds"
+                return @{ elevated = $true; revoke = $true }
+            }
+        }
+        catch {}
+    }
+
+    # elevation was accepted, so hand it back afterwards regardless of whether we could read it back
+    Write-M365PLog -Level Warning -Message "Elevation was accepted but has not replicated yet, continuing anyway"
+    return @{ elevated = $true; revoke = $true }
+}
+
+function Disable-M365PAzureElevation {
+    <#
+        .SYNOPSIS
+        Hands back the root scope access that Enable-M365PAzureElevation took, so nobody is left standing
+        with more Azure privilege than they started the run with.
+    #>
+    Param($Context)
+
+    try {
+        $assignment = Get-M365PRootElevationAssignment -Context $Context
+        if (!$assignment) {
+            Write-M365PLog -Level Verbose -Message "No root scope assignment left to remove"
+            return
+        }
+        $null = Invoke-M365PRest -Context $Context -ResourceKey "arm" -Method DELETE -Raw -Uri "https://management.azure.com$($assignment.id)?api-version=2022-04-01"
+        Write-M365PLog -Message "Handed your root scope access back again"
+    }
+    catch {
+        Write-M365PLog -Level Warning -Message "Could not hand back your root scope access ($($_.Exception.Message)). Remove it by hand with: Remove-AzRoleAssignment -ObjectId $($Context.runningUserId) -Scope '/' -RoleDefinitionName 'User Access Administrator'"
+    }
+}
+
 function Test-M365PGrant_azureRbac {
     Param($Grant, $Context)
 
-    $scopes = @("/providers/Microsoft.Management/managementGroups/$($Context.tenantId)")
+    # Reading role assignments needs Azure permissions of its own, which a Global Administrator loses
+    # again the moment the elevation this run took is handed back. Anything assigned during this run is
+    # therefore answered from what the assignment call itself confirmed, not from a read that cannot work.
+    if ($Context.cache.azureRbacAssigned -and $Context.cache.azureRbacAssigned.ContainsKey($Grant.key)) {
+        return @{ state = "granted"; detail = $Context.cache.azureRbacAssigned[$Grant.key] }
+    }
+
+    $scopes = @(Get-M365PAzureScopePreference -Context $Context)
     try {
         $subscriptions = @(Invoke-M365PRest -Context $Context -ResourceKey "arm" -Uri "https://management.azure.com/subscriptions?api-version=2022-12-01")
         foreach ($subscription in $subscriptions) { $scopes += "/subscriptions/$($subscription.subscriptionId)" }
@@ -959,7 +1104,7 @@ function Test-M365PGrant_azureRbac {
     $lastError = $null
     foreach ($scope in $scopes) {
         try {
-            $assignments = @(Invoke-M365PRest -Context $Context -ResourceKey "arm" -Uri "https://management.azure.com$scope/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01&`$filter=principalId eq '$($Context.scannerSpnObjectId)'")
+            $assignments = @(Invoke-M365PRest -Context $Context -ResourceKey "arm" -Uri "$(Get-M365PArmScopeUri -Scope $scope)/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01&`$filter=principalId eq '$($Context.scannerSpnObjectId)'")
             $match = $assignments | Where-Object { $_.properties.roleDefinitionId -like "*$($Grant.roleDefinitionId)" } | Select-Object -First 1
             if ($match) { return @{ state = "granted"; detail = "$($Grant.displayName) at $scope" } }
         }
@@ -971,7 +1116,26 @@ function Test-M365PGrant_azureRbac {
     return @{ state = "missing"; detail = "The scanner has no $($Grant.displayName) assignment$(if($lastError){" (last error: $lastError)"})" }
 }
 
-function Set-M365PGrant_azureRbac {
+function Set-M365PAzureRbacAssigned {
+    <#
+        .SYNOPSIS
+        Records that this run made the assignment, which is the only evidence left once the elevation
+        that made it possible has been handed back again.
+    #>
+    Param($Context, $Grant, [String]$Detail)
+
+    if (!$Grant.key) { return }
+    if (!$Context.cache.azureRbacAssigned) { $Context.cache.azureRbacAssigned = @{} }
+    $Context.cache.azureRbacAssigned[$Grant.key] = $Detail
+}
+
+function Invoke-M365PAzureRbacAssignment {
+    <#
+        .SYNOPSIS
+        One attempt at assigning the role, at the root scope first, the root management group next and
+        per subscription last. Returns the number of scopes it landed on, so the caller can decide
+        whether elevating is worth it.
+    #>
     Param($Grant, $Context)
 
     $body = @{
@@ -982,20 +1146,36 @@ function Set-M365PGrant_azureRbac {
         }
     }
 
-    # the root management group covers every current and future subscription in one assignment
-    try {
-        $scope = "/providers/Microsoft.Management/managementGroups/$($Context.tenantId)"
-        $null = Invoke-M365PRest -Context $Context -ResourceKey "arm" -Method PUT -Raw -Body $body -Uri "https://management.azure.com$scope/providers/Microsoft.Authorization/roleAssignments/$([guid]::NewGuid())?api-version=2022-04-01"
-        Write-M365PLog -Message "Assigned $($Grant.displayName) at the root management group"
-        return
-    }
-    catch {
-        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
-        Write-M365PLog -Level Warning -Message "Could not assign at the root management group ($($_.Exception.Message)), falling back to individual subscriptions"
+    foreach ($scope in (Get-M365PAzureScopePreference -Context $Context)) {
+        $label = if ($scope -eq "/") { "the root scope" } else { "the root management group" }
+
+        # nothing but the call itself belongs in here, so that bookkeeping afterwards can never be
+        # mistaken for the assignment having failed
+        $done = $false
+        try {
+            $null = Invoke-M365PRest -Context $Context -ResourceKey "arm" -Method PUT -Raw -Body $body -Uri "$(Get-M365PArmScopeUri -Scope $scope)/providers/Microsoft.Authorization/roleAssignments/$([guid]::NewGuid())?api-version=2022-04-01"
+            $done = $true
+            Write-M365PLog -Message "Assigned $($Grant.displayName) at $label"
+        }
+        catch {
+            if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+            if ($_.Exception.Message -like "*RoleAssignmentExists*") {
+                $done = $true
+                Write-M365PLog -Message "$($Grant.displayName) was already assigned at $label"
+            }
+            else {
+                Write-M365PLog -Level Verbose -Message "Could not assign at $($label): $($_.Exception.Message)"
+            }
+        }
+
+        if ($done) {
+            Set-M365PAzureRbacAssigned -Context $Context -Grant $Grant -Detail "$($Grant.displayName) at $scope"
+            return 1
+        }
     }
 
+    Write-M365PLog -Level Verbose -Message "Falling back to individual subscriptions"
     $subscriptions = @(Invoke-M365PRest -Context $Context -ResourceKey "arm" -Uri "https://management.azure.com/subscriptions?api-version=2022-12-01")
-    if ($subscriptions.Count -eq 0) { Throw "No subscriptions are visible to assign $($Grant.displayName) on" }
 
     $assigned = 0
     foreach ($subscription in $subscriptions) {
@@ -1004,18 +1184,51 @@ function Set-M365PGrant_azureRbac {
             $assigned++
         }
         catch {
+            if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
             if ($_.Exception.Message -like "*RoleAssignmentExists*") { $assigned++; continue }
-            Write-M365PLog -Level Warning -Message "Could not assign $($Grant.displayName) on $($subscription.displayName): $($_.Exception.Message)"
+            Write-M365PLog -Level Verbose -Message "Could not assign $($Grant.displayName) on $($subscription.displayName): $($_.Exception.Message)"
         }
     }
-    if ($assigned -eq 0) { Throw "$($Grant.displayName) could not be assigned on any subscription" }
-    Write-M365PLog -Message "Assigned $($Grant.displayName) on $assigned subscription(s)"
+
+    if ($assigned -gt 0) {
+        Write-M365PLog -Message "Assigned $($Grant.displayName) on $assigned subscription(s), which does not cover assignments made above them"
+        Set-M365PAzureRbacAssigned -Context $Context -Grant $Grant -Detail "$($Grant.displayName) on $assigned subscription(s)"
+    }
+    return $assigned
 }
 
-function Remove-M365PGrant_azureRbac {
+function Set-M365PGrant_azureRbac {
     Param($Grant, $Context)
 
-    $scopes = @("/providers/Microsoft.Management/managementGroups/$($Context.tenantId)")
+    if ((Invoke-M365PAzureRbacAssignment -Grant $Grant -Context $Context) -gt 0) { return }
+
+    # Nothing landed, which for a Global Administrator normally means they have never elevated: the role
+    # gives them no Azure access at all until they do. Elevate, retry, and hand the access straight back,
+    # so the run leaves the person who ran it exactly as privileged as it found them.
+    Write-M365PLog -Level Verbose -Message "No scope accepted the assignment, trying again with elevated access"
+
+    $elevation = $null
+    try {
+        $elevation = Enable-M365PAzureElevation -Context $Context
+
+        if ((Invoke-M365PAzureRbacAssignment -Grant $Grant -Context $Context) -gt 0) { return }
+
+        Throw "$($Grant.displayName) could not be assigned at the root management group or on any subscription, even with elevated access"
+    }
+    finally {
+        if ($elevation -and $elevation.revoke) { Disable-M365PAzureElevation -Context $Context }
+    }
+}
+
+function Invoke-M365PAzureRbacRemoval {
+    <#
+        .SYNOPSIS
+        One pass at removing the role from every scope it is held at. Reports what it saw as well as what
+        it managed to delete, so the caller can tell 'nothing to do' apart from 'not allowed to do it'.
+    #>
+    Param($Grant, $Context)
+
+    $scopes = @(Get-M365PAzureScopePreference -Context $Context)
     try {
         foreach ($subscription in @(Invoke-M365PRest -Context $Context -ResourceKey "arm" -Uri "https://management.azure.com/subscriptions?api-version=2022-12-01")) {
             $scopes += "/subscriptions/$($subscription.subscriptionId)"
@@ -1023,15 +1236,50 @@ function Remove-M365PGrant_azureRbac {
     }
     catch {}
 
+    $found = 0
+    $removed = 0
     foreach ($scope in $scopes) {
         try {
-            $assignments = @(Invoke-M365PRest -Context $Context -ResourceKey "arm" -Uri "https://management.azure.com$scope/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01&`$filter=principalId eq '$($Context.scannerSpnObjectId)'")
+            $assignments = @(Invoke-M365PRest -Context $Context -ResourceKey "arm" -Uri "$(Get-M365PArmScopeUri -Scope $scope)/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01&`$filter=principalId eq '$($Context.scannerSpnObjectId)'")
             foreach ($assignment in ($assignments | Where-Object { $_.properties.roleDefinitionId -like "*$($Grant.roleDefinitionId)" -and $_.properties.scope -eq $scope })) {
-                $null = Invoke-M365PRest -Context $Context -ResourceKey "arm" -Method DELETE -Raw -Uri "https://management.azure.com$($assignment.id)?api-version=2022-04-01"
-                Write-M365PLog -Message "Removed $($Grant.displayName) at $scope"
+                $found++
+                try {
+                    $null = Invoke-M365PRest -Context $Context -ResourceKey "arm" -Method DELETE -Raw -Uri "https://management.azure.com$($assignment.id)?api-version=2022-04-01"
+                    $removed++
+                    Write-M365PLog -Message "Removed $($Grant.displayName) at $scope"
+                }
+                catch {
+                    Write-M365PLog -Level Verbose -Message "Could not remove $($Grant.displayName) at $($scope): $($_.Exception.Message)"
+                }
             }
         }
         catch {}
+    }
+
+    return @{ found = $found; removed = $removed }
+}
+
+function Remove-M365PGrant_azureRbac {
+    Param($Grant, $Context)
+
+    if ($Context.cache.azureRbacAssigned) { $Context.cache.azureRbacAssigned.Remove($Grant.key) }
+
+    $result = Invoke-M365PAzureRbacRemoval -Grant $Grant -Context $Context
+    if ($result.found -eq 0 -or $result.removed -eq $result.found) { return }
+
+    # same story as assigning: without elevated access a Global Administrator cannot touch role
+    # assignments above the deployment's own resource group, so unticking the surface would otherwise
+    # leave the scanner's access quietly in place
+    $elevation = $null
+    try {
+        $elevation = Enable-M365PAzureElevation -Context $Context
+        $null = Invoke-M365PAzureRbacRemoval -Grant $Grant -Context $Context
+    }
+    catch {
+        Write-M365PLog -Level Warning -Message "Could not remove $($Grant.displayName): $($_.Exception.Message)"
+    }
+    finally {
+        if ($elevation -and $elevation.revoke) { Disable-M365PAzureElevation -Context $Context }
     }
 }
 
