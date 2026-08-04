@@ -1,0 +1,607 @@
+{
+  "$comment": [
+    "Central definition of every permission M365Permissions Cloud needs.",
+    "This file is the single source of truth for:",
+    "  - authorize.ps1 (grants them)",
+    "  - the scanner VM (audits them into the permissionState table)",
+    "  - the portal (gates features on them)",
+    "  - m365permissions.com (documents them)",
+    "Master copy: https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/main/M365PermissionsCloud/permissions.json",
+    "Mirror: https://m365permissions.com/permissions.json",
+    "",
+    "CUTOVER RULE: every grant marked 'required' must be part of the set that the",
+    "frozen Finalize-M365PermissionsV2 Azure Function already grants. Anything new",
+    "ships as 'recommended' until that Function is deleted, otherwise installs that",
+    "were onboarded by the old Function fail Test-ArePermissionsPresent and end up",
+    "in a permanent re-auth loop.",
+    "",
+    "gatesUpdate: whether a missing grant blocks the auto update and triggers the re-auth",
+    "mail. Defaults to true for 'required' and false otherwise. It is pinned to false on a",
+    "handful of required grants so that the update gate stays byte identical to the set that",
+    "defs/requiredpermissionsV2.json checked before this file existed. Flip them to true in",
+    "the release that deletes the Azure Function.",
+    "",
+    "Deliberately NOT changed yet (would break the cutover rule):",
+    "  - graph/spo Sites.FullControl.All is not yet downgraded to Sites.Read.All",
+    "  - exo full_access_as_app is not yet dropped",
+    "  - graph Mail.Send is not yet dropped in favour of exo.mail.send.scoped",
+    "All three land in the release that deletes the Function."
+  ],
+  "revision": 1,
+  "minimumProductVersion": "1.5.0",
+
+  "resources": {
+    "graph": {
+      "appId": "00000003-0000-0000-c000-000000000000",
+      "name": "Microsoft Graph",
+      "tokenResources": [ "https://graph.microsoft.com" ]
+    },
+    "spo": {
+      "appId": "00000003-0000-0ff1-ce00-000000000000",
+      "name": "SharePoint Online",
+      "tokenResources": []
+    },
+    "exo": {
+      "appId": "00000002-0000-0ff1-ce00-000000000000",
+      "name": "Exchange Online",
+      "tokenResources": [ "https://outlook.office365.com" ]
+    },
+    "fabric": {
+      "$comment": "The legacy Power BI audience is listed first because it is the one confirmed to work for a delegated Azure Cloud Shell session, and the Fabric admin API accepts it. api.fabric.microsoft.com is the fallback, and is what the scanner already uses app-only.",
+      "appId": "00000009-0000-0000-c000-000000000000",
+      "name": "Power BI / Fabric",
+      "tokenResources": [ "https://analysis.windows.net/powerbi/api", "https://api.fabric.microsoft.com" ]
+    },
+    "devops": {
+      "appId": "499b84ac-1321-427f-aa17-267ca6975798",
+      "name": "Azure DevOps",
+      "tokenResources": [ "499b84ac-1321-427f-aa17-267ca6975798" ]
+    },
+    "bap": {
+      "appId": "8578e004-a5c6-46e7-913e-12f58912df43",
+      "name": "Power Platform (BAP)",
+      "tokenResources": [ "https://api.bap.microsoft.com" ]
+    },
+    "arm": {
+      "appId": "797f4846-ba00-4fd7-ba43-dac1f8f63013",
+      "name": "Azure Service Management",
+      "tokenResources": [ "https://management.azure.com/" ]
+    }
+  },
+
+  "groups": {
+    "admins": "SEC-APP-M365Permissions-Admins",
+    "users": "SEC-APP-M365Permissions-Users",
+    "service": "SEC-SVC-M365Permissions"
+  },
+
+  "surfaces": [
+    { "key": "Exchange",      "displayName": "Exchange Online",  "default": true,  "description": "Mailboxes, mail-enabled groups, calendar and folder permissions." },
+    { "key": "PowerBI",       "displayName": "Power BI / Fabric","default": false, "description": "Workspaces, reports, datasets and their permissions." },
+    { "key": "PowerPlatform", "displayName": "Power Platform",   "default": false, "description": "Environments, apps and flows. Authorized manually, see the docs link." },
+    { "key": "AzureDevOps",   "displayName": "Azure DevOps",     "default": false, "description": "Organizations, projects and group memberships." },
+    { "key": "Azure",         "displayName": "Azure",            "default": false, "description": "Subscription and resource group RBAC assignments." }
+  ],
+
+  "grants": [
+    {
+      "key": "spo.sites.fullcontrol",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "spo",
+      "value": "Sites.FullControl.All",
+      "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
+      "docs": {
+        "title": "SharePoint: full control of all site collections",
+        "why": "Reads the permission model of every site, list and library, including unique (broken inheritance) permissions that the read-only scopes do not expose.",
+        "url": "https://m365permissions.com/docs/permissions#spo.sites.fullcontrol"
+      }
+    },
+    {
+      "key": "exo.manageasapp",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "exo",
+      "value": "Exchange.ManageAsApp",
+      "categories": [ "ExoRecipients", "O365Group", "Teams", "Admins" ],
+      "docs": {
+        "title": "Exchange: manage as application",
+        "why": "Permits app-only Exchange Online PowerShell. Without it no Exchange cmdlet can be called at all, regardless of the assigned Exchange RBAC roles.",
+        "url": "https://m365permissions.com/docs/permissions#exo.manageasapp"
+      }
+    },
+    {
+      "key": "graph.directory.read",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "Directory.Read.All",
+      "categories": [ "EntraUsers", "EntraGroups", "EntraSPNs", "Entra", "Admins", "Devices" ],
+      "docs": {
+        "title": "Read directory data",
+        "why": "Enumerates users, groups, service principals, applications and their assignments. This is the backbone of every scan.",
+        "url": "https://m365permissions.com/docs/permissions#graph.directory.read"
+      }
+    },
+    {
+      "key": "graph.entitlementmanagement.read",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "EntitlementManagement.Read.All",
+      "categories": [ "EntraGroups", "Admins" ],
+      "docs": {
+        "title": "Read entitlement management",
+        "why": "Reads access packages and their assignment policies so access granted through Identity Governance is attributed correctly.",
+        "url": "https://m365permissions.com/docs/permissions#graph.entitlementmanagement.read"
+      }
+    },
+    {
+      "key": "graph.roleeligibilityschedule.read",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "RoleEligibilitySchedule.Read.Directory",
+      "categories": [ "Admins" ],
+      "docs": {
+        "title": "Read role eligibility schedules",
+        "why": "Reads PIM eligible role assignments, so administrators who can elevate are reported alongside permanently assigned ones.",
+        "url": "https://m365permissions.com/docs/permissions#graph.roleeligibilityschedule.read"
+      }
+    },
+    {
+      "key": "graph.rolemanagement.read",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "RoleManagement.Read.All",
+      "categories": [ "Admins", "Entra" ],
+      "docs": {
+        "title": "Read role management data",
+        "why": "Reads directory role definitions and assignments, including scoped and custom roles.",
+        "url": "https://m365permissions.com/docs/permissions#graph.rolemanagement.read"
+      }
+    },
+    {
+      "key": "graph.sites.fullcontrol",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "Sites.FullControl.All",
+      "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
+      "docs": {
+        "title": "Graph: full control of all site collections",
+        "why": "The Graph counterpart of the SharePoint grant, used for the site and drive metadata that the SharePoint REST API does not return.",
+        "url": "https://m365permissions.com/docs/permissions#graph.sites.fullcontrol"
+      }
+    },
+    {
+      "key": "graph.application.readwrite.ownedby",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "Application.ReadWrite.OwnedBy",
+      "categories": [],
+      "docs": {
+        "title": "Manage applications this app owns",
+        "why": "Lets the scanner maintain the single sign-on application it owns (reply URL, app roles, group assignments) without any privilege over other applications.",
+        "url": "https://m365permissions.com/docs/permissions#graph.application.readwrite.ownedby"
+      }
+    },
+    {
+      "key": "graph.cloudpc.read",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "CloudPC.Read.All",
+      "categories": [ "Devices" ],
+      "docs": {
+        "title": "Read Cloud PC data",
+        "why": "Reads Windows 365 Cloud PC provisioning and assignment data so Cloud PCs appear in the device permission model.",
+        "url": "https://m365permissions.com/docs/permissions#graph.cloudpc.read"
+      }
+    },
+    {
+      "key": "graph.privilegedaccess.read",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "PrivilegedAccess.Read.AzureAD",
+      "categories": [ "Admins" ],
+      "docs": {
+        "title": "Read privileged access to Entra",
+        "why": "Reads PIM state for directory roles so the difference between eligible and active administrators is visible.",
+        "url": "https://m365permissions.com/docs/permissions#graph.privilegedaccess.read"
+      }
+    },
+    {
+      "key": "graph.privilegedeligibilityschedule.read.group",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "PrivilegedEligibilitySchedule.Read.AzureADGroup",
+      "categories": [ "EntraGroups", "Admins" ],
+      "docs": {
+        "title": "Read PIM for Groups eligibility",
+        "why": "Reads eligible membership and ownership of role-assignable groups, which is otherwise invisible in the group membership list.",
+        "url": "https://m365permissions.com/docs/permissions#graph.privilegedeligibilityschedule.read.group"
+      }
+    },
+    {
+      "key": "graph.devicemanagementrbac.read",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "DeviceManagementRBAC.Read.All",
+      "categories": [ "Devices", "Admins" ],
+      "docs": {
+        "title": "Read Intune RBAC",
+        "why": "Reads Intune role definitions, assignments and scope tags so Intune administrators are reported.",
+        "url": "https://m365permissions.com/docs/permissions#graph.devicemanagementrbac.read"
+      }
+    },
+
+    {
+      "key": "graph.application.readwrite.all",
+      "gatesUpdate": false,
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "Application.ReadWrite.All",
+      "condition": { "orchestration": true },
+      "categories": [],
+      "docs": {
+        "title": "Manage all applications (orchestration only)",
+        "why": "Only granted when orchestration is enabled. The primary node uses it to create and authorize the managed identities of the scale-out nodes it spawns.",
+        "url": "https://m365permissions.com/docs/permissions#orchestration"
+      }
+    },
+    {
+      "key": "graph.approleassignment.readwrite.all",
+      "gatesUpdate": false,
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "AppRoleAssignment.ReadWrite.All",
+      "condition": { "orchestration": true },
+      "categories": [],
+      "docs": {
+        "title": "Manage app role assignments (orchestration only)",
+        "why": "Only granted when orchestration is enabled. Assigns the scanner's own permission set to the managed identities of scale-out nodes.",
+        "url": "https://m365permissions.com/docs/permissions#orchestration"
+      }
+    },
+    {
+      "key": "graph.directory.readwrite.all",
+      "gatesUpdate": false,
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "Directory.ReadWrite.All",
+      "condition": { "orchestration": true },
+      "categories": [],
+      "docs": {
+        "title": "Read and write directory data (orchestration only)",
+        "why": "Only granted when orchestration is enabled. Required to register the service principals of scale-out nodes.",
+        "url": "https://m365permissions.com/docs/permissions#orchestration"
+      }
+    },
+    {
+      "key": "graph.rolemanagement.readwrite.directory",
+      "gatesUpdate": false,
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "RoleManagement.ReadWrite.Directory",
+      "condition": { "orchestration": true },
+      "categories": [],
+      "docs": {
+        "title": "Manage directory roles (orchestration only)",
+        "why": "Only granted when orchestration is enabled. Assigns the Exchange role to scale-out node identities.",
+        "url": "https://m365permissions.com/docs/permissions#orchestration"
+      }
+    },
+    {
+      "key": "entra.group.admins",
+      "nodeScoped": false,
+      "gatesUpdate": false,
+      "principal": "scanner",
+      "provider": "entraGroup",
+      "necessity": "required",
+      "groupRef": "admins",
+      "scannerIsOwner": true,
+      "runningUserIsOwner": true,
+      "runningUserIsMember": true,
+      "categories": [],
+      "docs": {
+        "title": "Portal administrators group",
+        "why": "Members of this group get the Admin.Full role in the portal. Created and owned by the scanner so it can keep the app role assignment in sync.",
+        "url": "https://m365permissions.com/docs/permissions#entra.group.admins"
+      }
+    },
+    {
+      "key": "entra.group.users",
+      "nodeScoped": false,
+      "gatesUpdate": false,
+      "principal": "scanner",
+      "provider": "entraGroup",
+      "necessity": "required",
+      "groupRef": "users",
+      "scannerIsOwner": true,
+      "runningUserIsOwner": true,
+      "categories": [],
+      "docs": {
+        "title": "Portal readers group",
+        "why": "Members of this group get the read-only User.Read role in the portal.",
+        "url": "https://m365permissions.com/docs/permissions#entra.group.users"
+      }
+    },
+    {
+      "key": "entra.group.service",
+      "gatesUpdate": false,
+      "principal": "scanner",
+      "provider": "entraGroup",
+      "necessity": "required",
+      "groupRef": "service",
+      "scannerIsOwner": true,
+      "scannerIsMember": true,
+      "runningUserIsOwner": true,
+      "categories": [ "PowerBI" ],
+      "docs": {
+        "title": "Service group",
+        "why": "Holds the scanner identity itself. Tenant settings that can only be delegated to a security group (such as the Fabric read-only admin APIs) point at this group.",
+        "url": "https://m365permissions.com/docs/permissions#entra.group.service"
+      }
+    },
+
+    {
+      "key": "frontend.scope.openid",
+      "principal": "frontend",
+      "provider": "entraDelegatedScope",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "openid",
+      "categories": [],
+      "docs": {
+        "title": "Sign in",
+        "why": "Single sign-on for the portal. Delegated, so it can never do more than the signed in user already can.",
+        "url": "https://m365permissions.com/docs/permissions#frontend-sso"
+      }
+    },
+    {
+      "key": "frontend.scope.profile",
+      "principal": "frontend",
+      "provider": "entraDelegatedScope",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "profile",
+      "categories": [],
+      "docs": {
+        "title": "View basic profile",
+        "why": "Shows the signed in user's display name in the portal.",
+        "url": "https://m365permissions.com/docs/permissions#frontend-sso"
+      }
+    },
+    {
+      "key": "frontend.scope.email",
+      "principal": "frontend",
+      "provider": "entraDelegatedScope",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "email",
+      "categories": [],
+      "docs": {
+        "title": "View email address",
+        "why": "Used as the identity written to the portal audit log.",
+        "url": "https://m365permissions.com/docs/permissions#frontend-sso"
+      }
+    },
+    {
+      "key": "frontend.scope.offline_access",
+      "principal": "frontend",
+      "provider": "entraDelegatedScope",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "offline_access",
+      "categories": [],
+      "docs": {
+        "title": "Maintain access",
+        "why": "Keeps a portal session alive without a full sign-in round trip on every request.",
+        "url": "https://m365permissions.com/docs/permissions#frontend-sso"
+      }
+    },
+    {
+      "key": "frontend.scope.user.read",
+      "principal": "frontend",
+      "provider": "entraDelegatedScope",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "User.Read",
+      "categories": [],
+      "docs": {
+        "title": "Read the signed in user's profile",
+        "why": "Reads the signed in user's own profile only.",
+        "url": "https://m365permissions.com/docs/permissions#frontend-sso"
+      }
+    },
+
+    {
+      "key": "frontend.approle.user",
+      "gatesUpdate": false,
+      "principal": "frontend",
+      "provider": "entraAppRoleDefinition",
+      "necessity": "required",
+      "value": "User.Read",
+      "displayName": "User",
+      "description": "Read-only access to the application",
+      "groupRef": "users",
+      "categories": [],
+      "docs": {
+        "title": "Portal reader role",
+        "why": "Defines the read-only portal role and binds the readers group to it, so only assigned users can open the portal.",
+        "url": "https://m365permissions.com/docs/permissions#frontend-roles"
+      }
+    },
+    {
+      "key": "frontend.approle.admin",
+      "gatesUpdate": false,
+      "principal": "frontend",
+      "provider": "entraAppRoleDefinition",
+      "necessity": "required",
+      "value": "Admin.Full",
+      "displayName": "Admin",
+      "description": "Full admin access to the application",
+      "groupRef": "admins",
+      "categories": [],
+      "docs": {
+        "title": "Portal administrator role",
+        "why": "Defines the administrator portal role and binds the admins group to it.",
+        "url": "https://m365permissions.com/docs/permissions#frontend-roles"
+      }
+    },
+
+    {
+      "key": "exo.rbac.viewonly.recipients",
+      "principal": "scanner",
+      "provider": "exoRoleAssignment",
+      "necessity": "recommended",
+      "role": "View-Only Recipients",
+      "replaces": "entra.role.exchangeAdministrator",
+      "condition": { "surfaces": "Exchange" },
+      "categories": [ "ExoRecipients", "O365Group", "Teams" ],
+      "docs": {
+        "title": "Exchange: View-Only Recipients",
+        "why": "Reads mailboxes, mail users, distribution groups and their delegate, folder and send-as permissions. Read-only, and replaces the Exchange Administrator directory role.",
+        "url": "https://m365permissions.com/docs/permissions#exo.rbac.viewonly.recipients"
+      }
+    },
+    {
+      "key": "exo.rbac.viewonly.configuration",
+      "principal": "scanner",
+      "provider": "exoRoleAssignment",
+      "necessity": "recommended",
+      "role": "View-Only Configuration",
+      "replaces": "entra.role.exchangeAdministrator",
+      "condition": { "surfaces": "Exchange" },
+      "categories": [ "Admins", "ExoRecipients" ],
+      "docs": {
+        "title": "Exchange: View-Only Configuration",
+        "why": "Reads Exchange role groups, management roles and role assignments, which is what the administrator report needs. Read-only.",
+        "url": "https://m365permissions.com/docs/permissions#exo.rbac.viewonly.configuration"
+      }
+    },
+    {
+      "key": "exo.mailbox.sender",
+      "nodeScoped": false,
+      "principal": "scanner",
+      "provider": "exoMailbox",
+      "necessity": "recommended",
+      "condition": { "mailMode": [ "Auto" ] },
+      "categories": [],
+      "capabilities": [ "reportSubscriptions" ],
+      "docs": {
+        "title": "Dedicated sender mailbox",
+        "why": "A shared mailbox created solely to send scheduled reports from, so the scanner never needs permission on a real user's mailbox.",
+        "url": "https://m365permissions.com/docs/permissions#exo.mailbox.sender"
+      }
+    },
+    {
+      "key": "exo.mail.send.scoped",
+      "nodeScoped": false,
+      "principal": "scanner",
+      "provider": "exoRoleAssignment",
+      "necessity": "recommended",
+      "role": "Application Mail.Send",
+      "scope": { "type": "managementScope", "name": "M365Permissions-Sender", "source": "context:mailAddress" },
+      "condition": { "mailMode": [ "Auto", "Existing" ] },
+      "categories": [],
+      "capabilities": [ "reportSubscriptions" ],
+      "docs": {
+        "title": "Exchange: send as one mailbox only",
+        "why": "Sends scheduled reports from exactly one designated mailbox. This is what makes the tenant-wide Graph Mail.Send permission unnecessary.",
+        "url": "https://m365permissions.com/docs/permissions#exo.mail.send.scoped"
+      }
+    },
+
+    {
+      "key": "fabric.readonly.adminapis",
+      "nodeScoped": false,
+      "principal": "scanner",
+      "provider": "fabricTenantSetting",
+      "necessity": "recommended",
+      "settingMatch": [ "service principals can use read-only", "service principals can access read-only" ],
+      "settingName": "AllowServicePrincipalsUseReadAdminAPIs",
+      "groupRef": "service",
+      "condition": { "surfaces": "PowerBI" },
+      "categories": [ "PowerBI" ],
+      "docs": {
+        "title": "Fabric: service principals may use read-only admin APIs",
+        "why": "A Fabric tenant setting, not an Entra permission. Without it every Power BI admin API returns 401 no matter which Entra permissions are held. The onboarding script switches it on and delegates it to the service group, so this is no longer a manual step. It needs a Fabric administrator, so if the person running onboarding is not one, it is reported and skipped rather than failing the run.",
+        "url": "https://m365permissions.com/docs/scanning-powerbi"
+      }
+    },
+    {
+      "key": "devops.org.user",
+      "principal": "scanner",
+      "provider": "azureDevOpsOrgUser",
+      "necessity": "recommended",
+      "condition": { "surfaces": "AzureDevOps" },
+      "categories": [ "AzureDevOps" ],
+      "docs": {
+        "title": "Azure DevOps organization access",
+        "why": "The scanner identity is added as a stakeholder to every Azure DevOps organization in the tenant. Stakeholder is the lowest entitlement that can read project membership.",
+        "url": "https://m365permissions.com/docs/scanning-azure-devops"
+      }
+    },
+    {
+      "key": "azure.rbac.reader",
+      "principal": "scanner",
+      "provider": "azureRbac",
+      "necessity": "recommended",
+      "roleDefinitionId": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+      "displayName": "Reader",
+      "condition": { "surfaces": "Azure" },
+      "categories": [ "Azure" ],
+      "docs": {
+        "title": "Azure Reader at the root management group",
+        "why": "Reads Azure role assignments across every subscription. Reader grants no access to data inside the resources, only to the assignments themselves.",
+        "url": "https://m365permissions.com/docs/scanning-azure"
+      }
+    },
+    {
+      "key": "powerplatform.adminapp",
+      "nodeScoped": false,
+      "principal": "scanner",
+      "provider": "manualProbe",
+      "necessity": "recommended",
+      "probe": {
+        "resource": "bap",
+        "uri": "https://api.bap.microsoft.com/providers/Microsoft.BusinessAppPlatform/scopes/admin/environments?api-version=2020-10-01&$top=1"
+      },
+      "condition": { "surfaces": "PowerPlatform" },
+      "categories": [ "PowerPlatform" ],
+      "manual": true,
+      "docs": {
+        "title": "Power Platform management application",
+        "why": "Power Platform has no delegated API that Azure Cloud Shell can call, so this one stays a manual step. The portal detects the result automatically once you have done it.",
+        "url": "https://m365permissions.com/docs/scanning-power-platform"
+      }
+    }
+  ]
+}
