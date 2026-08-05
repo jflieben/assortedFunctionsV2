@@ -1505,25 +1505,51 @@ function Get-M365PDevOpsEntitlementFailure {
     return "Azure DevOps declined the entitlement"
 }
 
-function Test-M365PDevOpsMembership {
+function Get-M365PDevOpsMembership {
     <#
         .SYNOPSIS
-        Whether the scanner identity holds an entitlement in one organization.
+        Whether the scanner identity is present in one organization, and what was looked at.
+
+        .DESCRIPTION
+        Azure DevOps exposes an added service principal through more than one collection depending on
+        the organization and the API version it answers on, and none of them is guaranteed to be
+        present, so every candidate is tried and any hit counts. When nothing matches, what each probe
+        actually returned is handed back: a bare "not a member" is indistinguishable from a lookup that
+        was never able to see the identity in the first place, which is the more likely of the two.
     #>
     Param($Context, [String]$Organization)
 
-    foreach ($endpoint in $script:M365PDevOpsEntitlementEndpoints) {
+    $probes = @(
+        @{ label = "serviceprincipalentitlements"; uri = "https://vsaex.dev.azure.com/$Organization/_apis/serviceprincipalentitlements?api-version=7.1-preview.1&`$top=10000" }
+        @{ label = "graph/serviceprincipals"; uri = "https://vssps.dev.azure.com/$Organization/_apis/graph/serviceprincipals?api-version=7.1-preview.1" }
+        @{ label = "userentitlements"; uri = "https://vsaex.dev.azure.com/$Organization/_apis/userentitlements?api-version=7.1-preview.3&`$top=10000" }
+    )
+
+    $notes = @()
+    foreach ($probe in $probes) {
         try {
-            $response = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw -Uri "https://vsaex.dev.azure.com/$Organization/_apis/$($endpoint)&`$top=10000"
-            foreach ($member in @($response.members)) {
-                $originIds = @($member.servicePrincipal.originId, $member.user.originId) | Where-Object { $_ }
-                if ($originIds -contains $Context.scannerSpnObjectId) { return $true }
+            $response = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw -Uri $probe.uri
+
+            # every collection wraps its rows differently, and the identity sits under a different
+            # property in each, so read all the shapes rather than betting on one
+            $items = @()
+            foreach ($property in @("members", "value", "items")) {
+                if ($response.PSObject.Properties.Name -contains $property) { $items += @($response.$property) }
             }
+            if ($items.Count -eq 0 -and $response -is [Array]) { $items = @($response) }
+
+            foreach ($item in $items) {
+                $originIds = @($item.servicePrincipal.originId, $item.user.originId, $item.originId) | Where-Object { $_ }
+                if ($originIds -contains $Context.scannerSpnObjectId) { return @{ found = $true; notes = @() } }
+            }
+            $notes += "$($probe.label) returned $($items.Count) entries without $($Context.scannerSpnObjectId)"
         }
-        catch { continue }
+        catch {
+            $notes += "$($probe.label): $(Get-M365PErrorDetail -ErrorRecord $_)"
+        }
     }
 
-    return $false
+    return @{ found = $false; notes = $notes }
 }
 
 function Test-M365PGrant_azureDevOpsOrgUser {
@@ -1534,12 +1560,23 @@ function Test-M365PGrant_azureDevOpsOrgUser {
 
     $present = @()
     $absent = @()
+    $notes = @()
     foreach ($org in $orgs) {
-        if (Test-M365PDevOpsMembership -Context $Context -Organization $org) { $present += $org } else { $absent += $org }
+        $membership = Get-M365PDevOpsMembership -Context $Context -Organization $org
+        if ($membership.found) {
+            $present += $org
+        }
+        else {
+            $absent += $org
+            foreach ($note in @($membership.notes)) { $notes += "$($org): $note" }
+        }
     }
 
     if ($absent.Count -eq 0) { return @{ state = "granted"; detail = "Member of $($present -join ", ")" } }
-    return @{ state = "missing"; detail = "Not a member of $($absent -join ", ")" }
+
+    $detail = "Not a member of $($absent -join ", ")"
+    if ($notes.Count -gt 0) { $detail = "$detail. $($notes -join " | ")" }
+    return @{ state = "missing"; detail = $detail }
 }
 
 function Set-M365PGrant_azureDevOpsOrgUser {
