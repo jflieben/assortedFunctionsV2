@@ -886,13 +886,49 @@ function Get-M365PExoServicePrincipal {
     return $existing
 }
 
+function Get-M365PExoRoleAssignmentsForScanner {
+    <#
+        .SYNOPSIS
+        The scanner's Exchange role assignments, read back the way Exchange actually supports.
+
+        .DESCRIPTION
+        New-ManagementRoleAssignment takes -App, but Get-ManagementRoleAssignment does not, and asking
+        it for -App fails the entire cmdlet with "Parameter set cannot be resolved using the specified
+        named parameters". Assignments made to a service principal are read back through -RoleAssignee
+        instead, keyed on the Exchange side identity rather than the Entra application id.
+
+        Callers still filter on Role themselves, so Role is only passed to the fallback: combining it
+        with RoleAssignee is another parameter set to get wrong for no gain.
+    #>
+    Param(
+        [Parameter(Mandatory = $true)]$Context,
+        [Parameter(Mandatory = $true)]$ExoSpn,
+        [String]$Role
+    )
+
+    $identity = @($ExoSpn.Identity, $ExoSpn.ObjectId, $Context.scannerSpnObjectId) | Where-Object { $_ } | Select-Object -First 1
+
+    try {
+        return @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ManagementRoleAssignment" -Parameters @{ RoleAssignee = "$identity" })
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        if (!$Role) { Throw $_ }
+        Write-M365PLog -Level Verbose -Message "Reading assignments for $identity failed ($($_.Exception.Message)), listing $Role and matching the assignee instead"
+    }
+
+    $names = @($ExoSpn.DisplayName, $ExoSpn.ServicePrincipalName, $identity, $Context.scannerAppId, $Context.scannerDisplayName) | Where-Object { $_ }
+    return @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ManagementRoleAssignment" -Parameters @{ Role = $Role } |
+        Where-Object { $names -contains $_.RoleAssigneeName -or $names -contains $_.RoleAssignee })
+}
+
 function Test-M365PGrant_exoRoleAssignment {
     Param($Grant, $Context)
 
     $exoSpn = Get-M365PExoServicePrincipal -Context $Context
     if (!$exoSpn) { return @{ state = "missing"; detail = "The scanner identity is not registered in Exchange Online" } }
 
-    $assignments = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ManagementRoleAssignment" -Parameters @{ App = $Context.scannerAppId })
+    $assignments = @(Get-M365PExoRoleAssignmentsForScanner -Context $Context -ExoSpn $exoSpn -Role $Grant.role)
     $match = $assignments | Where-Object { $_.Role -eq $Grant.role }
 
     if ($Grant.scope) {
@@ -944,7 +980,7 @@ function Set-M365PGrant_exoRoleAssignment {
 
         $parameters.CustomResourceScope = $Grant.scope.name
         # a stale assignment on the same role but the wrong scope would otherwise shadow the new one
-        $existing = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ManagementRoleAssignment" -Parameters @{ App = $Context.scannerAppId }) |
+        $existing = @(Get-M365PExoRoleAssignmentsForScanner -Context $Context -ExoSpn $exoSpn -Role $Grant.role) |
             Where-Object { $_.Role -eq $Grant.role -and $_.CustomResourceScope -ne $Grant.scope.name -and $_.CustomRecipientWriteScope -ne $Grant.scope.name }
         foreach ($stale in $existing) {
             Write-M365PLog -Level Warning -Message "Removing the differently scoped $($Grant.role) assignment $($stale.Name)"
@@ -958,7 +994,10 @@ function Set-M365PGrant_exoRoleAssignment {
 function Remove-M365PGrant_exoRoleAssignment {
     Param($Grant, $Context)
 
-    $assignments = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ManagementRoleAssignment" -Parameters @{ App = $Context.scannerAppId }) | Where-Object { $_.Role -eq $Grant.role }
+    $exoSpn = Get-M365PExoServicePrincipal -Context $Context
+    if (!$exoSpn) { return }
+
+    $assignments = @(Get-M365PExoRoleAssignmentsForScanner -Context $Context -ExoSpn $exoSpn -Role $Grant.role) | Where-Object { $_.Role -eq $Grant.role }
     foreach ($assignment in $assignments) {
         $null = Invoke-M365PExoCommand -Context $Context -Cmdlet "Remove-ManagementRoleAssignment" -Parameters @{ Identity = $assignment.Name; Confirm = $false }
         Write-M365PLog -Message "Removed the Exchange role assignment $($assignment.Name)"
