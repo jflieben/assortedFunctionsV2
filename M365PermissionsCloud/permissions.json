@@ -66,6 +66,7 @@
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "recommended",
+      "blocksCategories": false,
       "resource": "graph",
       "value": "CrossTenantInformation.ReadBasic.All",
       "categories": [ "EntraUsers", "EntraGroups", "EntraSPNs", "Entra", "Admins", "Devices" ],
@@ -80,6 +81,7 @@
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "recommended",
+      "blocksCategories": false,
       "resource": "graph",
       "value": "AuditLog.Read.All",
       "categories": [ "ExoRecipients", "Entra", "Admins", "Azure", "Sharepoint", "Onedrive", "Teams", "O365Group" ],
@@ -94,6 +96,7 @@
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "recommended",
+      "blocksCategories": false,
       "resource": "graph",
       "value": "AuditLogsQuery.Read.All",
       "categories": [ "ExoRecipients", "Entra", "Admins", "Azure", "Sharepoint", "Onedrive", "Teams", "O365Group" ],
@@ -108,6 +111,7 @@
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "recommended",
+      "blocksCategories": false,
       "resource": "graph",
       "value": "DeviceManagementConfiguration.Read.All",
       "categories": [ "Admins"],
@@ -122,6 +126,7 @@
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "recommended",
+      "blocksCategories": false,
       "resource": "graph",
       "value": "Policy.Read.All",
       "categories": [ "Admins", "Azure"],
@@ -136,6 +141,7 @@
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "recommended",
+      "blocksCategories": false,
       "resource": "graph",
       "value": "DeviceManagementServiceConfig.Read.All",
       "categories": [ "Admins"],
@@ -146,17 +152,17 @@
       }
     },           
     {
-      "key": "spo.sites.fullcontrol",
+      "key": "spo.sites.readall",
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
       "resource": "spo",
-      "value": "Sites.FullControl.All",
+      "value": "Sites.Read.All",
       "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
       "docs": {
-        "title": "SharePoint: full control of all site collections",
-        "why": "Reads the permission model of every site, list and library, including unique (broken inheritance) permissions that the read-only scopes do not expose.",
-        "url": "https://m365permissions.com/docs/permissions#spo.sites.fullcontrol"
+        "title": "SharePoint: read access to all site collections",
+        "why": "Reads the permission model of every item in every site, list and library, including unique (broken inheritance) permissions and sharing links.",
+        "url": "https://m365permissions.com/docs/permissions#spo.sites.readall"
       }
     },
     {
@@ -230,17 +236,17 @@
       }
     },
     {
-      "key": "graph.sites.fullcontrol",
+      "key": "graph.sites.readall",
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
       "resource": "graph",
-      "value": "Sites.FullControl.All",
+      "value": "Sites.Read.All",
       "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
       "docs": {
-        "title": "Graph: full control of all site collections",
+        "title": "Graph: read access to all site collections",
         "why": "The Graph counterpart of the SharePoint grant, used for the site and drive metadata that the SharePoint REST API does not return.",
-        "url": "https://m365permissions.com/docs/permissions#graph.sites.fullcontrol"
+        "url": "https://m365permissions.com/docs/permissions#graph.sites.readall"
       }
     },
     {

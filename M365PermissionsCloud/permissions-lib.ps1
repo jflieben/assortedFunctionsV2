@@ -1981,6 +1981,12 @@ function Invoke-M365PSync {
             categories   = @($grant.categories)
             capabilities = @($grant.capabilities)
             manual       = [Boolean]$grant.manual
+            # Whether missing this grant stops its categories being scanned, as opposed to leaving
+            # them with less detail. Necessity cannot express it: the Fabric tenant switch is
+            # recommended and is the only way into Power BI, while the audit log reads are recommended
+            # and merely enrich eight categories. Absent means blocking, so an older definition gates
+            # exactly as it did before.
+            blocking     = ($null -eq $grant.PSObject.Properties["blocksCategories"] -or [Boolean]$grant.blocksCategories)
             state        = $state
             detail       = $detail
             revision     = $Definition.revision
