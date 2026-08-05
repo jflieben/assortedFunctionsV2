@@ -922,6 +922,100 @@ function Get-M365PExoRoleAssignmentsForScanner {
         Where-Object { $names -contains $_.RoleAssigneeName -or $names -contains $_.RoleAssignee })
 }
 
+function Test-M365PScopeRestrictsTo {
+    <#
+        .SYNOPSIS
+        Whether a management scope restricts to exactly one mailbox.
+    #>
+    Param($Scope, [String]$MailAddress)
+
+    if (!$Scope -or [String]::IsNullOrWhiteSpace($MailAddress)) { return $false }
+    if ($Scope.Exclusive -eq $true) { return $false }
+    if ($Scope.ScopeRestrictionType -and "$($Scope.ScopeRestrictionType)" -ne "RecipientScope") { return $false }
+    # Exchange rewrites RecipientRestrictionFilter into a normalised RecipientFilter, so match on the
+    # address rather than on the expression that was sent
+    return ("$($Scope.RecipientFilter)" -like "*$MailAddress*")
+}
+
+function Get-M365PExoManagementScopes {
+    <#
+        .SYNOPSIS
+        Every management scope in the tenant, cached for the run.
+    #>
+    Param($Context, [Switch]$Refresh)
+
+    if (!$Refresh -and $Context.cache.exoScopes) { return $Context.cache.exoScopes }
+
+    $scopes = @()
+    try { $scopes = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ManagementScope" -Parameters @{}) } catch { $scopes = @() }
+    $Context.cache.exoScopes = $scopes
+    return $scopes
+}
+
+function Resolve-M365PExoManagementScope {
+    <#
+        .SYNOPSIS
+        The name of a management scope restricted to one mailbox, reusing whatever the tenant already has.
+
+        .DESCRIPTION
+        Exchange refuses to create a scope whose RecipientRoot, RecipientFilter, ServerFilter,
+        ScopeRestrictionType and Exclusive all match an existing one, whatever that one happens to be
+        called, and answers with "Use the existing management scope instead of creating a new one". A
+        tenant can therefore already hold exactly the scope needed under a name we would never guess,
+        so match on what a scope does rather than on what it is called and adopt whatever is there.
+
+        Returns the name to assign against, which is not necessarily the name in the definition.
+    #>
+    Param(
+        [Parameter(Mandatory = $true)]$Context,
+        [Parameter(Mandatory = $true)][String]$Name,
+        [Parameter(Mandatory = $true)][String]$MailAddress
+    )
+
+    $filter = "PrimarySmtpAddress -eq '$MailAddress'"
+    $scopes = @(Get-M365PExoManagementScopes -Context $Context -Refresh)
+
+    $ours = $scopes | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
+    if ($ours) {
+        if (Test-M365PScopeRestrictsTo -Scope $ours -MailAddress $MailAddress) { return $ours.Name }
+
+        Write-M365PLog -Message "Repointing the $Name management scope at $MailAddress..."
+        $null = Invoke-M365PExoCommand -Context $Context -Cmdlet "Set-ManagementScope" -Parameters @{
+            Identity                   = $Name
+            RecipientRestrictionFilter = $filter
+        }
+        $null = Get-M365PExoManagementScopes -Context $Context -Refresh
+        return $Name
+    }
+
+    $equivalent = $scopes | Where-Object { Test-M365PScopeRestrictsTo -Scope $_ -MailAddress $MailAddress } | Select-Object -First 1
+    if ($equivalent) {
+        Write-M365PLog -Message "Reusing the existing management scope $($equivalent.Name), which already restricts to $MailAddress"
+        return $equivalent.Name
+    }
+
+    Write-M365PLog -Message "Creating the $Name management scope for $MailAddress..."
+    try {
+        $null = Invoke-M365PExoCommand -Context $Context -Cmdlet "New-ManagementScope" -Parameters @{
+            Name                       = $Name
+            RecipientRestrictionFilter = $filter
+        }
+        Start-Sleep -Seconds 5
+        $null = Get-M365PExoManagementScopes -Context $Context -Refresh
+        return $Name
+    }
+    catch {
+        # Exchange says an equivalent exists but not which one, and its idea of equivalent is broader
+        # than a string comparison of the filter, so look again and adopt what it was objecting about
+        if ($_.Exception.Message -notlike "*existing management scope*") { Throw $_ }
+        $equivalent = @(Get-M365PExoManagementScopes -Context $Context -Refresh) |
+            Where-Object { Test-M365PScopeRestrictsTo -Scope $_ -MailAddress $MailAddress } | Select-Object -First 1
+        if (!$equivalent) { Throw $_ }
+        Write-M365PLog -Message "Reusing the existing management scope $($equivalent.Name), which already restricts to $MailAddress"
+        return $equivalent.Name
+    }
+}
+
 function Test-M365PGrant_exoRoleAssignment {
     Param($Grant, $Context)
 
@@ -932,14 +1026,18 @@ function Test-M365PGrant_exoRoleAssignment {
     $match = $assignments | Where-Object { $_.Role -eq $Grant.role }
 
     if ($Grant.scope) {
-        $match = $match | Where-Object { $_.CustomResourceScope -eq $Grant.scope.name -or $_.CustomRecipientWriteScope -eq $Grant.scope.name }
-        if (!$match) { return @{ state = "missing"; detail = "$($Grant.role) is not assigned within the $($Grant.scope.name) scope" } }
-        # a scope that no longer points at the designated address is as good as missing
-        $scopes = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ManagementScope" -Parameters @{ Identity = $Grant.scope.name })
-        $scope = $scopes | Select-Object -First 1
-        if ($Context.mailAddress -and $scope -and $scope.RecipientFilter -and $scope.RecipientFilter -notlike "*$($Context.mailAddress)*") {
-            return @{ state = "missing"; detail = "The $($Grant.scope.name) scope does not point at $($Context.mailAddress)" }
-        }
+        if (!$Context.mailAddress) { return @{ state = "missing"; detail = "No sender address has been determined" } }
+
+        # the scope in use will not always carry the name from the definition: Exchange refuses to
+        # create a duplicate of an equivalent scope, so an existing one gets adopted under its own name
+        $acceptable = @(Get-M365PExoManagementScopes -Context $Context |
+            Where-Object { Test-M365PScopeRestrictsTo -Scope $_ -MailAddress $Context.mailAddress } |
+            ForEach-Object { $_.Name })
+
+        if ($acceptable.Count -eq 0) { return @{ state = "missing"; detail = "No management scope restricts to $($Context.mailAddress)" } }
+
+        $match = $match | Where-Object { $acceptable -contains $_.CustomResourceScope -or $acceptable -contains $_.CustomRecipientWriteScope }
+        if (!$match) { return @{ state = "missing"; detail = "$($Grant.role) is not assigned within a scope restricted to $($Context.mailAddress)" } }
         return @{ state = "granted"; detail = "Scoped to $($Context.mailAddress)" }
     }
 
@@ -958,30 +1056,12 @@ function Set-M365PGrant_exoRoleAssignment {
     if ($Grant.scope) {
         if (!$Context.mailAddress) { Throw "A scoped assignment needs a mail address on the context" }
 
-        $scope = $null
-        try { $scope = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ManagementScope" -Parameters @{ Identity = $Grant.scope.name }) | Select-Object -First 1 } catch { $scope = $null }
+        $scopeName = Resolve-M365PExoManagementScope -Context $Context -Name $Grant.scope.name -MailAddress $Context.mailAddress
 
-        $filter = "PrimarySmtpAddress -eq '$($Context.mailAddress)'"
-        if (!$scope) {
-            Write-M365PLog -Message "Creating the $($Grant.scope.name) management scope for $($Context.mailAddress)..."
-            $null = Invoke-M365PExoCommand -Context $Context -Cmdlet "New-ManagementScope" -Parameters @{
-                Name                       = $Grant.scope.name
-                RecipientRestrictionFilter = $filter
-            }
-            Start-Sleep -Seconds 5
-        }
-        elseif ($scope.RecipientFilter -notlike "*$($Context.mailAddress)*") {
-            Write-M365PLog -Message "Repointing the $($Grant.scope.name) management scope at $($Context.mailAddress)..."
-            $null = Invoke-M365PExoCommand -Context $Context -Cmdlet "Set-ManagementScope" -Parameters @{
-                Identity                   = $Grant.scope.name
-                RecipientRestrictionFilter = $filter
-            }
-        }
-
-        $parameters.CustomResourceScope = $Grant.scope.name
+        $parameters.CustomResourceScope = $scopeName
         # a stale assignment on the same role but the wrong scope would otherwise shadow the new one
         $existing = @(Get-M365PExoRoleAssignmentsForScanner -Context $Context -ExoSpn $exoSpn -Role $Grant.role) |
-            Where-Object { $_.Role -eq $Grant.role -and $_.CustomResourceScope -ne $Grant.scope.name -and $_.CustomRecipientWriteScope -ne $Grant.scope.name }
+            Where-Object { $_.Role -eq $Grant.role -and $_.CustomResourceScope -ne $scopeName -and $_.CustomRecipientWriteScope -ne $scopeName }
         foreach ($stale in $existing) {
             Write-M365PLog -Level Warning -Message "Removing the differently scoped $($Grant.role) assignment $($stale.Name)"
             try { $null = Invoke-M365PExoCommand -Context $Context -Cmdlet "Remove-ManagementRoleAssignment" -Parameters @{ Identity = $stale.Name; Confirm = $false } } catch {}
@@ -1391,6 +1471,61 @@ function Get-M365PDevOpsOrganizations {
     return $orgs
 }
 
+#A managed identity is a service principal, and Azure DevOps keeps those in their own entitlement
+#collection rather than alongside users. Both are tried, newest first, so an organization that only
+#answers on the older endpoint still works.
+$script:M365PDevOpsEntitlementEndpoints = @(
+    "serviceprincipalentitlements?api-version=7.1-preview.1",
+    "userentitlements?api-version=7.1-preview.3"
+)
+
+function Get-M365PDevOpsEntitlementFailure {
+    <#
+        .SYNOPSIS
+        Why an entitlement call did nothing, or $null when it worked.
+
+        .DESCRIPTION
+        vsaex answers 200 OK even when it refused: the verdict is isSuccess inside operationResult, so
+        a successful HTTP call is not the same as an added member and has to be read out of the body.
+        Posting a service principal body to the user endpoint fails exactly this way, silently.
+    #>
+    Param($Response)
+
+    if (!$Response) { return "Azure DevOps returned an empty response" }
+
+    $result = $Response.operationResult
+    if (!$result) { return $null }
+    # absent rather than false means this API version does not report it, which is not a failure
+    if ($null -eq $result.isSuccess) { return $null }
+    if ($result.isSuccess) { return $null }
+
+    $messages = @(@($result.errors) | ForEach-Object { if ($_.value) { "$($_.value)" } elseif ($_.message) { "$($_.message)" } } | Where-Object { $_ })
+    if ($messages.Count -gt 0) { return ($messages -join "; ") }
+    if ($result.result) { return "Azure DevOps declined the entitlement: $($result.result)" }
+    return "Azure DevOps declined the entitlement"
+}
+
+function Test-M365PDevOpsMembership {
+    <#
+        .SYNOPSIS
+        Whether the scanner identity holds an entitlement in one organization.
+    #>
+    Param($Context, [String]$Organization)
+
+    foreach ($endpoint in $script:M365PDevOpsEntitlementEndpoints) {
+        try {
+            $response = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw -Uri "https://vsaex.dev.azure.com/$Organization/_apis/$($endpoint)&`$top=10000"
+            foreach ($member in @($response.members)) {
+                $originIds = @($member.servicePrincipal.originId, $member.user.originId) | Where-Object { $_ }
+                if ($originIds -contains $Context.scannerSpnObjectId) { return $true }
+            }
+        }
+        catch { continue }
+    }
+
+    return $false
+}
+
 function Test-M365PGrant_azureDevOpsOrgUser {
     Param($Grant, $Context)
 
@@ -1400,14 +1535,7 @@ function Test-M365PGrant_azureDevOpsOrgUser {
     $present = @()
     $absent = @()
     foreach ($org in $orgs) {
-        try {
-            $entitlements = @(Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw -Uri "https://vsaex.dev.azure.com/$org/_apis/userentitlements?api-version=7.1-preview.3&`$top=10000")
-            $members = @($entitlements.members)
-            if ($members | Where-Object { $_.user.originId -eq $Context.scannerSpnObjectId }) { $present += $org } else { $absent += $org }
-        }
-        catch {
-            $absent += $org
-        }
+        if (Test-M365PDevOpsMembership -Context $Context -Organization $org) { $present += $org } else { $absent += $org }
     }
 
     if ($absent.Count -eq 0) { return @{ state = "granted"; detail = "Member of $($present -join ", ")" } }
@@ -1429,15 +1557,23 @@ function Set-M365PGrant_azureDevOpsOrgUser {
             servicePrincipal     = @{ origin = "aad"; originId = $Context.scannerSpnObjectId; subjectKind = "servicePrincipal" }
             projectEntitlements  = @()
         }
-        try {
-            $null = Invoke-M365PRest -Context $Context -ResourceKey "devops" -Method POST -Raw -Body $body -Uri "https://vsaex.dev.azure.com/$org/_apis/userentitlements?api-version=7.1-preview.3"
-            $added++
+        $accepted = $false
+        $failures = @()
+        foreach ($endpoint in $script:M365PDevOpsEntitlementEndpoints) {
+            try {
+                $response = Invoke-M365PRest -Context $Context -ResourceKey "devops" -Method POST -Raw -Body $body -Uri "https://vsaex.dev.azure.com/$org/_apis/$endpoint"
+                $failure = Get-M365PDevOpsEntitlementFailure -Response $response
+                if (!$failure -or $failure -like "*already*") { $accepted = $true; break }
+                $failures += $failure
+            }
+            catch {
+                $detail = Get-M365PErrorDetail -ErrorRecord $_
+                if ($detail -like "*already*") { $accepted = $true; break }
+                $failures += $detail
+            }
         }
-        catch {
-            $detail = Get-M365PErrorDetail -ErrorRecord $_
-            if ($detail -like "*already*") { $added++; continue }
-            $errors += "$($org): $detail"
-        }
+
+        if ($accepted) { $added++ } else { $errors += "$($org): $($failures -join " / ")" }
     }
 
     if ($added -eq 0) { Throw "Could not add the scanner to any organization. $($errors -join " | ")" }
@@ -1448,16 +1584,25 @@ function Remove-M365PGrant_azureDevOpsOrgUser {
     Param($Grant, $Context)
 
     foreach ($org in (Get-M365PDevOpsOrganizations -Context $Context)) {
-        try {
-            $entitlements = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw -Uri "https://vsaex.dev.azure.com/$org/_apis/userentitlements?api-version=7.1-preview.3&`$top=10000"
-            $member = @($entitlements.members) | Where-Object { $_.user.originId -eq $Context.scannerSpnObjectId } | Select-Object -First 1
-            if ($member) {
-                $null = Invoke-M365PRest -Context $Context -ResourceKey "devops" -Method DELETE -Raw -Uri "https://vsaex.dev.azure.com/$org/_apis/userentitlements/$($member.id)?api-version=7.1-preview.3"
+        # whichever collection the entitlement lives in is the one it has to be deleted from, so the
+        # endpoint that found it is the endpoint that removes it
+        foreach ($endpoint in $script:M365PDevOpsEntitlementEndpoints) {
+            $collection = ($endpoint -split "\?")[0]
+            $apiVersion = ($endpoint -split "\?")[1]
+            try {
+                $entitlements = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw -Uri "https://vsaex.dev.azure.com/$org/_apis/$($endpoint)&`$top=10000"
+                $member = @($entitlements.members) | Where-Object {
+                    @($_.servicePrincipal.originId, $_.user.originId) -contains $Context.scannerSpnObjectId
+                } | Select-Object -First 1
+                if (!$member) { continue }
+
+                $null = Invoke-M365PRest -Context $Context -ResourceKey "devops" -Method DELETE -Raw -Uri "https://vsaex.dev.azure.com/$org/_apis/$collection/$($member.id)?$apiVersion"
                 Write-M365PLog -Message "Removed the scanner from Azure DevOps organization $org"
+                break
             }
-        }
-        catch {
-            Write-M365PLog -Level Warning -Message "Could not remove the scanner from $($org): $($_.Exception.Message)"
+            catch {
+                Write-M365PLog -Level Warning -Message "Could not remove the scanner from $($org): $(Get-M365PErrorDetail -ErrorRecord $_)"
+            }
         }
     }
 }
