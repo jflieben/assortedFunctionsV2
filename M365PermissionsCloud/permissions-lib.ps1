@@ -219,14 +219,15 @@ function Invoke-M365PRest {
     while ($nextUrl) {
         $attempt = 0
         $data = $null
+        $pageHeaders = $null
         while ($attempt -lt $MaxAttempts) {
             $attempt++
             try {
                 if ($Method -in @("POST", "PATCH", "PUT") -and $Body) {
-                    $data = Invoke-RestMethod -Uri $nextUrl -Method $Method -Headers $headers -Body $Body -ContentType "application/json; charset=utf-8" -ErrorAction Stop -Verbose:$false
+                    $data = Invoke-RestMethod -Uri $nextUrl -Method $Method -Headers $headers -Body $Body -ContentType "application/json; charset=utf-8" -ErrorAction Stop -Verbose:$false -ResponseHeadersVariable pageHeaders
                 }
                 else {
-                    $data = Invoke-RestMethod -Uri $nextUrl -Method $Method -Headers $headers -ErrorAction Stop -Verbose:$false
+                    $data = Invoke-RestMethod -Uri $nextUrl -Method $Method -Headers $headers -ErrorAction Stop -Verbose:$false -ResponseHeadersVariable pageHeaders
                 }
                 break
             }
@@ -249,9 +250,20 @@ function Invoke-M365PRest {
         }
 
         if ($NoPagination) { break }
+
+        # Azure DevOps does not put its continuation token in the body like the others do, it comes
+        # back as a response header and is fed to the next call as a query parameter
+        $continuationToken = $null
+        if ($pageHeaders -and $pageHeaders["X-MS-ContinuationToken"]) { $continuationToken = @($pageHeaders["X-MS-ContinuationToken"])[0] }
+
         $nextUrl = $null
         if ($data.PSObject.Properties.Name -contains "@odata.nextLink") { $nextUrl = $data.'@odata.nextLink' }
         elseif ($data.PSObject.Properties.Name -contains "continuationUri") { $nextUrl = $data.continuationUri }
+        elseif (![String]::IsNullOrWhiteSpace($continuationToken)) {
+            $encoded = [System.Uri]::EscapeDataString($continuationToken)
+            if ($Uri -like "*continuationToken=*") { $nextUrl = $Uri -replace "continuationToken=[^&]*", "continuationToken=$encoded" }
+            else { $nextUrl = "$($Uri)$(if($Uri.Contains("?")){'&'}else{'?'})continuationToken=$encoded" }
+        }
     }
 
     return $results
@@ -1093,6 +1105,15 @@ function Test-M365PGrant_exoMailbox {
     try { $mailbox = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-Mailbox" -Parameters @{ Identity = $Context.mailAddress }) | Select-Object -First 1 } catch { $mailbox = $null }
 
     if (!$mailbox) { return @{ state = "missing"; detail = "$($Context.mailAddress) does not exist" } }
+
+    # This grant is the dedicated mailbox the product creates for itself, which only exists in Auto
+    # mode. In every other mail mode the address is one the customer already had, and the fact that it
+    # exists says nothing about this grant: answering "granted" there tells the prune we created it and
+    # are therefore free to delete it, which must not happen to a real mailbox.
+    if ($Context.mailMode -ne "Auto") {
+        return @{ state = "missing"; detail = "$($Context.mailAddress) is an existing mailbox rather than one created for reporting" }
+    }
+
     return @{ state = "granted"; detail = "$($mailbox.RecipientTypeDetails) $($Context.mailAddress)" }
 }
 
@@ -1519,24 +1540,31 @@ function Get-M365PDevOpsMembership {
     #>
     Param($Context, [String]$Organization)
 
+    # the entitlement collections take a page size, the graph one only pages by continuation token,
+    # which Invoke-M365PRest follows for us as long as it is not asked for the raw first page
     $probes = @(
-        @{ label = "serviceprincipalentitlements"; uri = "https://vsaex.dev.azure.com/$Organization/_apis/serviceprincipalentitlements?api-version=7.1-preview.1&`$top=10000" }
-        @{ label = "graph/serviceprincipals"; uri = "https://vssps.dev.azure.com/$Organization/_apis/graph/serviceprincipals?api-version=7.1-preview.1" }
-        @{ label = "userentitlements"; uri = "https://vsaex.dev.azure.com/$Organization/_apis/userentitlements?api-version=7.1-preview.3&`$top=10000" }
+        @{ label = "serviceprincipalentitlements"; uri = "https://vsaex.dev.azure.com/$Organization/_apis/serviceprincipalentitlements?api-version=7.1-preview.1&`$top=10000"; paginate = $false }
+        @{ label = "graph/serviceprincipals"; uri = "https://vssps.dev.azure.com/$Organization/_apis/graph/serviceprincipals?api-version=7.1-preview.1"; paginate = $true }
+        @{ label = "userentitlements"; uri = "https://vsaex.dev.azure.com/$Organization/_apis/userentitlements?api-version=7.1-preview.3&`$top=10000"; paginate = $false }
     )
 
     $notes = @()
     foreach ($probe in $probes) {
         try {
-            $response = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw -Uri $probe.uri
-
-            # every collection wraps its rows differently, and the identity sits under a different
-            # property in each, so read all the shapes rather than betting on one
-            $items = @()
-            foreach ($property in @("members", "value", "items")) {
-                if ($response.PSObject.Properties.Name -contains $property) { $items += @($response.$property) }
+            if ($probe.paginate) {
+                $items = @(Invoke-M365PRest -Context $Context -ResourceKey "devops" -Uri $probe.uri)
             }
-            if ($items.Count -eq 0 -and $response -is [Array]) { $items = @($response) }
+            else {
+                $response = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw -Uri $probe.uri
+
+                # every collection wraps its rows differently, and the identity sits under a different
+                # property in each, so read all the shapes rather than betting on one
+                $items = @()
+                foreach ($property in @("members", "value", "items")) {
+                    if ($response.PSObject.Properties.Name -contains $property) { $items += @($response.$property) }
+                }
+                if ($items.Count -eq 0 -and $response -is [Array]) { $items = @($response) }
+            }
 
             foreach ($item in $items) {
                 $originIds = @($item.servicePrincipal.originId, $item.user.originId, $item.originId) | Where-Object { $_ }
