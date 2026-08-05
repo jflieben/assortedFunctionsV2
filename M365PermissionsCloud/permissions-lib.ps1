@@ -291,7 +291,14 @@ function Invoke-M365PExoCommand {
     $results = @()
 
     while ($nextUrl) {
-        $data = Invoke-RestMethod -Uri $nextUrl -Method POST -Body $body -Headers $headers -ErrorAction Stop -Verbose:$false
+        try {
+            $data = Invoke-RestMethod -Uri $nextUrl -Method POST -Body $body -Headers $headers -ErrorAction Stop -Verbose:$false
+        }
+        catch {
+            # the status line on its own is useless here: every rejected cmdlet reads "400 (Bad Request)"
+            # and the reason Exchange refused is only ever in the response body
+            Throw "$Cmdlet failed: $(Get-M365PErrorDetail -ErrorRecord $_)"
+        }
         if ($null -ne $data -and $data.PSObject.Properties.Name -contains "value") { $results += @($data.value) } elseif ($null -ne $data) { $results += @($data) }
         $nextUrl = $null
         if ($data.PSObject.Properties.Name -contains "@odata.nextLink") { $nextUrl = $data.'@odata.nextLink' }
@@ -424,6 +431,45 @@ function Get-M365PDirectoryObjectIds {
     }
 }
 
+function Get-M365PErrorDetail {
+    <#
+        .SYNOPSIS
+        The reason Graph gave for a failed call.
+
+        .DESCRIPTION
+        Invoke-RestMethod puts nothing usable in the exception message: every rejected call reads
+        "Response status code does not indicate success: 400 (Bad Request)" regardless of what went
+        wrong. The actual reason is in the response body, which lands on ErrorDetails and survives a
+        rethrow, so anything matching on why a call failed has to read that instead.
+    #>
+    Param(
+        [Parameter(Mandatory = $true)]$ErrorRecord
+    )
+
+    $detail = $ErrorRecord.ErrorDetails.Message
+    if ([String]::IsNullOrWhiteSpace($detail)) { return "$($ErrorRecord.Exception.Message)" }
+
+    $parsed = $null
+    try { $parsed = $detail | ConvertFrom-Json -ErrorAction Stop } catch { $parsed = $null }
+    if (!$parsed) { return "$detail" }
+
+    # Exchange answers every failure with error.message = "Error executing cmdlet" and buries the
+    # cmdlet's actual objection in a JSON string nested inside error.details, so the outer message is
+    # worthless on its own and has to be unwrapped one level further
+    foreach ($item in @($parsed.error.details)) {
+        if (!$item.message) { continue }
+        $inner = $null
+        try { $inner = $item.message | ConvertFrom-Json -ErrorAction Stop } catch { $inner = $null }
+        if ($inner.Message) { return "$($inner.Message)" }
+        return "$($item.message)"
+    }
+
+    if ($parsed.error.message) { return "$($parsed.error.message)" }
+    # ARM does not always use the error envelope, some providers answer with code/message at the root
+    if ($parsed.message) { return "$($parsed.message)" }
+    return "$detail"
+}
+
 function Add-M365PDirectoryObjectRef {
     <#
         .SYNOPSIS
@@ -440,9 +486,12 @@ function Add-M365PDirectoryObjectRef {
     }
     catch {
         if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
-        # the reference already existing is the normal idempotent path
-        if ($_.Exception.Message -like "*already exist*" -or $_.Exception.Message -like "*added object references already exist*") { return $true }
-        Write-M365PLog -Level Warning -Message "Could not add $ObjectId to $($CollectionUri): $($_.Exception.Message)"
+        $detail = Get-M365PErrorDetail -ErrorRecord $_
+        # the reference already existing is the normal idempotent path. Graph answers that with a 400
+        # whose body reads "One or more added object references already exist", so it only looks like
+        # a failure until you read the body
+        if ($detail -like "*already exist*") { return $true }
+        Write-M365PLog -Level Warning -Message "Could not add $ObjectId to $($CollectionUri): $detail"
         return $false
     }
 }
@@ -800,7 +849,7 @@ function Set-M365PGrant_entraAppRoleDefinition {
         }
     }
     catch {
-        if ($_.Exception.Message -notlike "*already exists*") { Throw $_ }
+        if ((Get-M365PErrorDetail -ErrorRecord $_) -notlike "*already exist*") { Throw $_ }
     }
 }
 
@@ -1159,12 +1208,13 @@ function Invoke-M365PAzureRbacAssignment {
         }
         catch {
             if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
-            if ($_.Exception.Message -like "*RoleAssignmentExists*") {
+            $detail = Get-M365PErrorDetail -ErrorRecord $_
+            if ($detail -like "*RoleAssignmentExists*") {
                 $done = $true
                 Write-M365PLog -Message "$($Grant.displayName) was already assigned at $label"
             }
             else {
-                Write-M365PLog -Level Verbose -Message "Could not assign at $($label): $($_.Exception.Message)"
+                Write-M365PLog -Level Verbose -Message "Could not assign at $($label): $detail"
             }
         }
 
@@ -1185,8 +1235,9 @@ function Invoke-M365PAzureRbacAssignment {
         }
         catch {
             if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
-            if ($_.Exception.Message -like "*RoleAssignmentExists*") { $assigned++; continue }
-            Write-M365PLog -Level Verbose -Message "Could not assign $($Grant.displayName) on $($subscription.displayName): $($_.Exception.Message)"
+            $detail = Get-M365PErrorDetail -ErrorRecord $_
+            if ($detail -like "*RoleAssignmentExists*") { $assigned++; continue }
+            Write-M365PLog -Level Verbose -Message "Could not assign $($Grant.displayName) on $($subscription.displayName): $detail"
         }
     }
 
@@ -1344,8 +1395,9 @@ function Set-M365PGrant_azureDevOpsOrgUser {
             $added++
         }
         catch {
-            if ($_.Exception.Message -like "*already*") { $added++; continue }
-            $errors += "$($org): $($_.Exception.Message)"
+            $detail = Get-M365PErrorDetail -ErrorRecord $_
+            if ($detail -like "*already*") { $added++; continue }
+            $errors += "$($org): $detail"
         }
     }
 
