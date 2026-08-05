@@ -1624,9 +1624,19 @@ function Invoke-M365PSync {
                     try { Remove-M365PGrant -Grant $grant -Context $Context; $detail = "Removed, no longer selected" }
                     catch { $detail = "Could not remove: $($_.Exception.Message)" }
                 }
+            }elseif ($Mode -eq "Audit") {
+                # A surface being unselected says nothing about whether the permission is actually
+                # there. Upgrades in particular start from a conservative surface list, so reporting
+                # notApplicable without looking would take working categories offline and hide the
+                # fact that the customer is already entitled to them. Report what is true, and let
+                # the caller decide whether to widen the surfaces.
+                $current = Test-M365PGrant -Grant $grant -Context $Context
+                if ($current.state -eq "granted") {
+                    $state = "granted"
+                    $detail = "Granted, but the surface it belongs to is not selected"
+                }
             }
-        }
-        else {
+        }else {
             $result = Test-M365PGrant -Grant $grant -Context $Context
             $state = $result.state
             $detail = $result.detail

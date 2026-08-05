@@ -132,17 +132,17 @@
       }
     },         
     {
-      "key": "graph.devicemanagementserviceconfiguration.readall",
+      "key": "graph.devicemanagementserviceconfig.readall",
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "recommended",
       "resource": "graph",
-      "value": "DeviceManagementServiceConfiguration.Read.All",
+      "value": "DeviceManagementServiceConfig.Read.All",
       "categories": [ "Admins"],
       "docs": {
         "title": "Read device enrollment managers",
         "why": "Standard read permissions don't allow this, if granted we can report on entities holding this special enrollment privilege",
-        "url": "https://m365permissions.com/docs/permissions#graph.devicemanagementserviceconfiguration.readall"
+        "url": "https://m365permissions.com/docs/permissions#graph.devicemanagementserviceconfig.readall"
       }
     },           
     {
@@ -535,7 +535,7 @@
       "necessity": "recommended",
       "role": "View-Only Recipients",
       "condition": { "surfaces": "Exchange" },
-      "categories": [ "ExoRecipients", "O365Group", "Teams" ],
+      "categories": [ "ExoRecipients"],
       "docs": {
         "title": "Exchange: View-Only Recipients",
         "why": "Reads mailboxes, mail users, distribution groups and their delegate, folder and send-as permissions. Read-only, and replaces the Exchange Administrator directory role.",
