@@ -651,11 +651,20 @@ function Test-M365PGrant_entraDirectoryRole {
 function Set-M365PGrant_entraDirectoryRole {
     Param($Grant, $Context)
 
-    $null = Invoke-M365PRest -Context $Context -Method POST -Raw -Uri "https://graph.microsoft.com/beta/roleManagement/directory/roleAssignments" -Body @{
-        "@odata.type"    = "#microsoft.graph.unifiedRoleAssignment"
-        roleDefinitionId = $Grant.roleTemplateId
-        principalId      = $Context.scannerSpnObjectId
-        directoryScopeId = "/"
+    try {
+        $null = Invoke-M365PRest -Context $Context -Method POST -Raw -Uri "https://graph.microsoft.com/beta/roleManagement/directory/roleAssignments" -Body @{
+            "@odata.type"    = "#microsoft.graph.unifiedRoleAssignment"
+            roleDefinitionId = $Grant.roleTemplateId
+            principalId      = $Context.scannerSpnObjectId
+            directoryScopeId = "/"
+        }
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        # the assignment already being there is success, not failure. Graph answers a duplicate with a
+        # conflict whose reason is only in the response body, so the status line cannot be matched on
+        $detail = Get-M365PErrorDetail -ErrorRecord $_
+        if ($detail -notlike "*already exist*" -and $detail -notlike "*conflicting object*") { Throw $_ }
     }
 }
 

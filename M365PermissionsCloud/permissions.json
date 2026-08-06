@@ -4,7 +4,7 @@
     "Master copy: https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/main/M365PermissionsCloud/permissions.json",
     "Mirror: https://m365permissions.com/permissions.json"
   ],
-  "revision": 1,
+  "revision": 2,
   "minimumProductVersion": "1.4.9",
 
   "resources": {
@@ -236,6 +236,21 @@
       }
     },
     {
+      "key": "entra.role.globalreader",
+      "principal": "scanner",
+      "provider": "entraDirectoryRole",
+      "necessity": "recommended",
+      "blocksCategories": false,
+      "roleTemplateId": "f2ef992c-3afb-46b9-b7cf-a126ee74c451",
+      "displayName": "Global Reader",
+      "categories": [],
+      "docs": {
+        "title": "Entra: Global Reader",
+        "why": "A directory role rather than an application permission, so it reaches the read surfaces that have no application permission at all. It grants read access only and no ability to change anything, and the granular application permissions above stay in place rather than being replaced by it.",
+        "url": "https://m365permissions.com/docs/permissions#entra.role.globalreader"
+      }
+    },
+    {
       "key": "graph.sites.readall",
       "principal": "scanner",
       "provider": "entraAppRole",
@@ -322,6 +337,7 @@
 
     {
       "key": "graph.application.readwrite.all",
+      "nodeScoped": false,
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
@@ -337,6 +353,7 @@
     },
     {
       "key": "graph.approleassignment.readwrite.all",
+      "nodeScoped": false,
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
@@ -352,6 +369,7 @@
     },
     {
       "key": "graph.directory.readwrite.all",
+      "nodeScoped": false,
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
@@ -367,6 +385,7 @@
     },
     {
       "key": "graph.rolemanagement.readwrite.directory",
+      "nodeScoped": false,
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
