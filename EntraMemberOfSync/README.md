@@ -45,7 +45,7 @@ flowchart TD
         L[[For each source group]] --> M{"Mode in\nthe marker?"}
         M -- "direct" --> N[("/members")]
         M -- "transitive" --> O[("/transitiveMembers")]
-        N --> P["Keep users\n& devices only"]
+        N --> P["Filter on type"]
         O --> P
         P --> Q{{"Union of\nall sources"}}
     end
@@ -115,7 +115,7 @@ EntraMemberOfSync:transitive:9c40b1e8-77af-4d2c-b3a9-5e8f6d1a0c34
 
 The mode applies to how **source** groups are read. The target group's own membership is always read and written as direct members.
 
-Only **user and device** objects are synced. A nested group or service principal found inside a source group is ignored, which also means the runbook will never remove a group or service principal that you assigned to the target group directly.
+Only **user and device** objects are synced by default. A nested group or service principal found inside a source group is ignored, which also means the runbook will never remove a group or service principal that you assigned to the target group directly, if you do want this, modify $supportedMemberTypes
 
 ## Setup
 
@@ -152,22 +152,9 @@ Repeat per group. There is nothing to register centrally, the runbook picks up a
 - Throttling (429) and transient server errors are retried up to five times, honouring `Retry-After`.
 - If any group fails to process, the runbook still finishes the rest and then throws, so the Automation job ends in **Failed** status and your alerting picks it up.
 
-## Logging
-
-The runbook deliberately splits its messages over two Automation streams:
-
-- **Output** carries the normal narrative: the run header, the candidate count, one line per synced group, and the closing summary.
-- **Warning** carries everything that deserves attention: throttling retries, the search fallback, unreadable source groups, cancelled removals, self references, and individual add or remove failures.
-
-That split is not cosmetic. In PowerShell a function's return value travels the output stream, so anything a value-returning function writes with `Write-Output` ends up inside the caller's variable. `Get-MarkedGroups` returning a group list, or `Add-GroupMembers` returning a count, must therefore stay silent on that stream. Keep this in mind if you extend the script: log from the main body with `Write-Output`, and from inside a function with `Write-Warning`.
-
-A practical benefit is that "did anything need attention" is a single glance at the Warnings of the job, and you can alert on the warning count without parsing the output text.
-
 ## Limitations
 
-- Membership follows on a schedule, so changes land within the sync interval rather than instantly.
-- Only union-of-groups semantics. Other dynamic rule expressions (department, country, extension attributes) are out of scope, keep using regular dynamic groups for those.
-- Roughly 25 source groups per target, because a group description caps out at 1024 characters.
-- Users and devices only.
-- Discovery goes through the Graph search index, which is eventually consistent. A freshly marked group can take a few minutes to be picked up, which is irrelevant at an hourly cadence.
+- Membership follows on a schedule, so changes land within the sync interval you define, rather than instantly.
+- Only union-of-groups semantics. Other dynamic rule expressions (department, country, extension attributes) are out of scope, keep using regular dynamic groups for those (e.g. as source groups)
+- Roughly 20 source groups per target, because a group description caps out at 1024 characters.
 - A marked group used as a source for another marked group converges over successive runs rather than within a single run.
