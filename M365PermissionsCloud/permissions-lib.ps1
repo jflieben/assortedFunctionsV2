@@ -381,15 +381,39 @@ function Invoke-M365PExoRequest {
         $response.Dispose()
     }
 
-    if ($status -lt 200 -or $status -gt 299) {
-        if ([String]::IsNullOrWhiteSpace($text)) { Throw "Exchange Online returned HTTP $status with no explanation" }
-        Throw $text
+    # A body can be present and still say nothing. This API answers some refusals with a run of NUL
+    # bytes, which no string test counts as whitespace, so throwing it as the message produced a failure
+    # that rendered as blank and told nobody anything. Readability is what is left once the control
+    # characters are gone.
+    $readable = $text -replace "[\p{C}]", ""
+
+    # A rejected token is not a missing permission. Reported as a refusal it would audit every Exchange
+    # grant as missing and take those categories offline over a problem with the caller's session, so it
+    # is raised as unavailable, which is the signal for "could not determine".
+    if ($status -eq 401) {
+        $why = if ([String]::IsNullOrWhiteSpace($readable)) { "" } else { " $readable" }
+        Throw "M365PUNAVAILABLE: Exchange Online did not accept this session's token (HTTP 401).$why"
     }
 
-    if ([String]::IsNullOrWhiteSpace($text)) { return $null }
+    if ($status -lt 200 -or $status -gt 299) {
+        # The status always goes in the message, and the body, when it says something, on ErrorDetails.
+        # That is where Get-M365PErrorDetail looks first, so Exchange's nested reason still comes out,
+        # and a refusal that explains nothing at least names the status it refused with.
+        $record = [System.Management.Automation.ErrorRecord]::new(
+            [System.Exception]::new("Exchange Online returned HTTP $status"),
+            "M365PExoHttpError",
+            [System.Management.Automation.ErrorCategory]::InvalidResult,
+            $Uri)
+        if (![String]::IsNullOrWhiteSpace($readable)) {
+            $record.ErrorDetails = [System.Management.Automation.ErrorDetails]::new($text)
+        }
+        Throw $record
+    }
+
+    if ([String]::IsNullOrWhiteSpace($readable)) { return $null }
 
     try { return ($text | ConvertFrom-Json) }
-    catch { Throw "Exchange Online returned a body that is not JSON: $($text.Substring(0, [Math]::Min(200, $text.Length)))" }
+    catch { Throw "Exchange Online returned a body that is not JSON: $($readable.Substring(0, [Math]::Min(200, $readable.Length)))" }
 }
 
 function Invoke-M365PExoCommand {
@@ -431,6 +455,9 @@ function Invoke-M365PExoCommand {
             $data = Invoke-M365PExoRequest -Uri $nextUrl -Headers $headers -Body $body
         }
         catch {
+            # the unavailable signal is matched on the front of the message, so naming the cmdlet in
+            # front of it would turn "could not determine" into "the cmdlet was refused"
+            if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
             # the status line on its own is useless here: every rejected cmdlet reads "400 (Bad Request)"
             # and the reason Exchange refused is only ever in the response body
             Throw "$Cmdlet failed: $(Get-M365PErrorDetail -ErrorRecord $_)"
@@ -582,12 +609,13 @@ function Get-M365PErrorDetail {
         [Parameter(Mandatory = $true)]$ErrorRecord
     )
 
-    # ErrorDetails is where Invoke-RestMethod leaves a response body. The Exchange transport throws the
-    # body as the message instead, since it reads the response itself, so both are unwrapped the same
-    # way rather than only the one that happens to come from a cmdlet.
-    $detail = $ErrorRecord.ErrorDetails.Message
-    if ([String]::IsNullOrWhiteSpace($detail)) { $detail = "$($ErrorRecord.Exception.Message)" }
-    if ([String]::IsNullOrWhiteSpace($detail)) { return "" }
+    # ErrorDetails is where Invoke-RestMethod leaves a response body, and where the Exchange transport
+    # puts one too, so both are unwrapped the same way rather than only the one that came from a cmdlet.
+    # Emptiness is judged with the control characters removed: a body of NUL bytes is not whitespace by
+    # any string test, and reporting it verbatim produced a reason that rendered as blank.
+    $detail = "$($ErrorRecord.ErrorDetails.Message)"
+    if ([String]::IsNullOrWhiteSpace(($detail -replace "[\p{C}]", ""))) { $detail = "$($ErrorRecord.Exception.Message)" }
+    if ([String]::IsNullOrWhiteSpace(($detail -replace "[\p{C}]", ""))) { return "no reason given" }
 
     $parsed = $null
     try { $parsed = $detail | ConvertFrom-Json -ErrorAction Stop } catch { $parsed = $null }
