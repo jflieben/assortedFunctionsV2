@@ -22,13 +22,6 @@
                 "description": "Use Azure Hybrid Benefit for Windows Server"
             }
         },
-        "allowSelfAuth": {
-            "type": "bool",
-            "defaultValue": false,
-            "metadata": {
-                "description": "Request additional permissions to allow M365Permissions to automatically scale up and down"
-            }
-        },
         "TenantSize": {
             "type": "string"
         },
@@ -164,9 +157,6 @@
                     },
                     "UseAzureHybridBenefit": {
                         "value": "[parameters('UseAzureHybridBenefit')]"
-                    },
-                    "allowSelfAuth": {
-                        "value": "[parameters('allowSelfAuth')]"
                     },
                     "TenantSize": {
                         "value": "[parameters('TenantSize')]"

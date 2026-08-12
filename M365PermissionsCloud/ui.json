@@ -226,26 +226,6 @@
                                 "required": true
                             },
                             "visible": true
-                        },
-                        {
-                            "name": "allowSelfAuth",
-                            "type": "Microsoft.Common.CheckBox",
-                            "label": "Allow M365Permissions to automatically scale up and down",
-                            "toolTip": "M365Permissions will request additional permissions during setup so it can automatically create and remove disposable SPOT VM's for scanning. This is optional except for tenants with > 5000 users",
-                            "visible": "[and(not(empty(steps('basics').dropDown1)),not(equals(steps('basics').dropDown1,'50')),not(equals(steps('basics').dropDown1,'500')))]",
-                            "constraints": {
-                                "required": "[and(not(empty(steps('basics').dropDown1)),not(equals(steps('basics').dropDown1,'50')),not(equals(steps('basics').dropDown1,'500')),not(equals(steps('basics').dropDown1,'3000')))]"
-                            }
-                        },
-                        {
-                            "name": "text3",
-                            "type": "Microsoft.Common.InfoBox",
-                            "visible": "[and(not(empty(steps('basics').dropDown1)),not(equals(steps('basics').dropDown1,'50')),not(equals(steps('basics').dropDown1,'500')))]",
-                            "options": {
-                                "text": "If selected, M365Permissions will request extra Graph scopes so it can temporarily create and remove Azure SPOT VM's (these are 4-6 cents/hour on average). This is optional except for tenants with > 5000 users to ensure scanning is done in a timely manner and without causing throttling.",
-                                "uri": "https://m365permissions.com/#/docs/support#required-permissions",
-                                "style": "Info"
-                            }
                         }
                     ]
                 },
@@ -376,7 +356,6 @@
 				"TenantSize": "[steps('basics').dropDown1]",
 				"vmSize": "[steps('basics').vmSize]",
 				"UseAzureHybridBenefit": "[steps('basics').hybridBenefit]",
-				"allowSelfAuth": "[steps('basics').allowSelfAuth]",
 				"Location": "[steps('basics').resourceScope.location.name]",
 				"customTags": "[steps('m365configuration').customTags]",
 				"applicationResourceName": "[steps('m365configuration').applicationName]",
