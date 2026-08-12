@@ -123,6 +123,28 @@ function Stop-WithReason {
     Exit 1
 }
 
+function Get-TokenTenantId {
+    <#
+        .SYNOPSIS
+        The tenant a token was issued for, from its tid claim, or $null when it cannot be read.
+    #>
+    Param([Parameter(Mandatory = $true)][String]$Token)
+
+    try {
+        $payload = $Token.Split(".")[1]
+        switch ($payload.Length % 4) {
+            1 { $payload = $payload.Substring(0, $payload.Length - 1) }
+            2 { $payload += "==" }
+            3 { $payload += "=" }
+        }
+        $json = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload.Replace("-", "+").Replace("_", "/")))
+        return ($json | ConvertFrom-Json).tid
+    }
+    catch {
+        return $null
+    }
+}
+
 function Get-PlainAccessToken {
     <#
         .SYNOPSIS
@@ -177,12 +199,28 @@ if ($SubscriptionId -and $context.Subscription.Id -ne $SubscriptionId) {
     }
 }
 
-$tenantId = $context.Tenant.Id
+$graphToken = Get-PlainAccessToken -Resource "https://graph.microsoft.com"
+if (!$graphToken) { Stop-WithReason "Could not get a Microsoft Graph token for your account." }
+
+# The tenant is taken from the token rather than from the Azure context, because it is the token that
+# every API validates against and the two are not always the same. A session that was pointed at another
+# tenant, or that switched subscription across a tenant boundary, can keep reporting one tenant while
+# handing out tokens for another. Exchange is addressed per organization, /adminapi/beta/<tenant>/, so a
+# mismatch there is not a warning, it is a 403 with an empty body on every Exchange permission while
+# Graph carries on working normally. That combination is almost impossible to read from the outside.
+$tokenTenantId = Get-TokenTenantId -Token $graphToken
+$tenantId = if ($tokenTenantId) { $tokenTenantId } else { $context.Tenant.Id }
+
 Write-Detail "Tenant:       $tenantId"
 Write-Detail "Signed in as: $($context.Account.Id)"
 
-$graphToken = Get-PlainAccessToken -Resource "https://graph.microsoft.com"
-if (!$graphToken) { Stop-WithReason "Could not get a Microsoft Graph token for your account." }
+if ($tokenTenantId -and $context.Tenant.Id -and $tokenTenantId -ne $context.Tenant.Id) {
+    Write-Problem "Your session reports tenant $($context.Tenant.Id) but issues tokens for $tokenTenantId. Going with $tokenTenantId, which is the tenant these tokens can actually address. If that is not the tenant you meant to authorize, stop and run Connect-AzAccount -TenantId <the right one> first."
+}
+
+if ($context.Account.Type -and "$($context.Account.Type)" -ne "User") {
+    Write-Problem "This session is signed in as $($context.Account.Type) ($($context.Account.Id)) rather than as an administrator. Onboarding applies permissions with your own privileges, so unless that identity holds them this will not do what you expect."
+}
 $graphHeaders = @{ "Authorization" = "Bearer $graphToken"; "Content-Type" = "application/json" }
 
 # ------------------------------------------------------------------------------------------------
