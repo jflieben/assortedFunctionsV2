@@ -455,8 +455,13 @@ Write-M365PResultTable -Results $results
 # ------------------------------------------------------------------------------------------------
 
 $requiredPresent = Test-M365PRequiredGrantsPresent -Results $results
-$unavailable = @($results | Where-Object { $_.state -eq "unavailable" })
 $manual = @($results | Where-Object { $_.manual -and $_.state -ne "granted" -and $_.state -ne "notApplicable" })
+
+# A manual grant has no session to be determined from, by definition: Power Platform is authorized by
+# hand precisely because there is no token for it, so reporting that no token was found says nothing a
+# reader can act on and contradicts the manual list directly above, which tells them what to do about
+# the same permission. Anything else being undeterminable is a real surprise and still worth saying.
+$unavailable = @($results | Where-Object { $_.state -eq "unavailable" -and !$_.manual })
 
 if ($manual.Count -gt 0) {
     Write-Host "These need a manual step, they cannot be done from here:" -ForegroundColor Yellow
