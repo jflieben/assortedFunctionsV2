@@ -270,6 +270,128 @@ function Invoke-M365PRest {
     return $results
 }
 
+#One client for the process. A new HttpClient per call leaks sockets, and the handler below carries a
+#deliberate configuration that must not vary between calls.
+$script:M365PExoHttpClient = $null
+
+function Get-M365PExoHttpClient {
+    <#
+        .SYNOPSIS
+        The HttpClient used for Exchange adminapi calls, with decompression left to us.
+
+        .DESCRIPTION
+        Exchange answers some cmdlets with Content-Encoding: gzip over a body that is not gzipped.
+        .NET's automatic decompression fails that while the response is still being read, with
+        "The archive entry was compressed using an unsupported compression method", which reads exactly
+        like the cmdlet was rejected and sent onboarding down the wrong path entirely.
+
+        Invoke-RestMethod cannot avoid it: it appends its own gzip, deflate, br to whatever
+        Accept-Encoding is asked for, so a request for identity still comes back compressed. Turning
+        the automatic path off is the only way to judge a body by what it contains.
+    #>
+    if ($script:M365PExoHttpClient) { return $script:M365PExoHttpClient }
+
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $handler.AutomaticDecompression = [System.Net.DecompressionMethods]::None
+    $client = [System.Net.Http.HttpClient]::new($handler)
+    $client.Timeout = [TimeSpan]::FromMinutes(10)
+    $script:M365PExoHttpClient = $client
+    return $client
+}
+
+function Expand-M365PResponseBody {
+    <#
+        .SYNOPSIS
+        The text of a response body, decompressed when it actually is compressed.
+
+        .DESCRIPTION
+        Content-Encoding is a claim, not a fact, so the magic number decides instead and anything that
+        does not decompress is returned as the text it already was. That covers all three shapes seen
+        from this API: a genuinely gzipped body, a plain body labelled gzip, and no body at all.
+
+        Brotli has no magic number to check, so it is the one encoding still taken on trust. Nothing
+        asks for it, which is why trusting it is affordable here.
+    #>
+    Param([Byte[]]$Bytes, [String]$ContentEncoding)
+
+    if ($null -eq $Bytes -or $Bytes.Length -eq 0) { return "" }
+
+    $decoder = $null
+    if ($Bytes.Length -gt 2 -and $Bytes[0] -eq 0x1F -and $Bytes[1] -eq 0x8B) { $decoder = "gzip" }
+    elseif ($ContentEncoding -like "*br*" -and $ContentEncoding -notlike "*gzip*") { $decoder = "br" }
+
+    if ($decoder) {
+        try {
+            $compressed = [System.IO.MemoryStream]::new($Bytes)
+            $reader = if ($decoder -eq "gzip") {
+                [System.IO.Compression.GZipStream]::new($compressed, [System.IO.Compression.CompressionMode]::Decompress)
+            }
+            else {
+                [System.IO.Compression.BrotliStream]::new($compressed, [System.IO.Compression.CompressionMode]::Decompress)
+            }
+            $plain = [System.IO.MemoryStream]::new()
+            $reader.CopyTo($plain)
+            $reader.Dispose()
+            $text = [System.Text.Encoding]::UTF8.GetString($plain.ToArray())
+            $plain.Dispose()
+            return $text.TrimStart([Char]0xFEFF)
+        }
+        catch {
+            # whatever it is, it is not what the header said it was, so fall through and read it as text
+        }
+    }
+
+    return ([System.Text.Encoding]::UTF8.GetString($Bytes)).TrimStart([Char]0xFEFF)
+}
+
+function Invoke-M365PExoRequest {
+    <#
+        .SYNOPSIS
+        One POST to the Exchange adminapi. Returns the parsed body, or $null when there was none.
+
+        .DESCRIPTION
+        Throws with the response body as the message on any non-success status, because the status line
+        is useless on its own: every rejected cmdlet reads 400, and what Exchange actually objected to
+        is only ever in the body. Get-M365PErrorDetail is what unwraps it.
+    #>
+    Param(
+        [Parameter(Mandatory = $true)][String]$Uri,
+        [Parameter(Mandatory = $true)][Hashtable]$Headers,
+        [Parameter(Mandatory = $true)][String]$Body
+    )
+
+    $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $Uri)
+    $request.Content = [System.Net.Http.StringContent]::new($Body, [System.Text.Encoding]::UTF8, "application/json")
+    foreach ($name in $Headers.Keys) {
+        # Content-Type belongs to the content in .NET, and the request refuses it
+        if ($name -eq "Content-Type") { continue }
+        $null = $request.Headers.TryAddWithoutValidation($name, $Headers[$name])
+    }
+    # asked for explicitly since the handler no longer does it, and these responses are worth
+    # compressing. What comes back is still judged on its content rather than on this being honoured.
+    $null = $request.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip")
+
+    $response = (Get-M365PExoHttpClient).SendAsync($request).GetAwaiter().GetResult()
+    try {
+        $bytes = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+        $text = Expand-M365PResponseBody -Bytes $bytes -ContentEncoding ($response.Content.Headers.ContentEncoding -join ",")
+        $status = [int]$response.StatusCode
+    }
+    finally {
+        $response.Dispose()
+    }
+
+    if ($status -lt 200 -or $status -gt 299) {
+        if ([String]::IsNullOrWhiteSpace($text)) { Throw "Exchange Online returned HTTP $status with no explanation" }
+        Throw $text
+    }
+
+    if ([String]::IsNullOrWhiteSpace($text)) { return $null }
+
+    try { return ($text | ConvertFrom-Json) }
+    catch { Throw "Exchange Online returned a body that is not JSON: $($text.Substring(0, [Math]::Min(200, $text.Length)))" }
+}
+
 function Invoke-M365PExoCommand {
     <#
         .SYNOPSIS
@@ -305,31 +427,13 @@ function Invoke-M365PExoCommand {
 
     while ($nextUrl) {
         $data = $null
-        $attempt = 0
-        while ($attempt -lt 3) {
-            $attempt++
-            try {
-                $data = Invoke-RestMethod -Uri $nextUrl -Method POST -Body $body -Headers $headers -ErrorAction Stop -Verbose:$false
-                break
-            }
-            catch {
-                # A body that cannot be decompressed is not the cmdlet refusing. Exchange's adminapi
-                # intermittently answers with content that does not match the Content-Encoding it
-                # declares, which fails while the response is still being read and so carries no
-                # verdict at all: the cmdlet may well have run. Retrying is the only way to find out,
-                # and this is the one failure here worth retrying, because every other one is Exchange
-                # objecting on purpose and will object identically the second time.
-                $unreadable = ($_.Exception -is [System.IO.InvalidDataException]) -or
-                              ($_.Exception.Message -like "*unsupported compression method*") -or
-                              ($_.Exception.Message -like "*archive entry*")
-                if (!$unreadable -or $attempt -ge 3) {
-                    # the status line on its own is useless here: every rejected cmdlet reads
-                    # "400 (Bad Request)" and the reason Exchange refused is only ever in the body
-                    Throw "$Cmdlet failed: $(Get-M365PErrorDetail -ErrorRecord $_)"
-                }
-                Write-M365PLog -Level Verbose -Message "Could not read Exchange's answer to $Cmdlet, retrying"
-                Start-Sleep -Seconds (2 * $attempt)
-            }
+        try {
+            $data = Invoke-M365PExoRequest -Uri $nextUrl -Headers $headers -Body $body
+        }
+        catch {
+            # the status line on its own is useless here: every rejected cmdlet reads "400 (Bad Request)"
+            # and the reason Exchange refused is only ever in the response body
+            Throw "$Cmdlet failed: $(Get-M365PErrorDetail -ErrorRecord $_)"
         }
         if ($null -ne $data -and $data.PSObject.Properties.Name -contains "value") { $results += @($data.value) } elseif ($null -ne $data) { $results += @($data) }
         $nextUrl = $null
@@ -478,8 +582,12 @@ function Get-M365PErrorDetail {
         [Parameter(Mandatory = $true)]$ErrorRecord
     )
 
+    # ErrorDetails is where Invoke-RestMethod leaves a response body. The Exchange transport throws the
+    # body as the message instead, since it reads the response itself, so both are unwrapped the same
+    # way rather than only the one that happens to come from a cmdlet.
     $detail = $ErrorRecord.ErrorDetails.Message
-    if ([String]::IsNullOrWhiteSpace($detail)) { return "$($ErrorRecord.Exception.Message)" }
+    if ([String]::IsNullOrWhiteSpace($detail)) { $detail = "$($ErrorRecord.Exception.Message)" }
+    if ([String]::IsNullOrWhiteSpace($detail)) { return "" }
 
     $parsed = $null
     try { $parsed = $detail | ConvertFrom-Json -ErrorAction Stop } catch { $parsed = $null }
