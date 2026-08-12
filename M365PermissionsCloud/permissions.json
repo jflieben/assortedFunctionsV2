@@ -2,9 +2,16 @@
   "$comment": [
     "Central definition of every permission M365Permissions Cloud needs.",
     "Master copy: https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/main/M365PermissionsCloud/permissions.json",
-    "Mirror: https://m365permissions.com/permissions.json"
+    "Mirror: https://m365permissions.com/permissions.json",
+    "",
+    "satisfiedBy lists broader permissions that already cover a grant. It is read during an audit only:",
+    "an install upgraded from a release that asked for a wider permission keeps scanning on what it",
+    "already holds instead of reporting the narrower replacement as missing and taking its categories",
+    "offline. Apply never consults it, so a re-authorization still grants the narrow permission and the",
+    "prune still removes the wide one. Each entry overrides the fields it names on the grant it sits on,",
+    "so it may switch provider, resource, value or role, and an explicit null clears a field."
   ],
-  "revision": 2,
+  "revision": 3,
   "minimumProductVersion": "1.4.9",
 
   "resources": {
@@ -158,6 +165,11 @@
       "necessity": "required",
       "resource": "spo",
       "value": "Sites.Read.All",
+      "satisfiedBy": [
+        { "provider": "entraAppRole", "resource": "spo", "value": "Sites.ReadWrite.All" },
+        { "provider": "entraAppRole", "resource": "spo", "value": "Sites.Manage.All" },
+        { "provider": "entraAppRole", "resource": "spo", "value": "Sites.FullControl.All" }
+      ],
       "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
       "docs": {
         "title": "SharePoint: read access to all site collections",
@@ -186,6 +198,9 @@
       "necessity": "required",
       "resource": "graph",
       "value": "Directory.Read.All",
+      "satisfiedBy": [
+        { "provider": "entraAppRole", "resource": "graph", "value": "Directory.ReadWrite.All" }
+      ],
       "categories": [ "EntraUsers", "EntraGroups", "EntraSPNs", "Entra", "Admins", "Devices" ],
       "docs": {
         "title": "Read directory data",
@@ -257,6 +272,11 @@
       "necessity": "required",
       "resource": "graph",
       "value": "Sites.Read.All",
+      "satisfiedBy": [
+        { "provider": "entraAppRole", "resource": "graph", "value": "Sites.ReadWrite.All" },
+        { "provider": "entraAppRole", "resource": "graph", "value": "Sites.Manage.All" },
+        { "provider": "entraAppRole", "resource": "graph", "value": "Sites.FullControl.All" }
+      ],
       "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
       "docs": {
         "title": "Graph: read access to all site collections",
@@ -604,6 +624,10 @@
       "necessity": "recommended",
       "role": "Application Mail.Send",
       "scope": { "type": "managementScope", "name": "M365Permissions-Sender", "source": "context:mailAddress" },
+      "satisfiedBy": [
+        { "provider": "entraAppRole", "resource": "graph", "value": "Mail.Send" },
+        { "provider": "exoRoleAssignment", "role": "Application Mail.Send", "scope": null }
+      ],
       "condition": { "mailMode": [ "Auto", "Existing" ] },
       "categories": [],
       "capabilities": [ "reportSubscriptions" ],

@@ -16,6 +16,7 @@
 
     Grant states:
       granted        the permission is in place
+      satisfied      absent, but a broader permission the tenant already holds covers it (audit only)
       missing        the permission is applicable but absent
       notApplicable  a condition excluded it (and it is pruned if it was previously granted)
       unavailable    no usable token for that resource in this context, so the answer is unknown
@@ -1812,6 +1813,54 @@ function Test-M365PGrant {
     }
 }
 
+function Test-M365PSatisfiedBy {
+    <#
+        .SYNOPSIS
+        Whether a broader permission the tenant already holds covers a grant that tested as missing.
+        Returns the explanation when one does, and $null when none do.
+
+        .DESCRIPTION
+        Narrowing a permission is a privilege reduction, but it lands on installs that are already
+        running: 1.4.9 replaced Sites.ReadWrite.All with Sites.Read.All and tenant wide Mail.Send with a
+        single scoped mailbox. The scanner still reads everything it did the day before, because what it
+        holds is a superset of what is now asked for, so reporting those as missing takes SharePoint,
+        OneDrive, Teams and Groups offline over permissions that demonstrably work.
+
+        Audit only, and Invoke-M365PSync is what enforces that. In Apply mode the narrow permission has
+        to actually be granted before the prune removes the wide one, and short circuiting here would
+        leave the deployment holding neither.
+    #>
+    Param(
+        [Parameter(Mandatory = $true)]$Grant,
+        [Parameter(Mandatory = $true)]$Context
+    )
+
+    foreach ($alternative in @($Grant.satisfiedBy)) {
+        if (!$alternative) { continue }
+
+        # the alternative is a patch over the grant rather than a grant of its own, so it only has to
+        # name what differs. An explicit null clears a field, which is how the unscoped form of a
+        # scoped role assignment is expressed.
+        $probe = [PSCustomObject]@{}
+        foreach ($property in $Grant.PSObject.Properties) {
+            $probe | Add-Member -MemberType NoteProperty -Name $property.Name -Value $property.Value -Force
+        }
+        foreach ($property in $alternative.PSObject.Properties) {
+            $probe | Add-Member -MemberType NoteProperty -Name $property.Name -Value $property.Value -Force
+        }
+        # satisfiedBy is not transitive: an alternative may not bring its own alternatives along
+        $probe | Add-Member -MemberType NoteProperty -Name "satisfiedBy" -Value $null -Force
+
+        $result = Test-M365PGrant -Grant $probe -Context $Context
+        if ($result.state -ne "granted") { continue }
+
+        $held = @($probe.value, $probe.role) | Where-Object { $_ } | Select-Object -First 1
+        return "Covered by $held, which this tenant already holds and which includes everything this permission asks for. Re-authorize to move to the narrower permission."
+    }
+
+    return $null
+}
+
 function Set-M365PGrant {
     Param(
         [Parameter(Mandatory = $true)]$Grant,
@@ -1951,6 +2000,16 @@ function Invoke-M365PSync {
             $state = $result.state
             $detail = $result.detail
 
+            # Audit only. In Apply the narrow permission must actually be granted before the prune takes
+            # the wide one away, so short circuiting here would leave the deployment holding neither.
+            if ($state -eq "missing" -and $Mode -eq "Audit") {
+                $covered = Test-M365PSatisfiedBy -Grant $grant -Context $Context
+                if ($covered) {
+                    $state = "satisfied"
+                    $detail = $covered
+                }
+            }
+
             if ($state -eq "missing" -and $Mode -eq "Apply") {
                 if ($grant.manual) {
                     $detail = "This is a manual step, see the documentation link"
@@ -2056,7 +2115,10 @@ function Test-M365PRequiredGrantsPresent {
 
     $candidates = @($Results | Where-Object { $_.necessity -eq "required" })
 
-    $missing = @($candidates | Where-Object { $_.state -ne "granted" -and $_.state -ne "notApplicable" })
+    # 'satisfied' counts as present here: this gates whether the product can run, and a grant covered by
+    # a broader permission the tenant already holds can run. That it should still be re-authorized onto
+    # the narrower permission is reported separately, and is not a reason to refuse to work.
+    $missing = @($candidates | Where-Object { $_.state -notin @("granted", "satisfied", "notApplicable") })
     if ($missing.Count -eq 0) { return $true }
     Write-M365PLog -Level Warning -Message "Missing required permissions: $(($missing.key) -join ", ")"
     return $false
@@ -2071,6 +2133,7 @@ function Write-M365PResultTable {
     foreach ($result in ($Results | Sort-Object necessity, key)) {
         $colour = switch ($result.state) {
             "granted"       { "Green" }
+            "satisfied"     { "DarkGreen" }
             "notApplicable" { "DarkGray" }
             "unavailable"   { "DarkYellow" }
             default         { if ($result.necessity -eq "required") { "Red" } else { "DarkYellow" } }

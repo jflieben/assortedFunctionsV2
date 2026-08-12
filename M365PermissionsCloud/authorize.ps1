@@ -90,12 +90,36 @@ function Write-Step { Param([String]$Message) Write-Host "`n==> $Message" -Foreg
 function Write-Detail { Param([String]$Message) Write-Host "    $Message" -ForegroundColor DarkGray }
 function Write-Problem { Param([String]$Message) Write-Host "    $Message" -ForegroundColor DarkYellow }
 
+function Wait-Close {
+    <#
+        .SYNOPSIS
+        Blocks until the user actually presses a key, so the window never closes before its final
+        message can be read. Read-Host is not used for the pause because a leftover newline in the
+        input buffer (from pasting the command, or from an irm | iex style invocation) makes it
+        return instantly without waiting. We drain any buffered input first, then wait for a real
+        key press, and only fall back to Read-Host when there is no interactive console at all.
+    #>
+    Param([String]$Message = "Press any key to close this terminal...")
+    Write-Host ""
+    Write-Host $Message -ForegroundColor Cyan
+    try {
+        if (-not [Console]::IsInputRedirected) {
+            while ([Console]::KeyAvailable) { $null = [Console]::ReadKey($true) }
+            $null = [Console]::ReadKey($true)
+            return
+        }
+    }catch {
+        # no interactive console (e.g. some hosts) - fall through to a line read
+    }
+    $null = Read-Host
+}
+
 function Stop-WithReason {
     Param([String]$Reason)
     Write-Host ""
     Write-Host "Cannot continue: $Reason" -ForegroundColor Red
     Write-Host "If you are stuck, the documentation is at https://m365permissions.com/docs/onboarding" -ForegroundColor DarkGray
-    Read-Host "Press any key to close this terminal..."
+    Wait-Close
     Exit 1
 }
 
@@ -432,14 +456,14 @@ if ($MspOnboarding) {
     }
     Write-Host ""
     Write-Host "https://m365permissions.com/docs/msp-cross-tenant" -ForegroundColor DarkGray
-    Read-Host "Press any key to close this terminal..."
+    Wait-Close
     Exit 0
 }
 
 if (!$requiredPresent) {
     Write-Host "Some required permissions are still missing, see the table above." -ForegroundColor Red
     Write-Host "Re-running this command is safe and is usually all that is needed, since permissions sometimes take a moment to replicate." -ForegroundColor DarkGray
-    Read-Host "Press any key to close this terminal..."
+    Wait-Close
     Exit 1
 }
 
@@ -451,5 +475,5 @@ Write-Host ""
 Write-Host "That button is not a formality: the scanner has no other way to find out that it has been" -ForegroundColor DarkGray
 Write-Host "authorized, so it will keep waiting until you press it." -ForegroundColor DarkGray
 Write-Host ""
-Read-Host "Press any key to close this terminal..."
+Wait-Close
 Exit 0
