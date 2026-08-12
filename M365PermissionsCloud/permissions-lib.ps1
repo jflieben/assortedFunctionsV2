@@ -2276,6 +2276,17 @@ function Invoke-M365PSync {
             $state = $result.state
             $detail = $result.detail
 
+            # A legacy grant is one an older version asked for and this one no longer does. It stays in
+            # the definition only so a deployment still holding it can be recognised and have it taken
+            # away once the grants that replace it are verified, which is what the prune below does. It
+            # is never granted, so not holding it is the finished state rather than a finding: reporting
+            # it as missing would put a permission the product is trying to get rid of on the list of
+            # things an administrator is being asked to add.
+            if ($grant.legacy -and $state -eq "missing") {
+                $state = "notApplicable"
+                $detail = "Not held, which is the intended state"
+            }
+
             # Audit only. In Apply the narrow permission must actually be granted before the prune takes
             # the wide one away, so short circuiting here would leave the deployment holding neither.
             if ($state -eq "missing" -and $Mode -eq "Audit") {
