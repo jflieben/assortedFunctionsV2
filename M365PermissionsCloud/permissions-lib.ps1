@@ -1108,7 +1108,9 @@ function Get-M365PExoServicePrincipal {
             # that does not match the Content-Encoding it declares, which surfaces as a decompression
             # failure carrying no verdict whatsoever). Failing every Exchange grant on the strength of
             # that would be wrong, so read the state back instead of believing the exception.
-            Write-M365PLog -Level Warning -Message "New-ServicePrincipal did not confirm, checking whether the identity is registered anyway: $($_.Exception.Message)"
+            # naming the identity matters: a deployment that resolved the wrong scanner fails here in a
+            # way that is indistinguishable from a broken call until you can see which app id it asked about
+            Write-M365PLog -Level Warning -Message "New-ServicePrincipal did not confirm for $($Context.scannerDisplayName) ($($Context.scannerAppId)), checking whether it is registered anyway: $($_.Exception.Message)"
             $existing = $null
         }
 
@@ -1284,7 +1286,7 @@ function Set-M365PGrant_exoRoleAssignment {
     Param($Grant, $Context)
 
     $exoSpn = Get-M365PExoServicePrincipal -Context $Context -CreateIfMissing
-    if (!$exoSpn) { Throw "The scanner identity could not be registered in Exchange Online" }
+    if (!$exoSpn) { Throw "The scanner identity $($Context.scannerDisplayName) ($($Context.scannerAppId)) could not be registered in Exchange Online" }
 
     $parameters = @{ App = $Context.scannerAppId; Role = $Grant.role }
 
