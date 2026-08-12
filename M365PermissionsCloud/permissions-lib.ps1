@@ -367,9 +367,14 @@ function Invoke-M365PExoRequest {
         if ($name -eq "Content-Type") { continue }
         $null = $request.Headers.TryAddWithoutValidation($name, $Headers[$name])
     }
-    # asked for explicitly since the handler no longer does it, and these responses are worth
-    # compressing. What comes back is still judged on its content rather than on this being honoured.
-    $null = $request.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip")
+    # Compression is deliberately never asked for, and this is the whole fix rather than a detail.
+    # Asking is what breaks this API: with gzip on the request it answers either a body labelled gzip
+    # that is not gzip, or a failure status padded with NUL bytes. The identical call with no
+    # Accept-Encoding answers 200 with plain json and does what it was asked. Nothing is added here,
+    # and the handler adds nothing of its own because its automatic decompression is off, which is the
+    # only way to stop that: Invoke-RestMethod appends gzip, deflate, br to whatever you set.
+    #
+    # Expand-M365PResponseBody still sniffs the body, so a proxy that compresses anyway is handled.
 
     $response = (Get-M365PExoHttpClient).SendAsync($request).GetAwaiter().GetResult()
     try {
