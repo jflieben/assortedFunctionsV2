@@ -304,13 +304,32 @@ function Invoke-M365PExoCommand {
     $results = @()
 
     while ($nextUrl) {
-        try {
-            $data = Invoke-RestMethod -Uri $nextUrl -Method POST -Body $body -Headers $headers -ErrorAction Stop -Verbose:$false
-        }
-        catch {
-            # the status line on its own is useless here: every rejected cmdlet reads "400 (Bad Request)"
-            # and the reason Exchange refused is only ever in the response body
-            Throw "$Cmdlet failed: $(Get-M365PErrorDetail -ErrorRecord $_)"
+        $data = $null
+        $attempt = 0
+        while ($attempt -lt 3) {
+            $attempt++
+            try {
+                $data = Invoke-RestMethod -Uri $nextUrl -Method POST -Body $body -Headers $headers -ErrorAction Stop -Verbose:$false
+                break
+            }
+            catch {
+                # A body that cannot be decompressed is not the cmdlet refusing. Exchange's adminapi
+                # intermittently answers with content that does not match the Content-Encoding it
+                # declares, which fails while the response is still being read and so carries no
+                # verdict at all: the cmdlet may well have run. Retrying is the only way to find out,
+                # and this is the one failure here worth retrying, because every other one is Exchange
+                # objecting on purpose and will object identically the second time.
+                $unreadable = ($_.Exception -is [System.IO.InvalidDataException]) -or
+                              ($_.Exception.Message -like "*unsupported compression method*") -or
+                              ($_.Exception.Message -like "*archive entry*")
+                if (!$unreadable -or $attempt -ge 3) {
+                    # the status line on its own is useless here: every rejected cmdlet reads
+                    # "400 (Bad Request)" and the reason Exchange refused is only ever in the body
+                    Throw "$Cmdlet failed: $(Get-M365PErrorDetail -ErrorRecord $_)"
+                }
+                Write-M365PLog -Level Verbose -Message "Could not read Exchange's answer to $Cmdlet, retrying"
+                Start-Sleep -Seconds (2 * $attempt)
+            }
         }
         if ($null -ne $data -and $data.PSObject.Properties.Name -contains "value") { $results += @($data.value) } elseif ($null -ne $data) { $results += @($data) }
         $nextUrl = $null
@@ -875,6 +894,44 @@ function Set-M365PGrant_entraAppRoleDefinition {
     }
 }
 
+function Find-M365PExoServicePrincipal {
+    <#
+        .SYNOPSIS
+        The scanner's Exchange side service principal, or null.
+
+        .DESCRIPTION
+        Exchange mirrors these objects under its own identifiers and -Identity is documented against
+        several of them, so a miss on the app id is not proof the identity is absent. Acting on that
+        would report every Exchange grant missing in a tenant that has them, and on the apply path
+        would try to register an identity that is already there. Exchange only holds the few identities
+        that were explicitly registered with it, so listing them and matching the app id here settles
+        it. The first lookup is kept because it is the cheap answer in the common case.
+    #>
+    Param($Context)
+
+    $found = $null
+    try {
+        $found = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ServicePrincipal" -Parameters @{ Identity = $Context.scannerAppId }) | Select-Object -First 1
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        $found = $null
+    }
+    if ($found) { return $found }
+
+    try {
+        $found = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ServicePrincipal") |
+            Where-Object { @($_.AppId, $_.ObjectId, $_.ServiceId) -contains $Context.scannerAppId } |
+            Select-Object -First 1
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        $found = $null
+    }
+
+    return $found
+}
+
 function Get-M365PExoServicePrincipal {
     <#
         .SYNOPSIS
@@ -883,28 +940,43 @@ function Get-M365PExoServicePrincipal {
     #>
     Param($Context, [Switch]$CreateIfMissing)
 
+    # A miss is remembered as well as a hit. The definition carries an Exchange grant per role and each
+    # one asks for this, so in a tenant where the scanner has not been registered in Exchange yet the
+    # same failing lookup was repeated once per grant, and every one of them logs Exchange's rather
+    # alarming looking ManagementObjectNotFoundException. CreateIfMissing still gets a real attempt,
+    # since that is the path meant to change the answer.
     if ($Context.cache.exoSpn) { return $Context.cache.exoSpn }
+    if ($Context.cache.exoSpnChecked -and !$CreateIfMissing) { return $null }
 
-    $existing = $null
-    try {
-        $existing = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-ServicePrincipal" -Parameters @{ Identity = $Context.scannerAppId }) | Select-Object -First 1
-    }
-    catch {
-        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
-        $existing = $null
-    }
+    $existing = Find-M365PExoServicePrincipal -Context $Context
 
     if (!$existing -and $CreateIfMissing) {
         Write-M365PLog -Message "Registering the scanner identity in Exchange Online..."
-        $existing = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "New-ServicePrincipal" -Parameters @{
-                AppId       = $Context.scannerAppId
-                ObjectId    = $Context.scannerSpnObjectId
-                DisplayName = if ($Context.scannerDisplayName) { $Context.scannerDisplayName } else { "M365Permissions" }
-            }) | Select-Object -First 1
+        try {
+            $existing = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "New-ServicePrincipal" -Parameters @{
+                    AppId       = $Context.scannerAppId
+                    ObjectId    = $Context.scannerSpnObjectId
+                    DisplayName = if ($Context.scannerDisplayName) { $Context.scannerDisplayName } else { "M365Permissions" }
+                }) | Select-Object -First 1
+        }
+        catch {
+            if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+            # Registering is meant to be idempotent, and the two ways this call fails in practice both
+            # tend to leave the object in place: Exchange objecting that the identity already exists,
+            # and an answer that could not be read at all (its adminapi intermittently returns a body
+            # that does not match the Content-Encoding it declares, which surfaces as a decompression
+            # failure carrying no verdict whatsoever). Failing every Exchange grant on the strength of
+            # that would be wrong, so read the state back instead of believing the exception.
+            Write-M365PLog -Level Warning -Message "New-ServicePrincipal did not confirm, checking whether the identity is registered anyway: $($_.Exception.Message)"
+            $existing = $null
+        }
+
         Start-Sleep -Seconds 5
+        if (!$existing) { $existing = Find-M365PExoServicePrincipal -Context $Context }
     }
 
     $Context.cache.exoSpn = $existing
+    $Context.cache.exoSpnChecked = $true
     return $existing
 }
 
@@ -1484,21 +1556,80 @@ function Remove-M365PGrant_azureRbac {
     }
 }
 
+function Test-M365PDevOpsOrgName {
+    <#
+        .SYNOPSIS
+        Whether a string can be an Azure DevOps organization name.
+
+        .DESCRIPTION
+        Whatever comes back from the catalog goes straight into the path of every call below, so it
+        gets checked here rather than at the far end where the failure is unrecognisable. Azure DevOps
+        allows letters, digits and hyphens in a name, which a header cell, a url and an error body all
+        fail, and those are exactly the three things the catalog has been seen to hand back.
+    #>
+    Param([String]$Name)
+
+    if ([String]::IsNullOrWhiteSpace($Name)) { return $false }
+    return ($Name -match '^[A-Za-z0-9][A-Za-z0-9\-_\.]{0,62}$')
+}
+
 function Get-M365PDevOpsOrganizations {
+    <#
+        .SYNOPSIS
+        The Azure DevOps organizations backed by this tenant.
+
+        .DESCRIPTION
+        The catalog endpoint answers in CSV rather than JSON, and its response carries a UTF-8 BOM.
+        Reading it by splitting each line on commas and taking a fixed column went wrong twice over:
+        the BOM sits in front of the header, so the anchored header test never matched and
+        "Organization Name" was read as an organization, and a row whose id cell is empty shifts the
+        url into the column the name was expected in. Both then went into the path of every membership
+        probe, where a name with a space in it answers 404 and a url is rejected outright because a
+        path may not contain a colon.
+
+        Reading columns by name and refusing anything that cannot be an organization name keeps a
+        surprise in the response from turning into a call. A tenant with no organizations answers with
+        the header alone, which is now correctly read as none rather than as one.
+    #>
     Param($Context)
 
-    if ($Context.cache.devOpsOrgs) { return $Context.cache.devOpsOrgs }
+    if ($Context.cache.devOpsOrgsChecked) { return $Context.cache.devOpsOrgs }
 
     $csv = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw -Uri "https://vsaex.dev.azure.com/_apis/EnterpriseCatalog/Organizations?tenantId=$($Context.tenantId)&api-version=7.1-preview.1"
+
     $orgs = @()
     if ($csv -is [String]) {
-        foreach ($line in ($csv -split "`r?`n" | Where-Object { $_ -and $_ -notmatch "^Organization Id" })) {
-            $parts = $line -split ",\s*"
-            if ($parts.Count -ge 3) { $orgs += $parts[1].Trim() }
+        $lines = @($csv.TrimStart([Char]0xFEFF) -split "`r?`n" | Where-Object { ![String]::IsNullOrWhiteSpace($_) })
+        if ($lines.Count -gt 1) {
+            $rows = @()
+            try {
+                $rows = @($lines | ConvertFrom-Csv)
+            }
+            catch {
+                Write-M365PLog -Level Warning -Message "Could not read the Azure DevOps organization catalog: $($_.Exception.Message)"
+            }
+
+            foreach ($row in $rows) {
+                $name = "$($row.'Organization Name')".Trim()
+                if (!(Test-M365PDevOpsOrgName -Name $name)) {
+                    # a row that carries the url and not the name still names the organization, in the
+                    # last segment of a dev.azure.com url or the first label of a visualstudio.com one
+                    $url = @($row.PSObject.Properties.Value | Where-Object { "$_" -match "^https?://" }) | Select-Object -First 1
+                    $name = "$url".TrimEnd([Char]'/').Split([Char]'/')[-1].Split([Char]'.')[0].Trim()
+                }
+
+                if (Test-M365PDevOpsOrgName -Name $name) {
+                    if ($orgs -notcontains $name) { $orgs += $name }
+                }
+                else {
+                    Write-M365PLog -Level Warning -Message "Skipping a row in the Azure DevOps organization catalog that does not name an organization"
+                }
+            }
         }
     }
 
     $Context.cache.devOpsOrgs = $orgs
+    $Context.cache.devOpsOrgsChecked = $true
     return $orgs
 }
 
@@ -1854,7 +1985,9 @@ function Test-M365PSatisfiedBy {
         $result = Test-M365PGrant -Grant $probe -Context $Context
         if ($result.state -ne "granted") { continue }
 
-        $held = @($probe.value, $probe.role) | Where-Object { $_ } | Select-Object -First 1
+        # displayName last, which is the only name a directory role alternative has: it clears the
+        # role of the assignment it stands in for, so without it the message names nothing at all
+        $held = @($probe.value, $probe.role, $probe.displayName) | Where-Object { $_ } | Select-Object -First 1
         return "Covered by $held, which this tenant already holds and which includes everything this permission asks for. Re-authorize to move to the narrower permission."
     }
 

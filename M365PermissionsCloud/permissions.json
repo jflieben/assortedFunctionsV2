@@ -11,7 +11,7 @@
     "prune still removes the wide one. Each entry overrides the fields it names on the grant it sits on,",
     "so it may switch provider, resource, value or role, and an explicit null clears a field."
   ],
-  "revision": 3,
+  "revision": 4,
   "minimumProductVersion": "1.4.9",
 
   "resources": {
@@ -579,6 +579,9 @@
       "provider": "exoRoleAssignment",
       "necessity": "recommended",
       "role": "View-Only Recipients",
+      "satisfiedBy": [
+        { "provider": "entraDirectoryRole", "roleTemplateId": "29232cdf-9323-42fd-ade2-1d097af3e4de", "displayName": "Exchange Administrator", "role": null }
+      ],
       "condition": { "surfaces": "Exchange" },
       "categories": [ "ExoRecipients"],
       "docs": {
@@ -593,6 +596,9 @@
       "provider": "exoRoleAssignment",
       "necessity": "recommended",
       "role": "View-Only Configuration",
+      "satisfiedBy": [
+        { "provider": "entraDirectoryRole", "roleTemplateId": "29232cdf-9323-42fd-ade2-1d097af3e4de", "displayName": "Exchange Administrator", "role": null }
+      ],
       "condition": { "surfaces": "Exchange" },
       "categories": [ "Admins", "ExoRecipients" ],
       "docs": {
