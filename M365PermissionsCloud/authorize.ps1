@@ -1,436 +1,452 @@
-#M365Permissions Cloud post-install authorization script for those who do not wish to use the automated wizard
-#Author: Jos Lieben
-#Help: https://m365permissions.com/#/docs/support#manual-authorization
-#This script will create 3 security groups to manage access to the tool, assign the required API permissions to the managed identity of the VM and set up SSO for the frontend
-#It will match our VM and frontend by search for a VM and a Web App with the correct naming convention (m365vm* and m365pf*)
-#It will not touch anything else
-#You have to be logged in as a Global Administrator
+#Requires -Version 7.0
+<#
+.SYNOPSIS
+    Onboards a tenant for M365Permissions Cloud. Idempotent, so re-running it is how you add or remove
+    a surface later.
 
-[scriptblock]$authorizeM365Permissions = {
-    
-    ########## ! REQUIRED CONFIGURATION ! #################
-    $SubscriptionId = "xxxxx-xxxxxx-xxxxx-xxxxx-xxxxx" #"YOUR AZURE SUBSCRIPTION ID"
-    $EnableOrchestration = $False #recommended to set to #True if your tenant has > 3500 users, required if your tenant has > 5000 users
-    ########## ! END OF REQUIRED CONFIGURATION ! ##########
+.DESCRIPTION
+    Run this in Azure Cloud Shell. The portal composes the exact command for you, including the
+    subscription, resource group and web app name of your deployment, so you should not need to type
+    any of the parameters by hand.
 
-    Function Abort-Install($reason){
-        Write-Error $reason -ErrorAction Continue
-        Read-Host "Press any key to exit"
-        [System.Environment]::Exit(1)
-    }
+    Why Cloud Shell rather than a consent link: the permissions this product needs reach past Entra
+    into Exchange RBAC, Fabric tenant settings, Azure DevOps entitlements and Azure role assignments.
+    A browser consent redirect can only consent one Entra resource at a time and cannot touch any of
+    those. One Cloud Shell session can, using your own privileges, which is also why no vendor owned
+    application holds standing write access in your tenant any more.
 
-    if($SubscriptionId -ne "xxxxx-xxxxxx-xxxxx-xxxxx-xxxxx"){
-        # Authenticate
-        try{
-            Set-AzContext -SubscriptionId $SubscriptionId -Force
-            $Context = Get-AzContext
-            if (!$Context) {
-                Throw "Please login using Connect-AzAccount before running this script, automatic login failed"
-            }
-        }catch{Abort-Install $_}
-    }else{
-        Write-Error "You did not configure `$SubscriptionId, we'll try to auto detect. If the script ends up failing, please correct and rerun the script." -ErrorAction Continue
-    }
+    Everything is applied through the shared permission definition at
+    https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/main/M365PermissionsCloud/permissions.json
+    so this script has no permission list of its own to drift out of date.
 
-    $SubscriptionId = $Context.Subscription.Id
-    $TenantId = $Context.Tenant.Id
+    Nothing here hard fails. A surface that cannot be reached in your tenant is reported and skipped,
+    the rest still gets applied.
 
-    Write-Host "Using Subscription: $($Context.Subscription.Name) ($SubscriptionId) in Tenant $TenantId"
+.PARAMETER SubscriptionId
+    The subscription your M365Permissions deployment lives in.
 
-    # Get Graph Access Token
-    try {
-        $graphToken = (Get-AzAccessToken -ResourceUrl "https://graph.microsoft.com" -As -ErrorAction Stop).Token | ConvertFrom-SecureString -AsPlainText
-        $graphHeaders = @{"Authorization" = "Bearer $($graphToken)"}
-    }catch{Abort-Install $_}
+.PARAMETER ResourceGroup
+    The resource group of the deployment. Naming it turns a sweep over every subscription you can see
+    into a single lookup.
 
-    # Discover Resources
-    Write-Host "Searching for resources..."
-    $vm = Get-AzResource -ResourceType "Microsoft.Compute/virtualMachines" | Where-Object { $_.Name -like "m365vm*" } | Select-Object -First 1
-    if (!$vm) {
-        Abort-Install "No VM found starting with 'm365vm' in subscription $SubscriptionId, you have to run the marketplace wizard for M365Permissions first"
-    }
+.PARAMETER FrontendName
+    The name of the deployment's web app.
 
-    $frontEnd = Get-AzResource -ResourceType "Microsoft.Web/sites" | Where-Object { $_.Name -like "m365pf*" } | Select-Object -First 1
-    if (!$frontEnd) {
-        Abort-Install "No Frontend Web App found starting with 'm365pf' in subscription $SubscriptionId, you have to run the marketplace wizard for M365Permissions first"
-    }
+.PARAMETER ScannerAppId
+    The application id of the scanner identity. Supply it to skip Azure discovery entirely, which lets
+    an administrator with Entra privileges but no Azure access run this. The portal fills it in for you
+    once the deployment is live.
 
-    # Get Frontend URL
-    $fullWebApp = Get-AzWebApp -Name $frontEnd.Name -ResourceGroupName $frontEnd.ResourceGroupName
-    $frontendUrl = "https://$($fullWebApp.DefaultHostName)"
-    $feName = "M365PermissionsPortal-$($frontEnd.Name) (Single Sign-On)"
+.PARAMETER Surfaces
+    Which systems to authorize scanning of, beyond the always included Entra, SharePoint and OneDrive.
+    All, the default, selects every surface the definition knows about, including ones added after the
+    command you are running was composed. This is the full desired state and not an addition:
+    re-running without a surface removes its access again.
 
-    Write-Host "Installed Resource Group: $($vm.ResourceGroupName)"
-    Write-Host "Frontend URL: $frontendUrl"
-    Write-Host "Managed Identity Name: $($vm.Name)"
-    Write-Host "Frontend Entra Object for SSO: $feName"
+.PARAMETER MailMode
+    None to disable scheduled report mails, Auto to create a dedicated shared mailbox to send them
+    from, Existing to send from a mailbox you already have.
 
-    # Find managed identity of the VM in Graph
-    Write-Host "Getting managed identity of the VM that needs to be authorized"
-    $managedIdentity = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$Filter=displayName eq '$($vm.Name)'").value | Select-Object -First 1
-    if (!$managedIdentity) {
-        Abort-Install "Could not find Managed Identity SPN: $($vm.Name)"
-    }
+.PARAMETER Orchestration
+    Enable this if your tenant has more than 3500 users. It lets the scanner spawn extra scan nodes,
+    which needs a few write permissions it otherwise never asks for.
 
-    Write-Host "Got MI $($managedIdentity.id), checking SPN's of API's..."
-    $appRoles = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($managedIdentity.id)/appRoleAssignments").value
+.PARAMETER MspOnboarding
+    Cross tenant mode. Creates an application and certificate for the tenant instead of authorizing a
+    deployed scanner, and prints what you need for the deployment wizard's MSP tab.
 
-    $requiredRoles = @(
-        @{
-            "resource" = "00000003-0000-0ff1-ce00-000000000000" #Sharepoint Online
-            "id" = "Sites.FullControl.All" #Sites.FullControl.All
-        }
-        @{
-            "resource" = "00000002-0000-0ff1-ce00-000000000000" #Exchange Online
-            "id" = "Exchange.ManageAsApp" #Exchange.ManageAsApp
-        }
-        @{
-            "resource" = "00000002-0000-0ff1-ce00-000000000000" #Exchange Online
-            "id" = "full_access_as_app" #full_access_as_app
-        }        
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "Directory.Read.All" #Directory.Read.All
-        }   
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "EntitlementManagement.Read.All" #EntitlementManagement.Read.All
-        }   
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "RoleEligibilitySchedule.Read.Directory" #RoleEligibilitySchedule.Read.Directory
-        }   
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "RoleManagement.Read.All" #RoleManagement.Read.All
-        }      
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "Sites.FullControl.All" #Sites.FullControl.All
-        }    
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "Application.ReadWrite.OwnedBy" #Application.ReadWrite.OwnedBy
-        }            
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "Mail.Send" #Mail.Send
-        }                                   
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "CloudPC.Read.All" #CloudPC.Read.All 
-        }
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "PrivilegedAccess.Read.AzureAD" #PrivilegedAccess.Read.AzureAD
-        } 
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "PrivilegedEligibilitySchedule.Read.AzureADGroup" #PrivilegedEligibilitySchedule.Read.AzureADGroup
-        } 
-        @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "DeviceManagementRBAC.Read.All" #DeviceManagementRBAC.Read.All
-        }
-    )    
+.PARAMETER Audit
+    Report what is and is not in place, and change nothing.
 
-    if($EnableOrchestration){
-        Write-Host "Orchestration is enabled, adding additional roles so the MI can authorize child MI's..."
-        $requiredRoles += @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "Application.ReadWrite.All" #https://graph.microsoft.com/Application.ReadWrite.All
-        }
-        $requiredRoles += @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "AppRoleAssignment.ReadWrite.All" #https://graph.microsoft.com/AppRoleAssignment.ReadWrite.All
-        }
-        $requiredRoles += @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "Directory.ReadWrite.All" #https://graph.microsoft.com/Directory.ReadWrite.All
-        }
-        $requiredRoles += @{
-            "resource" = "00000003-0000-0000-c000-000000000000" #Graph API
-            "id" = "RoleManagement.ReadWrite.Directory" #https://graph.microsoft.com/RoleManagement.ReadWrite.Directory
-        }    
-    }
+.EXAMPLE
+    & ([scriptblock]::Create((irm https://m365permissions.com/authorize.ps1))) -SubscriptionId 'x' -ResourceGroup 'y' -FrontendName 'z' -Surfaces Exchange,PowerBI -MailMode Auto
 
-    #checking if base SPN's exist in the tenant, in some fringe cases they need to be registered (non destructively)
-    $spns = @()
-    foreach($uniqueResource in ($requiredRoles.resource | Select-Object -Unique)){
-        try{
-            $targetSpn = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$($uniqueResource)'").value
-            Write-Host "Detected required SPN $($uniqueResource) $($targetSpn.displayName) with ID $($targetSpn.id)"
-        }catch { 
-            $targetSpn = $null 
-            Write-Host "Failed to detect required SPN $uniqueResource, we will attempt to register"
-        }
-        if (!$targetSpn) {
-            Write-Host "Required SPN $($uniqueResource) not detected, creating..."
-            $desiredState = @{
-                "appId" = $uniqueResource
-            }
-            try {
-                $targetSpn = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals" -Body ($desiredState | ConvertTo-Json)
-                Write-Host "SPN registered, waiting 5 seconds..."
-                Start-Sleep -s 5
-                Write-Host "Created required SPN $($uniqueResource) $($targetSpn.displayName) with ID $($targetSpn.id)"
-            } catch {
-                Write-Error $_ -ErrorAction Continue
-                $targetSpn = $null
-            }
-        }
+.NOTES
+    Author: Jos Lieben
+    Docs:   https://m365permissions.com/docs/onboarding
+#>
+[CmdletBinding()]
+Param(
+    [String]$SubscriptionId,
+    [String]$ResourceGroup,
+    [String]$FrontendName,
+    [String]$ScannerAppId,
+    [ValidateSet("All", "Exchange", "PowerBI", "PowerPlatform", "AzureDevOps", "Azure")]
+    [String[]]$Surfaces = @("All"),
+    [ValidateSet("None", "Auto", "Existing")]
+    [String]$MailMode = "None",
+    [String]$MailAddress,
+    [Switch]$Orchestration,
+    [Switch]$MspOnboarding,
+    [Switch]$Audit,
+    [String]$DefinitionUri = "https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/main/M365PermissionsCloud/permissions.json",
+    [String]$LibraryUri = "https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/main/M365PermissionsCloud/permissions-lib.ps1",
+    [String]$CertificatePath
+)
 
-        if($targetSpn){
-            $spns += $targetSpn
-        }
-    }    
+$ErrorActionPreference = "Stop"
 
-    Write-Host "SPN's checked, checking for MI's roles..."
-    # Remove any roles that are not in the required list
-    foreach ($appRole in $appRoles) {
-        $targetSpn = $Null; $targetSpn = $spns | Where-Object { $_.id -eq $appRole.resourceId }
-        $fullRole = $null; $fullRole = $targetSpn.appRoles | Where-Object { $_.id -eq $appRole.appRoleId}
-        if($requiredRoles.id -notcontains $fullRole.value){
-            try {
-                Write-Host "Removing unneeded app role assignment $($appRole.appRoleId) from managed identity."
-                $uri = "https://graph.microsoft.com/v1.0/servicePrincipals/$($managedIdentity.id)/appRoleAssignments/$($appRole.id)"
-                Invoke-RestMethod -Method DELETE -Uri $uri -Headers $graphHeaders -ErrorAction Stop
-                Write-Host "Successfully removed role."
-            } catch {
-                Write-Error "Failed to remove app role assignment $($appRole.id): $_" -ErrorAction Continue
-            }
-        }
-    }
+function Write-Step { Param([String]$Message) Write-Host "`n==> $Message" -ForegroundColor Cyan }
+function Write-Detail { Param([String]$Message) Write-Host "    $Message" -ForegroundColor DarkGray }
+function Write-Problem { Param([String]$Message) Write-Host "    $Message" -ForegroundColor DarkYellow }
 
-    # Add any required roles that are missing
-    foreach ($role in $requiredRoles) {
-        if ($null -eq $role.id -or $null -eq $role.resource) { continue }
-        $targetSpn = $Null; $targetSpn = $spns | Where-Object { $_.appId -eq $role.resource }
-        $fullRole = $null; $fullRole = $targetSpn.appRoles | Where-Object { $_.value -eq $role.id}        
-        if($fullRole -and $targetSpn -and ($appRoles | Where-Object { $_.appRoleId -eq $fullRole.id -and $_.resourceId -eq $targetSpn.id }).Count -eq 0){
-            $body = @{
-                principalId = $managedIdentity.Id
-                resourceId  = $targetSpn.id
-                appRoleId   = $fullRole.id
-            }
-            try {
-                Write-Host "Adding approle $($role.id)..."
-                Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($managedIdentity.id)/appRoleAssignments" -Body ($body | ConvertTo-Json -Depth 15)
-                Write-Host "Added approle $($role.id) :)"
-            }catch {
-                Write-Error $_ -ErrorAction Continue
-            }
-        }
-    }    
-
-    Write-Host "API roles checked, checking directory roles..."
-
-    $dirRoleId = "29232cdf-9323-42fd-ade2-1d097af3e4de" #Exchange Administrator. If desired can be replaced with 88d8e3e3-8f55-4a1e-953a-9b9898b8876b (Directory Read) but has a slight impact on functionality, see https://m365permissions.com/#/docs/support#required-permissions for more info
-
-    $userRoles = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($managedIdentity.Id)/transitiveMemberOf").value | Where-Object { $_.'@odata.type' -eq "#microsoft.graph.directoryRole" }
-    if (!$userRoles -or $userRoles.roleTemplateId -notcontains $dirRoleId) {
-        Write-Host "assigning entra role..."
-        $desiredState = @{
-            '@odata.type'    = "#microsoft.graph.unifiedRoleAssignment"
-            roleDefinitionId = $dirRoleId
-            principalId      = $managedIdentity.Id
-            directoryScopeId = "/"
-        }
-        try {
-            $null = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/beta/roleManagement/directory/roleAssignments" -Body ($desiredState | ConvertTo-Json)
-            Write-Host "Role assigned"
-        } catch {
-            Write-Error "Failed to assign directory role: $_" -ErrorAction Continue
-        }
-    }
-
-    Write-Host "Directory roles configured, setting SSO config on the frontend SPN...."
-    $app = (Invoke-RestMethod -ContentType "application/json" -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$feName'" -Headers $graphHeaders).value | Select-Object -First 1
-    if($app){
-        Write-Host "Detected existing SSO SPN $($app.displayName) for Frontend"
-    }else{
-        Write-Host "Creating SSO SPN $feName for Frontend..."
-        $desiredState = @{
-            "displayName" = $feName
-        }
-        try {
-            $app = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications" -Body ($desiredState | ConvertTo-Json)
-            Write-Host "$feName created, waiting 5 seconds..."
-            Start-Sleep -s 5  
-        }catch{Abort-Install $_}
-    }
-
-    $spn = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$Filter=appId eq '$($app.appId)'").value
-    if(!$spn){
-        $desiredState = @{
-            "appId" = $app.appId
-        }
-        try {
-            $spn = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals" -Body ($desiredState | ConvertTo-Json)
-            Write-Host "SPN added to $($app.displayName)"
-        }catch{Abort-Install $_}
-    }    
-
-    Write-Host "adding MI as owner of app & spn so it can manage its lifecycle"
-    $owner = "{`"@odata.id`": `"https://graph.microsoft.com/v1.0/directoryObjects/$($managedIdentity.id)`"}"
-    try{Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications/$($app.id)/owners/`$ref" -Body $owner}catch{}#this only goes wrong during reruns, which is fine
-    try{Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($spn.id)/owners/`$ref" -Body $owner}catch{}
-    
-    Write-Host "Ensuring only specific groups can access the frontend...."
-    try {
-        Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($spn.id)" -Body '{"appRoleAssignmentRequired": true}'
-        Write-Host "Assignment requirement set for SPN $($spn.displayName)"
-    }catch{Abort-Install $_}
-
-    # determine who's running this script, so we can make that user an owner and member of the relevant security groups
-    try {
-        $me = Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/me" -ErrorAction Stop
-        $userId = $me.id  
-    }catch{
-        Write-Error "Could not determine who's running this script, you'll have to add yourself as member or owner to SEC-APP-M365Permissions-Admins manually!" -ErrorAction Continue
-    }     
-
-    # Create security groups customer can use to manage access by and to the tool
-    $desiredGroups = @(
-        "SEC-APP-M365Permissions-Admins"
-        "SEC-APP-M365Permissions-Users"
-        "SEC-SVC-M365Permissions"
-    )
-
-    foreach($groupName in $desiredGroups){
-        $groupState = @{
-            "displayName" = $groupName
-            "mailEnabled" = $false
-            "mailNickname" = $groupName.Replace("-","_")
-            "securityEnabled" = $true
-            "groupTypes" = @()
-        }
-        $group = $Null; $group = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=displayName eq '$groupName'").value
-        if(!$group){
-            $group = try {
-                Write-Host "Creating $groupName"
-                
-                Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups" -Body ($groupState | ConvertTo-Json)
-                Write-Host "Created security group $groupName with ID $($group.id)"
-            } catch {
-                Write-Error "Failed to create group $($groupName): $($_.Exception.Message)" -ErrorAction Continue
-            }
-        }else{
-            Write-Host "Detected existing group $($groupName) with ID $($group.id)"
-        }       
-        
-        # Add MI as owner
-        $miRef = @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($managedIdentity.Id)" }
-        try {
-            Write-Host "Adding MI as owner of group $groupName"
-            Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups/$($group.id)/owners/`$ref" -Body ($miRef | ConvertTo-Json)
-            Write-Host "MI added as owner of group $groupName"
-        } catch {}    
-        
-        # Add MI as member to the SVC group only
-        if($groupName -eq "SEC-SVC-M365Permissions"){
-            try {
-                Write-Host "Adding MI as member of group $groupName"
-                Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups/$($group.id)/members/`$ref" -Body ($miRef | ConvertTo-Json)
-                Write-Host "MI added as member of group $groupName"
-            } catch {}    
-        }         
-
-        #add the user as owner and for the admin group as member as well
-        if ($userId) {
-            $userRef = @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$userId" }
-            try {
-                Write-Host "Adding you as owner of group $groupName"
-                Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups/$($group.id)/owners/`$ref" -Body ($userRef | ConvertTo-Json)
-                Write-Host "User added as owner of group $groupName"
-            } catch {}
-            if($groupName -eq "SEC-APP-M365Permissions-Admins"){
-                try {
-                    Write-Host "Adding you as member of group $groupName"
-                    Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/groups/$($group.id)/members/`$ref" -Body ($userRef | ConvertTo-Json)
-                    Write-Host "Added you as member of group $groupName"
-                } catch {}
-            }
-        }        
-    }
-
-    Write-Host "Access Groups configured, configuring SSO permissions on the SPN..."
-    $graphSpn = $spns | Where-Object { $_.appId -eq "00000003-0000-0000-c000-000000000000" } # Microsoft Graph SPN
-    $desiredState = @{
-        "requiredResourceAccess" = @(
-            @{
-                "resourceAppId" = "00000003-0000-0000-c000-000000000000";
-                "resourceAccess" = @(
-                    @{
-                        "id"= ($graphSpn.oauth2PermissionScopes | where-Object{$_.value -eq "offline_access"}).id
-                        "type"= "Scope"
-                    },
-                    @{
-                        "id"=($graphSpn.oauth2PermissionScopes | where-Object{$_.value -eq "openid"}).id
-                        "type"= "Scope"
-                    },
-                    @{
-                        "id"= ($graphSpn.oauth2PermissionScopes | where-Object{$_.value -eq "User.Read"}).id
-                        "type"= "Scope"
-                    },
-                    @{
-                        "id"= ($graphSpn.oauth2PermissionScopes | where-Object{$_.value -eq "email"}).id
-                        "type"= "Scope"
-                    },
-                    @{
-                        "id"= ($graphSpn.oauth2PermissionScopes | where-Object{$_.value -eq "profile"}).id
-                        "type"= "Scope"
-                    }
-                )
-            }
-        );
-        "publicClient" = @{
-            "redirectUris" =@(
-                "$($frontendUrl)/api/entra/response"
-            )
-        }      
-    } | ConvertTo-Json -Depth 4
-
-    $Null = Invoke-RestMethod -ContentType "application/json" -Method PATCH -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/applications/$($app.id)" -Body $desiredState
-
-    try {
-        $targetSpn = $null; $targetSpn = (Invoke-RestMethod -ContentType "application/json" -Method GET -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/servicePrincipals(appId='00000003-0000-0000-c000-000000000000')")
-    }catch{Abort-Install $_}
-
-    $desiredState = @{
-        "clientId"    = $spn.id
-        "consentType" = "AllPrincipals"
-        "resourceId"  = $targetSpn.id
-        "scope"       = "openid email profile offline_access"
-    } | ConvertTo-Json -Depth 2
-    Write-Host "Adding OAuth2 permission grant..."
-    try{
-        $Null = Invoke-RestMethod -ContentType "application/json" -Method POST -Headers $graphHeaders -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants" -Body $desiredState
-        Write-Host "OAuth2 permission grant added"
-    }catch{
-        Write-Error "Failed to add OAuth2 permission grant: $_" -ErrorAction Continue
-    }
-    
-    Write-Host "All done, waiting 10 seconds before final instructions..."
-    Start-Sleep -s 10
-
+function Stop-WithReason {
+    Param([String]$Reason)
     Write-Host ""
-    Write-Host "!!!!!!!!!!!!!!!!!!!!!!!!!IMPORTANT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    Write-Host "!!!!!!!!!!!!!!!!!!!!!!!!!FINAL STEP TO FINALIZE!!!!!!!!!!!!!!!!!!!!!!!"
+    Write-Host "Cannot continue: $Reason" -ForegroundColor Red
+    Write-Host "If you are stuck, the documentation is at https://m365permissions.com/docs/onboarding" -ForegroundColor DarkGray
+    Read-Host "Press any key to close this terminal..."
+    Exit 1
+}
+
+function Get-PlainAccessToken {
+    <#
+        .SYNOPSIS
+        Normalises Get-AzAccessToken, whose return shape changed across Az versions, and returns $null
+        rather than throwing when a resource cannot be served in this session.
+    #>
+    Param([Parameter(Mandatory = $true)][String]$Resource)
+
+    foreach ($attempt in @("secure", "plain")) {
+        try {
+            if ($attempt -eq "secure") {
+                $token = Get-AzAccessToken -ResourceUrl $Resource -AsSecureString -ErrorAction Stop -WarningAction SilentlyContinue
+                return ($token.Token | ConvertFrom-SecureString -AsPlainText)
+            }
+            $token = Get-AzAccessToken -ResourceUrl $Resource -ErrorAction Stop -WarningAction SilentlyContinue
+            if ($token.Token -is [System.Security.SecureString]) { return ($token.Token | ConvertFrom-SecureString -AsPlainText) }
+            return $token.Token
+        }catch {
+            $lastError = $_
+        }
+    }
+
+    Write-Verbose "No token for $($Resource): $($lastError.Exception.Message)"
+    return $null
+}
+
+# ------------------------------------------------------------------------------------------------
+# 1. Session
+# ------------------------------------------------------------------------------------------------
+
+Write-Step "Checking your Azure session"
+
+if (!(Get-Command -Name Get-AzAccessToken -ErrorAction SilentlyContinue)) {
+    Stop-WithReason "The Az PowerShell module is not available. Azure Cloud Shell has it preinstalled, which is why we recommend running this there: https://shell.azure.com"
+}
+
+$context = Get-AzContext
+if (!$context) {
+    Stop-WithReason "You are not signed in. Run Connect-AzAccount first, or use Azure Cloud Shell where you already are."
+}
+
+if ($SubscriptionId -and $context.Subscription.Id -ne $SubscriptionId) {
+    try {
+        $null = Set-AzContext -SubscriptionId $SubscriptionId -Force -ErrorAction Stop
+        $context = Get-AzContext
+    }    catch {
+        # an Entra only administrator has no subscription access at all, which is fine when -ScannerAppId was given
+        if (!$ScannerAppId -and !$MspOnboarding) {
+            Stop-WithReason "Could not switch to subscription $SubscriptionId ($($_.Exception.Message)). If you do not have Azure access, ask for the command with -ScannerAppId in it, which needs no Azure access at all."
+        }
+        Write-Problem "No access to subscription $SubscriptionId, continuing without Azure discovery"
+    }
+}
+
+$tenantId = $context.Tenant.Id
+Write-Detail "Tenant:       $tenantId"
+Write-Detail "Signed in as: $($context.Account.Id)"
+
+$graphToken = Get-PlainAccessToken -Resource "https://graph.microsoft.com"
+if (!$graphToken) { Stop-WithReason "Could not get a Microsoft Graph token for your account." }
+$graphHeaders = @{ "Authorization" = "Bearer $graphToken"; "Content-Type" = "application/json" }
+
+# ------------------------------------------------------------------------------------------------
+# 2. Shared engine and definition
+# ------------------------------------------------------------------------------------------------
+
+Write-Step "Loading the shared permission definition"
+
+try {
+    . ([scriptblock]::Create((Invoke-RestMethod -Uri $LibraryUri -ErrorAction Stop)))
+}catch {
+    Stop-WithReason "Could not load the permission engine from $($LibraryUri): $($_.Exception.Message)"
+}
+
+try {
+    $definition = Get-M365PDefinition -Uri $DefinitionUri
+}catch {
+    Stop-WithReason "Could not load the permission definition from $($DefinitionUri): $($_.Exception.Message)"
+}
+
+Write-Detail "Definition revision $($definition.revision), $(@($definition.grants).Count) grants"
+
+# All is expanded from the definition rather than from the ValidateSet, so a surface added to
+# permissions.json is picked up by everyone already running with the default
+if ($Surfaces -contains "All") {
+    $Surfaces = @($definition.surfaces | ForEach-Object { $_.key })
+    Write-Detail "Surfaces: All ($($Surfaces -join ', '))"
+}else {
+    Write-Detail "Surfaces: $($Surfaces -join ', ')"
+}
+
+# ------------------------------------------------------------------------------------------------
+# 3. Find, or in MSP mode create, the principal being authorized
+# ------------------------------------------------------------------------------------------------
+
+$scannerSpn = $null
+$frontendApp = $null
+$frontendSpn = $null
+$frontendUrl = $null
+$mspOutput = $null
+
+if ($MspOnboarding) {
+    Write-Step "Cross tenant mode: creating the application this tenant will be scanned with"
+
+    $backendName = "M365Permissions-CrossTenant-Backend"
+    $backendApp = @(Invoke-RestMethod -Headers $graphHeaders -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$backendName'").value | Select-Object -First 1
+
+    $isNewApp = $false
+    if ($backendApp) {
+        Write-Detail "Reusing the existing application $($backendApp.appId)"
+    }else {
+        $isNewApp = $true
+        $backendApp = Invoke-RestMethod -Headers $graphHeaders -Method POST -Uri "https://graph.microsoft.com/v1.0/applications" -Body (@{ displayName = $backendName; signInAudience = "AzureADMyOrg" } | ConvertTo-Json)
+        Write-Detail "Created application $($backendApp.appId)"
+        Start-Sleep -Seconds 5
+    }
+
+    $scannerSpn = @(Invoke-RestMethod -Headers $graphHeaders -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$($backendApp.appId)'").value | Select-Object -First 1
+    if (!$scannerSpn) {
+        $scannerSpn = Invoke-RestMethod -Headers $graphHeaders -Method POST -Uri "https://graph.microsoft.com/v1.0/servicePrincipals" -Body (@{ appId = $backendApp.appId } | ConvertTo-Json)
+        Start-Sleep -Seconds 5
+    }
+    Write-Detail "Service principal $($scannerSpn.id)"
+
+    if ($isNewApp) {
+        Write-Step "Generating the certificate this tenant will be scanned with"
+
+        # written to a temporary folder rather than the working directory, and removed on the way out,
+        # so a certificate never ends up committed alongside whatever you happened to be standing in
+        $certificateFolder = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "m365permissions-$([guid]::NewGuid())"
+        $null = New-Item -Path $certificateFolder -ItemType Directory -Force
+        if ($CertificatePath) { $certificateFolder = $CertificatePath }
+
+        $pfxPath = Join-Path -Path $certificateFolder -ChildPath "$($backendApp.appId).pfx"
+        $pfxPassword = ([System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([guid]::NewGuid().ToString())) -replace '[/+=]', '').Substring(0, 24)
+
+        $certificate = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
+            "CN=$($backendApp.appId)",
+            [System.Security.Cryptography.RSA]::Create(2048),
+            [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+            [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
+        ).CreateSelfSigned([System.DateTimeOffset]::UtcNow.AddDays(-1), [System.DateTimeOffset]::UtcNow.AddYears(10))
+
+        [System.IO.File]::WriteAllBytes($pfxPath, $certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $pfxPassword))
+        Write-Detail "Thumbprint $($certificate.Thumbprint)"
+
+        $publicCertificate = [System.Convert]::ToBase64String($certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+        $null = Invoke-RestMethod -Headers $graphHeaders -Method PATCH -Uri "https://graph.microsoft.com/v1.0/applications/$($backendApp.id)" -Body (@{
+                keyCredentials = @(@{ type = "AsymmetricX509Cert"; usage = "Verify"; key = $publicCertificate; displayName = "M365Permissions Cross-Tenant Certificate" })
+            } | ConvertTo-Json -Depth 5)
+        Write-Detail "Certificate uploaded to the application"
+
+        $mspOutput = @{ pfxPath = $pfxPath; pfxPassword = $pfxPassword; certificateFolder = $certificateFolder }
+    }
+
+    $feName = "M365Permissions-CrossTenant-Frontend"
+}else {
+    Write-Step "Finding your deployment"
+
+    if ($ScannerAppId) {
+        Write-Detail "Using the scanner application id you supplied, no Azure access needed"
+        $scannerSpn = @(Invoke-RestMethod -Headers $graphHeaders -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$ScannerAppId'").value | Select-Object -First 1
+        if (!$scannerSpn) { Stop-WithReason "No service principal found for application id $ScannerAppId in this tenant." }
+    }else {
+        if (!$ResourceGroup) { Stop-WithReason "Either -ResourceGroup or -ScannerAppId is required. The portal puts one of them in the command for you." }
+
+        $vm = Get-AzResource -ResourceGroupName $ResourceGroup -ResourceType "Microsoft.Compute/virtualMachines" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "m365vm*" } | Select-Object -First 1
+        if (!$vm) { Stop-WithReason "No M365Permissions scanner found in resource group '$ResourceGroup'. Check that the subscription and resource group in the command match your deployment." }
+
+        $scannerSpn = @(Invoke-RestMethod -Headers $graphHeaders -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=displayName eq '$($vm.Name)'").value | Select-Object -First 1
+        if (!$scannerSpn) { Stop-WithReason "Found the scanner VM $($vm.Name) but not its managed identity in Entra. Wait a minute for the deployment to finish and try again." }
+        Write-Detail "Scanner: $($vm.Name)"
+    }
+
+    if (!$FrontendName -and $ResourceGroup) {
+        $webApp = Get-AzResource -ResourceGroupName $ResourceGroup -ResourceType "Microsoft.Web/sites" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "m365pf*" } | Select-Object -First 1
+        if ($webApp) { $FrontendName = $webApp.Name }
+    }
+    if (!$FrontendName) { Stop-WithReason "The name of the deployment's web app is required. The portal puts it in the command for you." }
+
+    $frontendUrl = "https://$($FrontendName).azurewebsites.net"
+    $feName = "M365PermissionsPortal-$FrontendName (Single Sign-On)"
+    Write-Detail "Portal:  $frontendUrl"
+}
+
+Write-Detail "Identity being authorized: $($scannerSpn.displayName) ($($scannerSpn.appId))"
+
+# ------------------------------------------------------------------------------------------------
+# 4. The single sign-on application
+# ------------------------------------------------------------------------------------------------
+
+if (!$Audit) {
+    Write-Step "Setting up single sign-on for the portal"
+
+    $frontendApp = @(Invoke-RestMethod -Headers $graphHeaders -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$feName'").value | Select-Object -First 1
+    if ($frontendApp) {
+        Write-Detail "Reusing the existing application $($frontendApp.appId)"
+    }else {
+        $frontendApp = Invoke-RestMethod -Headers $graphHeaders -Method POST -Uri "https://graph.microsoft.com/v1.0/applications" -Body (@{ displayName = $feName; signInAudience = "AzureADMyOrg" } | ConvertTo-Json)
+        Write-Detail "Created application $($frontendApp.appId)"
+        Start-Sleep -Seconds 5
+    }
+
+    $frontendSpn = @(Invoke-RestMethod -Headers $graphHeaders -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$($frontendApp.appId)'").value | Select-Object -First 1
+    if (!$frontendSpn) {
+        $frontendSpn = Invoke-RestMethod -Headers $graphHeaders -Method POST -Uri "https://graph.microsoft.com/v1.0/servicePrincipals" -Body (@{ appId = $frontendApp.appId } | ConvertTo-Json)
+        Start-Sleep -Seconds 5
+    }
+
+    # only assigned users and groups may open the portal
+    try {
+        $null = Invoke-RestMethod -Headers $graphHeaders -Method PATCH -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$($frontendSpn.id)" -Body '{"appRoleAssignmentRequired": true}'
+    }catch {
+        Write-Problem "Could not require assignment on the portal application: $($_.Exception.Message)"
+    }
+
+    # the scanner owns both objects so it can keep the reply URL and role assignments in sync by itself,
+    # which is what lets Application.ReadWrite.OwnedBy stay in place of the tenant wide equivalent
+    $ownerBody = @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($scannerSpn.id)" } | ConvertTo-Json
+    foreach ($uri in @("https://graph.microsoft.com/v1.0/applications/$($frontendApp.id)/owners/`$ref", "https://graph.microsoft.com/v1.0/servicePrincipals/$($frontendSpn.id)/owners/`$ref")) {
+        try { $null = Invoke-RestMethod -Headers $graphHeaders -Method POST -Uri $uri -Body $ownerBody } catch { }
+    }
+}else {
+    $frontendApp = @(Invoke-RestMethod -Headers $graphHeaders -Method GET -Uri "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$feName'").value | Select-Object -First 1
+    if ($frontendApp) {
+        $frontendSpn = @(Invoke-RestMethod -Headers $graphHeaders -Method GET -Uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$($frontendApp.appId)'").value | Select-Object -First 1
+    }
+}
+
+# ------------------------------------------------------------------------------------------------
+# 5. Apply the definition
+# ------------------------------------------------------------------------------------------------
+
+Write-Step "Working out which tokens this session can provide"
+
+$tokenProvider = { Param($audience) Get-PlainAccessToken -Resource $audience }
+
+# report up front which surfaces are reachable, so nobody is surprised half way through a run
+foreach ($surfaceKey in $Surfaces) {
+    $resourceKey = switch ($surfaceKey) {
+        "Exchange" { "exo" }
+        "PowerBI" { "fabric" }
+        "AzureDevOps" { "devops" }
+        "Azure" { "arm" }
+        "PowerPlatform" { $null }   # authorized by hand, see the documentation
+        default { $null }
+    }
+    if (!$resourceKey) { continue }
+    $audiences = @($definition.resources.PSObject.Properties[$resourceKey].Value.tokenResources)
+    $reachable = $false
+    foreach ($audience in $audiences) { if (Get-PlainAccessToken -Resource $audience) { $reachable = $true; break } }
+    if ($reachable) { Write-Detail "$surfaceKey is reachable from this session" } else { Write-Problem "$surfaceKey cannot be reached from this session, its permissions will be reported as unavailable and skipped" }
+}
+
+$me = $null
+try { $me = Invoke-RestMethod -Headers $graphHeaders -Method GET -Uri "https://graph.microsoft.com/v1.0/me" } catch { }
+if (!$me) { Write-Problem "Could not work out who you are, so you will have to add yourself to SEC-APP-M365Permissions-Admins by hand" }
+
+$engineContext = New-M365PContext -TokenProvider $tokenProvider `
+    -Definition $definition `
+    -TenantId $tenantId `
+    -ScannerAppId $scannerSpn.appId `
+    -ScannerSpnObjectId $scannerSpn.id `
+    -ScannerDisplayName $scannerSpn.displayName `
+    -FrontendAppId $frontendApp.appId `
+    -FrontendAppObjectId $frontendApp.id `
+    -FrontendSpnObjectId $frontendSpn.id `
+    -FrontendUrl $frontendUrl `
+    -Surfaces $Surfaces `
+    -Orchestration ([Boolean]$Orchestration) `
+    -AuthMode $(if ($MspOnboarding) { "ServicePrincipal" } else { "ManagedIdentity" }) `
+    -MailMode $MailMode `
+    -MailAddress $MailAddress `
+    -RunningUserId $me.id `
+    -MspOnboarding ([Boolean]$MspOnboarding) `
+    -SubscriptionId $SubscriptionId
+
+if ($Audit) {
+    Write-Step "Auditing (nothing will be changed)"
+    $results = Invoke-M365PSync -Context $engineContext -Mode Audit
+}else {
+    Write-Step "Applying permissions"
+    # pruning is what makes re-running with a surface unticked actually remove that surface's access.
+    # MSP onboarding never prunes: the tenant may be scanned by more than one thing.
+    $results = Invoke-M365PSync -Context $engineContext -Mode Apply -Prune:(!$MspOnboarding)
+}
+
+Write-M365PResultTable -Results $results
+
+# ------------------------------------------------------------------------------------------------
+# 6. Outcome
+# ------------------------------------------------------------------------------------------------
+
+$requiredPresent = Test-M365PRequiredGrantsPresent -Results $results
+$unavailable = @($results | Where-Object { $_.state -eq "unavailable" })
+$manual = @($results | Where-Object { $_.manual -and $_.state -ne "granted" -and $_.state -ne "notApplicable" })
+
+if ($manual.Count -gt 0) {
+    Write-Host "These need a manual step, they cannot be done from here:" -ForegroundColor Yellow
+    foreach ($item in $manual) {
+        Write-Host "  $($item.displayName)" -ForegroundColor Yellow
+        Write-Host "    Your application id is $($scannerSpn.appId)" -ForegroundColor DarkGray
+        Write-Host "    $($item.docsUrl)" -ForegroundColor DarkGray
+    }
     Write-Host ""
-    Write-Host "Please send an email to hello@m365permissions.com with the following:"
-    Write-Host "- Subscription ID: $SubscriptionId"
-    Write-Host "- Tenant ID: $TenantId"
-    Write-Host "- VM Name: $($vm.Name)"
+}
+
+if ($unavailable.Count -gt 0) {
+    Write-Host "These could not be determined from this session and were skipped:" -ForegroundColor DarkYellow
+    foreach ($item in $unavailable) { Write-Host "  $($item.displayName): $($item.detail)" -ForegroundColor DarkGray }
     Write-Host ""
-    Write-Host "!!!!!!!!!!!!!!!!!WITHOUT THE ABOVE, THE TOOL WILL NOT SCAN!!!!!!!!!!!!"
+}
+
+if ($MspOnboarding) {
+    Write-Host "Cross tenant onboarding complete." -ForegroundColor Green
     Write-Host ""
-    Write-Host "installation has been completed!"
-    Write-Host "https://m365permissions.com/#/docs/getting-started"
-    Read-Host "Press any key to exit"
+    Write-Host "In the M365Permissions deployment wizard, on the MSP / Cross-Tenant tab:" -ForegroundColor Cyan
+    Write-Host "  Tenant ID          : $tenantId"
+    Write-Host "  Backend Client ID  : $($scannerSpn.appId)"
+    Write-Host "  Frontend Client ID : $($frontendApp.appId)"
+    if ($mspOutput) {
+        Write-Host "  Certificate        : $($mspOutput.pfxPath)"
+        Write-Host "  Certificate secret : $($mspOutput.pfxPassword)"
+        Write-Host ""
+        Write-Host "Download the certificate now, this folder is temporary:" -ForegroundColor Yellow
+        Write-Host "  download $($mspOutput.pfxPath)" -ForegroundColor Yellow
+        Write-Host "Then remove it with: Remove-Item -Recurse -Force '$($mspOutput.certificateFolder)'" -ForegroundColor DarkGray
+    }else {
+        Write-Host ""
+        Write-Host "The application already existed, so no new certificate was generated." -ForegroundColor DarkGray
+    }
+    Write-Host ""
+    Write-Host "https://m365permissions.com/docs/msp-cross-tenant" -ForegroundColor DarkGray
     Exit 0
 }
 
-invoke-command -scriptblock $authorizeM365Permissions
+if (!$requiredPresent) {
+    Write-Host "Some required permissions are still missing, see the table above." -ForegroundColor Red
+    Write-Host "Re-running this command is safe and is usually all that is needed, since permissions sometimes take a moment to replicate." -ForegroundColor DarkGray
+    Exit 1
+}
 
-
+Write-Host "Done. Every required permission is in place." -ForegroundColor Green
+Write-Host ""
+Write-Host "Now go back to the portal and press the confirmation button." -ForegroundColor Cyan
+Write-Host "  $frontendUrl" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "That button is not a formality: the scanner has no other way to find out that it has been" -ForegroundColor DarkGray
+Write-Host "authorized, so it will keep waiting until you press it." -ForegroundColor DarkGray
+Write-Host ""
+Exit 0
