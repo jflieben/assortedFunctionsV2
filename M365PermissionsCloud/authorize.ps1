@@ -432,12 +432,14 @@ if ($MspOnboarding) {
     }
     Write-Host ""
     Write-Host "https://m365permissions.com/docs/msp-cross-tenant" -ForegroundColor DarkGray
+    Read-Host "Press any key to close this terminal..."
     Exit 0
 }
 
 if (!$requiredPresent) {
     Write-Host "Some required permissions are still missing, see the table above." -ForegroundColor Red
     Write-Host "Re-running this command is safe and is usually all that is needed, since permissions sometimes take a moment to replicate." -ForegroundColor DarkGray
+    Read-Host "Press any key to close this terminal..."
     Exit 1
 }
 
@@ -449,4 +451,5 @@ Write-Host ""
 Write-Host "That button is not a formality: the scanner has no other way to find out that it has been" -ForegroundColor DarkGray
 Write-Host "authorized, so it will keep waiting until you press it." -ForegroundColor DarkGray
 Write-Host ""
+Read-Host "Press any key to close this terminal..."
 Exit 0
