@@ -11,7 +11,7 @@
     "prune still removes the wide one. Each entry overrides the fields it names on the grant it sits on,",
     "so it may switch provider, resource, value or role, and an explicit null clears a field."
   ],
-  "revision": 5,
+  "revision": 6,
   "minimumProductVersion": "1.4.9",
 
   "resources": {
@@ -282,6 +282,20 @@
         "title": "Graph: read access to all site collections",
         "why": "The Graph counterpart of the SharePoint grant, used for the site and drive metadata that the SharePoint REST API does not return.",
         "url": "https://m365permissions.com/docs/permissions#graph.sites.readall"
+      }
+    },
+    {
+      "key": "graph.sharepointtenantsettings.readall",
+      "principal": "scanner",
+      "provider": "entraAppRole",
+      "necessity": "required",
+      "resource": "graph",
+      "value": "SharePointTenantSettings.Read.All",
+      "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
+      "docs": {
+        "title": "Graph: read the tenant's SharePoint settings",
+        "why": "Reads the organisation wide external sharing setting, which decides whether a sharing link found on a site could ever have reached someone outside the company.",
+        "url": "https://m365permissions.com/docs/permissions#graph.sharepointtenantsettings.readall"
       }
     },
     {
