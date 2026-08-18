@@ -17,10 +17,8 @@
 
     Everything is applied through the shared permission definition at
     https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/main/M365PermissionsCloud/permissions.json
-    so this script has no permission list of its own to drift out of date.
 
-    Nothing here hard fails. A surface that cannot be reached in your tenant is reported and skipped,
-    the rest still gets applied.
+    A surface that cannot be reached in your tenant is reported and skipped, the rest still gets applied.
 
 .PARAMETER SubscriptionId
     The subscription your M365Permissions deployment lives in.
@@ -202,12 +200,6 @@ if ($SubscriptionId -and $context.Subscription.Id -ne $SubscriptionId) {
 $graphToken = Get-PlainAccessToken -Resource "https://graph.microsoft.com"
 if (!$graphToken) { Stop-WithReason "Could not get a Microsoft Graph token for your account." }
 
-# The tenant is taken from the token rather than from the Azure context, because it is the token that
-# every API validates against and the two are not always the same. A session that was pointed at another
-# tenant, or that switched subscription across a tenant boundary, can keep reporting one tenant while
-# handing out tokens for another. Exchange is addressed per organization, /adminapi/beta/<tenant>/, so a
-# mismatch there is not a warning, it is a 403 with an empty body on every Exchange permission while
-# Graph carries on working normally. That combination is almost impossible to read from the outside.
 $tokenTenantId = Get-TokenTenantId -Token $graphToken
 $tenantId = if ($tokenTenantId) { $tokenTenantId } else { $context.Tenant.Id }
 
@@ -512,11 +504,10 @@ if (!$requiredPresent) {
 
 Write-Host "Done. Every required permission is in place." -ForegroundColor Green
 Write-Host ""
-Write-Host "Now go back to the portal and press the confirmation button." -ForegroundColor Cyan
+Write-Host "Please go back to the portal and press the confirmation button." -ForegroundColor Cyan
 Write-Host "  $frontendUrl" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "That button is not a formality: the scanner has no other way to find out that it has been" -ForegroundColor DarkGray
-Write-Host "authorized, so it will keep waiting until you press it." -ForegroundColor DarkGray
+Write-Host "It will keep waiting until you press it." -ForegroundColor DarkGray
 Write-Host ""
 Wait-Close
 Exit 0

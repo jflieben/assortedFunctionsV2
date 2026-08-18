@@ -11,7 +11,7 @@
     "prune still removes the wide one. Each entry overrides the fields it names on the grant it sits on,",
     "so it may switch provider, resource, value or role, and an explicit null clears a field."
   ],
-  "revision": 6,
+  "revision": 8,
   "minimumProductVersion": "1.4.9",
 
   "resources": {
@@ -159,22 +159,17 @@
       }
     },           
     {
-      "key": "spo.sites.readall",
+      "key": "spo.sites.fullcontrol",
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
       "resource": "spo",
-      "value": "Sites.Read.All",
-      "satisfiedBy": [
-        { "provider": "entraAppRole", "resource": "spo", "value": "Sites.ReadWrite.All" },
-        { "provider": "entraAppRole", "resource": "spo", "value": "Sites.Manage.All" },
-        { "provider": "entraAppRole", "resource": "spo", "value": "Sites.FullControl.All" }
-      ],
+      "value": "Sites.FullControl.All",
       "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
       "docs": {
-        "title": "SharePoint: read access to all site collections",
-        "why": "Reads the permission model of every item in every site, list and library, including unique (broken inheritance) permissions and sharing links.",
-        "url": "https://m365permissions.com/docs/permissions#spo.sites.readall"
+        "title": "SharePoint: full control of all site collections",
+        "why": "SharePoint separates reading content from reading who may read it. Listing the permissions on a site, its lists and its items needs the Enumerate Permissions right, which only full control carries: measured against a live tenant, Sites.Read.All and Sites.Manage.All are both refused outright on role assignments, and site collection administrators come back as an empty list rather than an error. Nothing is ever written with it. The tenant administration API, which is a separate and wider surface again, is no longer used at all.",
+        "url": "https://m365permissions.com/docs/permissions#spo.sites.fullcontrol"
       }
     },
     {
@@ -266,22 +261,17 @@
       }
     },
     {
-      "key": "graph.sites.readall",
+      "key": "graph.sites.fullcontrol",
       "principal": "scanner",
       "provider": "entraAppRole",
       "necessity": "required",
       "resource": "graph",
-      "value": "Sites.Read.All",
-      "satisfiedBy": [
-        { "provider": "entraAppRole", "resource": "graph", "value": "Sites.ReadWrite.All" },
-        { "provider": "entraAppRole", "resource": "graph", "value": "Sites.Manage.All" },
-        { "provider": "entraAppRole", "resource": "graph", "value": "Sites.FullControl.All" }
-      ],
+      "value": "Sites.FullControl.All",
       "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
       "docs": {
-        "title": "Graph: read access to all site collections",
-        "why": "The Graph counterpart of the SharePoint grant, used for the site and drive metadata that the SharePoint REST API does not return.",
-        "url": "https://m365permissions.com/docs/permissions#graph.sites.readall"
+        "title": "Graph: full control of all site collections",
+        "why": "The Graph counterpart of the SharePoint grant, used for the site and drive metadata that the SharePoint REST API does not return, and for the list of applications holding Sites.Selected access to a site. That list is the part that needs full control: measured against a live tenant, Sites.Read.All is refused outright on it. Nothing is ever written with it.",
+        "url": "https://m365permissions.com/docs/permissions#graph.sites.fullcontrol"
       }
     },
     {
