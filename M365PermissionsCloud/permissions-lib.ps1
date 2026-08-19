@@ -236,7 +236,12 @@ function Invoke-M365PRest {
                 $status = $null
                 try { $status = [int]$_.Exception.Response.StatusCode } catch {}
                 # never retry a definitive answer, only transient ones
-                if ($attempt -ge $MaxAttempts -or ($status -and $status -notin @(429, 500, 502, 503, 504))) { Throw $_ }
+                if ($attempt -ge $MaxAttempts -or ($status -and $status -notin @(429, 500, 502, 503, 504))) {
+                    # the exception carries the reason but never the request, and a reason with no url
+                    # attached cannot be traced back to the call that earned it
+                    Write-M365PLog -Level Verbose -Message "$Method $nextUrl failed$(if($status){" with HTTP $status"}): $(Get-M365PErrorDetail -ErrorRecord $_)"
+                    Throw $_
+                }
                 Start-Sleep -Seconds ([Math]::Min(30, [Math]::Pow(3, $attempt)))
             }
         }
@@ -621,6 +626,11 @@ function Get-M365PErrorDetail {
     $detail = "$($ErrorRecord.ErrorDetails.Message)"
     if ([String]::IsNullOrWhiteSpace(($detail -replace "[\p{C}]", ""))) { $detail = "$($ErrorRecord.Exception.Message)" }
     if ([String]::IsNullOrWhiteSpace(($detail -replace "[\p{C}]", ""))) { return "no reason given" }
+
+    # Azure DevOps prefixes its error bodies with a UTF-8 BOM, which ConvertFrom-Json refuses with
+    # "Unexpected character encountered while parsing value" at position 0. Left in, every DevOps
+    # refusal reported itself as the whole raw envelope instead of the sentence inside it.
+    $detail = $detail.Trim().TrimStart([Char]0xFEFF)
 
     $parsed = $null
     try { $parsed = $detail | ConvertFrom-Json -ErrorAction Stop } catch { $parsed = $null }
@@ -1824,6 +1834,15 @@ function Get-M365PDevOpsMembership {
     #>
     Param($Context, [String]$Organization)
 
+    # Checked again here, not only where the catalog was read. This goes straight into a url path, and
+    # a value that cannot be an organization name is rejected by Azure DevOps in a way that names
+    # neither the organization nor the call: a colon, which every url shaped value carries, comes back
+    # as "A potentially dangerous Request.Path value was detected from the client (:)" on all three
+    # probes at once. Refusing it here says which value was wrong instead.
+    if (!(Test-M365PDevOpsOrgName -Name $Organization)) {
+        return @{ found = $false; notes = @("'$Organization' is not a usable Azure DevOps organization name, so it was not looked up") }
+    }
+
     # the entitlement collections take a page size, the graph one only pages by continuation token,
     # which Invoke-M365PRest follows for us as long as it is not asked for the raw first page
     $probes = @(
@@ -2095,10 +2114,10 @@ function Test-M365PSatisfiedBy {
 
         .DESCRIPTION
         Narrowing a permission is a privilege reduction, but it lands on installs that are already
-        running: 1.4.9 replaced Sites.ReadWrite.All with Sites.Read.All and tenant wide Mail.Send with a
-        single scoped mailbox. The scanner still reads everything it did the day before, because what it
-        holds is a superset of what is now asked for, so reporting those as missing takes SharePoint,
-        OneDrive, Teams and Groups offline over permissions that demonstrably work.
+        running: 1.4.9 replaced tenant wide Mail.Send with a single scoped mailbox, and the Exchange
+        Administrator role with two read-only ones. The scanner still reads everything it did the day
+        before, because what it holds is a superset of what is now asked for, so reporting those as
+        missing takes categories offline over permissions that demonstrably work.
 
         Audit only, and Invoke-M365PSync is what enforces that. In Apply mode the narrow permission has
         to actually be granted before the prune removes the wide one, and short circuiting here would

@@ -11,7 +11,7 @@
     "prune still removes the wide one. Each entry overrides the fields it names on the grant it sits on,",
     "so it may switch provider, resource, value or role, and an explicit null clears a field."
   ],
-  "revision": 8,
+  "revision": 9,
   "minimumProductVersion": "1.4.9",
 
   "resources": {
@@ -281,10 +281,14 @@
       "necessity": "required",
       "resource": "graph",
       "value": "SharePointTenantSettings.Read.All",
+      "blocksCategories": false,
+      "satisfiedBy": [
+        { "provider": "entraAppRole", "resource": "graph", "value": "SharePointTenantSettings.ReadWrite.All" }
+      ],
       "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
       "docs": {
         "title": "Graph: read the tenant's SharePoint settings",
-        "why": "Reads the organisation wide external sharing setting, which decides whether a sharing link found on a site could ever have reached someone outside the company.",
+        "why": "Reads the organisation wide external sharing setting, which decides whether a sharing link found on a site could ever have reached someone outside the company. Enriches the four SharePoint categories rather than enabling them: without it the sites are still scanned and their links still reported, only the tenant default they sit under is unknown. It is therefore never allowed to take a category offline, which an install upgrading into it would otherwise suffer between the update landing and the customer re-authorizing.",
         "url": "https://m365permissions.com/docs/permissions#graph.sharepointtenantsettings.readall"
       }
     },
