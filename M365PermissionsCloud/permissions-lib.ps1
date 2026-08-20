@@ -1146,10 +1146,14 @@ function Get-M365PExoRoleAssignmentsForScanner {
 
         Callers still filter on Role themselves, so Role is only passed to the fallback: combining it
         with RoleAssignee is another parameter set to get wrong for no gain.
+
+        ExoSpn is optional. It only supplies names to assign by, and the object id already on the
+        context names the same assignee, so an identity that could not be read back does not stop the
+        assignments being read.
     #>
     Param(
         [Parameter(Mandatory = $true)]$Context,
-        [Parameter(Mandatory = $true)]$ExoSpn,
+        $ExoSpn,
         [String]$Role
     )
 
@@ -1264,12 +1268,41 @@ function Resolve-M365PExoManagementScope {
 }
 
 function Test-M365PGrant_exoRoleAssignment {
+    <#
+        .SYNOPSIS
+        Whether the scanner holds an Exchange role, judged by the assignments rather than by whether it
+        can look itself up.
+
+        .DESCRIPTION
+        Reading the identity object back is a privilege the scanner does not have. Get-ServicePrincipal
+        sits under Exchange's Role Management role, which View-Only Configuration does not include, so
+        Exchange answers 403 to the scanner and, for an -Identity lookup, has also been seen to hide the
+        object and report that it could not be found. Requiring it here meant a correctly authorized
+        install reported all three Exchange grants as "not registered in Exchange Online", and since
+        they are blocking, that took ExoRecipients and Admins offline over permissions measurably in
+        place: the same identity can read recipients, role groups and management scopes perfectly well.
+
+        The identity is only ever needed to name the assignee, and the object id on the context names
+        the same one. So it is attempted, and its absence is no longer a verdict.
+    #>
     Param($Grant, $Context)
 
-    $exoSpn = Get-M365PExoServicePrincipal -Context $Context
-    if (!$exoSpn) { return @{ state = "missing"; detail = "The scanner identity is not registered in Exchange Online" } }
+    # -CreateIfMissing is deliberately not passed: auditing must not change anything, and the apply
+    # path in Cloud Shell runs as an administrator who can actually read and create it
+    $exoSpn = $null
+    try { $exoSpn = Get-M365PExoServicePrincipal -Context $Context } catch { $exoSpn = $null }
 
-    $assignments = @(Get-M365PExoRoleAssignmentsForScanner -Context $Context -ExoSpn $exoSpn -Role $Grant.role)
+    $assignments = @()
+    try {
+        $assignments = @(Get-M365PExoRoleAssignmentsForScanner -Context $Context -ExoSpn $exoSpn -Role $Grant.role)
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        # Not being able to ask is not the same as the answer being no, and only missing blocks a
+        # category. Reporting unavailable keeps the finding visible without taking Exchange offline.
+        return @{ state = "unavailable"; detail = "Could not read the scanner's Exchange role assignments: $(Get-M365PErrorDetail -ErrorRecord $_)" }
+    }
+
     $match = $assignments | Where-Object { $_.Role -eq $Grant.role }
 
     if ($Grant.scope) {
@@ -2073,7 +2106,11 @@ function Test-M365PGrant_manualProbe {
     }
     catch {
         if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
-        return @{ state = "missing"; detail = "Not authorized yet. This is a manual step, see the documentation link." }
+        # The application id belongs in the detail because it is the one thing the manual step needs and
+        # the portal has no other way to know it: nothing publishes the scanner's identity to the
+        # database, so a blocked category could name the problem but not the value to fix it with.
+        # authorize.ps1 prints the same line for manual grants, so both routes now say the same thing.
+        return @{ state = "missing"; detail = "Not authorized yet. This is a manual step for application id $($Context.scannerAppId), see the documentation link." }
     }
 }
 
