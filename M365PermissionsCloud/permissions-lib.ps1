@@ -1917,6 +1917,22 @@ function Get-M365PDevOpsMembership {
 }
 
 function Test-M365PGrant_azureDevOpsOrgUser {
+    <#
+        .SYNOPSIS
+        Whether the scanner can actually scan this tenant's Azure DevOps, rather than merely belonging
+        to its organizations.
+
+        .DESCRIPTION
+        Membership on its own was not enough to judge this. An identity entitled to an organization and
+        given access to none of its projects passes every membership probe there is, and then lists no
+        projects and scans nothing, with no error anywhere: the entitlement is real, the identity is
+        active, and the collection level graph reads fine. Only the projects are invisible, because in
+        Azure DevOps project access is a separate grant.
+
+        So visibility is checked too. An organization that genuinely has no projects is reported the
+        same way, which is a finding about an organization with nothing to scan: harmless to act on,
+        and far better than the silence it replaces.
+    #>
     Param($Grant, $Context)
 
     $orgs = Get-M365PDevOpsOrganizations -Context $Context
@@ -1924,15 +1940,33 @@ function Test-M365PGrant_azureDevOpsOrgUser {
 
     $present = @()
     $absent = @()
+    $invisible = @()
     $notes = @()
     foreach ($org in $orgs) {
         $membership = Get-M365PDevOpsMembership -Context $Context -Organization $org
-        if ($membership.found) {
-            $present += $org
-        }
-        else {
+        if (!$membership.found) {
             $absent += $org
             foreach ($note in @($membership.notes)) { $notes += "$($org): $note" }
+            continue
+        }
+        $present += $org
+
+        # a call that could not be made says nothing about visibility, so it is not held against the org
+        try {
+            $projects = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw `
+                -Uri "https://dev.azure.com/$org/_apis/projects?api-version=7.1&`$top=1"
+            if (@($projects.value).Count -eq 0) { $invisible += $org }
+        }
+        catch {
+            if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+            Write-M365PLog -Level Verbose -Message "Could not check project visibility in $($org): $(Get-M365PErrorDetail -ErrorRecord $_)"
+        }
+    }
+
+    if ($absent.Count -eq 0 -and $invisible.Count -gt 0) {
+        return @{
+            state  = "missing"
+            detail = "Member of $($present -join ", ") but no project is visible in $($invisible -join ", "). In Azure DevOps project access is granted separately from the organization entitlement. Re-run the onboarding command to add it."
         }
     }
 
@@ -1941,6 +1975,113 @@ function Test-M365PGrant_azureDevOpsOrgUser {
     $detail = "Not a member of $($absent -join ", ")"
     if ($notes.Count -gt 0) { $detail = "$detail. $($notes -join " | ")" }
     return @{ state = "missing"; detail = $detail }
+}
+
+function Get-M365PDevOpsSubjectDescriptor {
+    <#
+        .SYNOPSIS
+        The Azure DevOps descriptor for the scanner identity in one organization, or null.
+
+        .DESCRIPTION
+        Every graph call below is keyed on a descriptor rather than on the Entra object id, and the
+        only reliable way to map one to the other for a service principal is to list them and match on
+        originId. Cached per organization because the project loop would otherwise repeat it.
+    #>
+    Param($Context, [Parameter(Mandatory = $true)][String]$Organization)
+
+    if (!$Context.cache.devOpsDescriptors) { $Context.cache.devOpsDescriptors = @{} }
+    if ($Context.cache.devOpsDescriptors.ContainsKey($Organization)) { return $Context.cache.devOpsDescriptors[$Organization] }
+
+    $descriptor = $null
+    try {
+        $descriptor = @(Invoke-M365PRest -Context $Context -ResourceKey "devops" `
+                -Uri "https://vssps.dev.azure.com/$Organization/_apis/graph/serviceprincipals?api-version=7.1-preview.1" |
+            Where-Object { $_.originId -eq $Context.scannerSpnObjectId } |
+            Select-Object -First 1).descriptor
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        Write-M365PLog -Level Verbose -Message "Could not resolve the scanner descriptor in $($Organization): $(Get-M365PErrorDetail -ErrorRecord $_)"
+    }
+
+    $Context.cache.devOpsDescriptors[$Organization] = $descriptor
+    return $descriptor
+}
+
+function Grant-M365PDevOpsProjectRead {
+    <#
+        .SYNOPSIS
+        Adds the scanner to the Readers group of every project in one organization. Returns how many
+        projects were covered.
+
+        .DESCRIPTION
+        An organization entitlement grants no project access. Azure DevOps keeps the two separate, so
+        an identity entitled to an organization and nothing else lists zero projects and scans nothing,
+        while looking perfectly healthy: connectiondata answers, the identity is active, and the
+        collection level graph is readable. Only the projects are invisible.
+
+        Done from here rather than from the scanner because the scanner cannot see the projects, which
+        is the very thing being fixed. The administrator running the onboarding command can.
+
+        Membership rather than the projectEntitlements field on the entitlement itself, because that
+        field is only honoured when the entitlement is created. Re-running the command on a deployment
+        that is already entitled reports "already exists" and would silently grant nothing, and
+        re-running is documented as safe and is how an administrator fixes exactly this. A membership
+        PUT is idempotent, so both paths converge on the same state.
+
+        Readers is the lowest project group there is. It grants read and nothing else.
+    #>
+    Param($Context, [Parameter(Mandatory = $true)][String]$Organization)
+
+    $descriptor = Get-M365PDevOpsSubjectDescriptor -Context $Context -Organization $Organization
+    if (!$descriptor) {
+        Write-M365PLog -Level Warning -Message "The scanner is not in the Azure DevOps graph for $Organization yet, so its projects could not be granted"
+        return 0
+    }
+
+    $projects = @()
+    try {
+        $response = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw `
+            -Uri "https://dev.azure.com/$Organization/_apis/projects?api-version=7.1&`$top=1000"
+        $projects = @($response.value)
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        Write-M365PLog -Level Warning -Message "Could not list the projects in $($Organization): $(Get-M365PErrorDetail -ErrorRecord $_)"
+        return 0
+    }
+
+    if ($projects.Count -eq 0) {
+        Write-M365PLog -Message "$Organization has no projects to grant access to"
+        return 0
+    }
+
+    $granted = 0
+    foreach ($project in $projects) {
+        if (!$project.id) { continue }
+        try {
+            # the project's own groups live under its scope, which is addressed by descriptor as well
+            $scope = (Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw `
+                    -Uri "https://vssps.dev.azure.com/$Organization/_apis/graph/descriptors/$($project.id)?api-version=7.1-preview.1").value
+            if (!$scope) { throw "the project scope descriptor came back empty" }
+
+            $readers = @(Invoke-M365PRest -Context $Context -ResourceKey "devops" `
+                    -Uri "https://vssps.dev.azure.com/$Organization/_apis/graph/groups?scopeDescriptor=$scope&api-version=7.1-preview.1" |
+                Where-Object { $_.displayName -eq "Readers" } | Select-Object -First 1).descriptor
+            if (!$readers) { throw "the project has no Readers group" }
+
+            $null = Invoke-M365PRest -Context $Context -ResourceKey "devops" -Method PUT -Raw `
+                -Uri "https://vssps.dev.azure.com/$Organization/_apis/graph/memberships/$descriptor/$readers`?api-version=7.1-preview.1"
+            $granted++
+        }
+        catch {
+            if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+            Write-M365PLog -Level Warning -Message "Could not give the scanner read access to $($Organization)/$($project.name): $(Get-M365PErrorDetail -ErrorRecord $_)"
+        }
+    }
+
+    Write-M365PLog -Message "Gave the scanner read access to $granted of $($projects.Count) project(s) in $Organization"
+    return $granted
 }
 
 function Set-M365PGrant_azureDevOpsOrgUser {
@@ -1972,6 +2113,17 @@ function Set-M365PGrant_azureDevOpsOrgUser {
                 if ($detail -like "*already*") { $accepted = $true; break }
                 $failures += $detail
             }
+        }
+
+        # The entitlement puts the identity in the organization. Project access is a separate grant and
+        # is what actually makes the projects visible, so it is applied whether or not the entitlement
+        # was new: an organization the deployment was already entitled to still has to be covered.
+        try {
+            $null = Grant-M365PDevOpsProjectRead -Context $Context -Organization $org
+        }
+        catch {
+            if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+            $failures += "project access: $(Get-M365PErrorDetail -ErrorRecord $_)"
         }
 
         if ($accepted) { $added++ } else { $errors += "$($org): $($failures -join " / ")" }
