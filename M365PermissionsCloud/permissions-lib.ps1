@@ -1916,6 +1916,42 @@ function Get-M365PDevOpsMembership {
     return @{ found = $false; notes = $notes }
 }
 
+function Test-M365PDevOpsHasHiddenProjects {
+    <#
+        .SYNOPSIS
+        Whether an organization that listed no projects actually has some the scanner cannot see.
+
+        .DESCRIPTION
+        Listing no projects has two causes that look identical from the projects endpoint: the
+        organization has none, or it has some and this identity has no access to them. Reporting both
+        as a problem puts a finding on an organization with nothing to scan, which is noise on a
+        perfectly healthy tenant.
+
+        Project groups tell them apart. Every project carries its own security groups, and the
+        collection level graph lists them whether or not the caller may open the project: an
+        organization with a project shows Readers, Contributors and the rest scoped to it, while an
+        empty organization shows only the collection level ones. That is the same signal that
+        identified the problem in the first place, an organization listing zero projects while its
+        project groups were plainly readable.
+
+        Answers false whenever it cannot tell. A wrong no here is a missed finding, a wrong yes is a
+        problem reported against an organization that does not have one.
+    #>
+    Param($Context, [Parameter(Mandatory = $true)][String]$Organization)
+
+    try {
+        $groups = @(Invoke-M365PRest -Context $Context -ResourceKey "devops" `
+                -Uri "https://vssps.dev.azure.com/$Organization/_apis/graph/groups?api-version=7.1-preview.1")
+        # project groups are classified under the project they belong to, collection level ones are not
+        return @($groups | Where-Object { "$($_.domain)" -like "*TeamProject*" }).Count -gt 0
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        Write-M365PLog -Level Verbose -Message "Could not tell whether $Organization has projects at all: $(Get-M365PErrorDetail -ErrorRecord $_)"
+        return $false
+    }
+}
+
 function Test-M365PGrant_azureDevOpsOrgUser {
     <#
         .SYNOPSIS
@@ -1955,7 +1991,9 @@ function Test-M365PGrant_azureDevOpsOrgUser {
         try {
             $projects = Invoke-M365PRest -Context $Context -ResourceKey "devops" -NoPagination -Raw `
                 -Uri "https://dev.azure.com/$org/_apis/projects?api-version=7.1&`$top=1"
-            if (@($projects.value).Count -eq 0) { $invisible += $org }
+            if (@($projects.value).Count -eq 0 -and (Test-M365PDevOpsHasHiddenProjects -Context $Context -Organization $org)) {
+                $invisible += $org
+            }
         }
         catch {
             if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
