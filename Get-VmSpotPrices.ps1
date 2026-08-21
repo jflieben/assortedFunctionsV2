@@ -4,7 +4,7 @@ function Get-VMSpotPrices{
         https://www.lieben.nu
     .NOTES
         Author: Jos Lieben
-        Company: Lieben Consultancy
+        Company: JSolve B.V.
         Copyright: Free to use, but not to redistribute or resell
     .SYNOPSIS
         Retrieves the spot prices for a specific VM family in a given Azure region in USD and also returns the sku name

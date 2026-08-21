@@ -4,7 +4,7 @@
     CompatiblePSEditions = @('Core')
     GUID                 = 'f7a3c2e1-4b8d-4e6f-9a1c-3d5e7f2b8c4a'
     Author               = 'Jos Lieben (jos@lieben.nu)'
-    CompanyName          = 'Lieben Consultancy'
+    CompanyName          = 'JSolve B.V.'
     Copyright            = 'https://jsolve.nl/commercial-use.html'
     Description          = @'
 SPPathFixer - SharePoint Online Long Path Scanner & Fixer

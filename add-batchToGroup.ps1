@@ -9,7 +9,7 @@
     .NOTES
     filename: add-batchToGroup.ps1
     author: Jos Lieben / jos@lieben.nu
-    copyright: Lieben Consultancy, free to use
+    copyright: JSolve B.V., free to use
     site: https://www.lieben.nu
     Created: 27/08/2021
     Updated: 18/10/2021

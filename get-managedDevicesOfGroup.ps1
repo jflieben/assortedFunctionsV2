@@ -5,7 +5,7 @@
     .NOTES
     filename: get-managedDevicesOfGroup.ps1
     author: Jos Lieben / jos@lieben.nu
-    copyright: Lieben Consultancy, free to use
+    copyright: JSolve B.V., free to use
     site: https://www.lieben.nu
     Updated: 03/09/2021
 #>

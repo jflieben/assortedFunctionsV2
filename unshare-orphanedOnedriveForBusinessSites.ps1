@@ -8,7 +8,7 @@
     .NOTES
     filename:   unshare-orphanedOnedriveForBusinessSites.ps1
     author:     Jos Lieben / jos@lieben.nu
-    copyright:  Lieben Consultancy, free to (re)use, keep headers intact
+    copyright:  JSolve B.V., free to (re)use, keep headers intact
     disclaimer: https://www.lieben.nu/liebensraum/contact/#disclaimer-and-copyright
     site:       https://www.lieben.nu
     Created:    28/02/2022

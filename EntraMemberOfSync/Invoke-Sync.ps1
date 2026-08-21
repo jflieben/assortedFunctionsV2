@@ -48,7 +48,7 @@
     .\Invoke-Sync.ps1
 
     .NOTES
-    Author: Jos Lieben / Lieben Consultancy
+    Author: Jos Lieben / JSolve B.V.
     Website: https://www.lieben.nu
     Free to use and modify, but please keep this header intact. No warranty, use at your own risk.
 

@@ -6,7 +6,7 @@
     .NOTES
     filename: detect-defaultTerminal.ps1
     author: Jos Lieben / jos@lieben.nu
-    copyright: Lieben Consultancy, free to use
+    copyright: JSolve B.V., free to use
     site: https://www.lieben.nu
 #>
 $delegationConsole = Get-ItemProperty -Path 'HKCU:\\Console\\%%Startup' -Name 'DelegationConsole' -ErrorAction SilentlyContinue

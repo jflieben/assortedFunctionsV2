@@ -1,6 +1,6 @@
 ﻿#Author:    Jos Lieben
-#Company:   Lieben Consultancy
-#Copyright: Lieben Consultancy, free to use
+#Company:   JSolve B.V.
+#Copyright: JSolve B.V., free to use
 #Contact:   https://www.lieben.nu
 
 $tenantName = "lieben"

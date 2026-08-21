@@ -5,7 +5,7 @@
     .NOTES
     author: Jos Lieben / jos@lieben.nu
     url: https://www.lieben.nu
-    copyright: Lieben Consultancy, unlimited free use for anyone
+    copyright: JSolve B.V., unlimited free use for anyone
     Created: 02/02/2023
 #>
 

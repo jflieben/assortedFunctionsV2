@@ -6,7 +6,7 @@
     .NOTES
     filename: remediate-defaultTerminal.ps1
     author: Jos Lieben / jos@lieben.nu
-    copyright: Lieben Consultancy, free to use
+    copyright: JSolve B.V., free to use
     site: https://www.lieben.nu
 #>
 Set-ItemProperty -Path 'HKCU:\\Console\\%%Startup' -Name 'DelegationConsole' -Value '{B23D10C0-E52E-411E-9D5B-C09FDF709C7D}' -Force -Confirm:$False

@@ -11,7 +11,7 @@
     ModuleVersion     = '2.0.0'
     GUID              = 'bbd6707a-392d-4db8-97c3-2634f029e2f0'
     Author            = 'Jos Lieben'
-    CompanyName       = 'Lieben Consultancy'
+    CompanyName       = 'JSolve B.V.'
     Copyright         = 'https://jsolve.nl/commercial-use.html (Free for non-commercial use with headers intact)'
     Description       = 'Azure Dynamic Desktop Right Sizing - Automatically right-sizes Azure VMs based on CPU/memory telemetry from Azure Monitor, pricing data, and performance benchmarks. Ideal for Azure Virtual Desktop (AVD) environments. Use Get-Help Get-VMRightSize, Set-VMRightSize, or Set-ResourceGroupRightSize for details.'
 

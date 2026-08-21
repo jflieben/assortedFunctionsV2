@@ -6,7 +6,7 @@
 
 .AUTHOR Jos Lieben
 
-.COMPANYNAME Lieben Consultancy
+.COMPANYNAME JSolve B.V.
 
 .COPYRIGHT 
 

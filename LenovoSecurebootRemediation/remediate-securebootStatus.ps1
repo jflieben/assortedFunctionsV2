@@ -35,12 +35,12 @@
     .NOTES
     filename: remediate-securebootStatus.ps1
     author: Jos Lieben / jos@lieben.nu
-    copyright: Lieben Consultancy, free to use
+    copyright: JSolve B.V., free to use
     site: https://www.lieben.nu
     updated: 2026-02-17
 
     .NOTICE
-    This script is provided "as is" without warranty of any kind. The author and Lieben Consultancy are not liable for any damage or loss resulting from its use. Always test scripts in a controlled environment before deploying widely.
+    This script is provided "as is" without warranty of any kind. The author and JSolve B.V. are not liable for any damage or loss resulting from its use. Always test scripts in a controlled environment before deploying widely.
 #>
 
 ####BEGIN CONFIGURATION####

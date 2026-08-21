@@ -1,6 +1,6 @@
 <#
     Author               = "Jos Lieben (jos@lieben.nu)"
-    CompanyName          = "Lieben Consultancy"
+    CompanyName          = "JSolve B.V."
     Copyright            = "https://jsolve.nl/commercial-use.html"
 #>    
 function invoke-PublishModule {

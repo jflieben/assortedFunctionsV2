@@ -111,4 +111,4 @@ Both modes use Microsoft Graph API with `Sites.ReadWrite.All` permissions.
 Free for non-commercial use.  
 Commercial use requires a license — see [liebensraum/commercial-use](https://jsolve.nl/commercial-use.html).
 
-**Author:** Jos Lieben (jos@lieben.nu) — [Lieben Consultancy](https://www.lieben.nu)
+**Author:** Jos Lieben (jos@lieben.nu) — [JSolve B.V.](https://www.lieben.nu)

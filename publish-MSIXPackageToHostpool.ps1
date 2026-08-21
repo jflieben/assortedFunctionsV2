@@ -5,7 +5,7 @@
     .NOTES
     filename: Publish-MSIXPackageToHostpool
     author: Jos Lieben / jos@lieben.nu
-    copyright: Lieben Consultancy, free to use/modify as long as headers are kept intact
+    copyright: JSolve B.V., free to use/modify as long as headers are kept intact
     site: https://www.lieben.nu
     Created: 18/09/2023
 #>
