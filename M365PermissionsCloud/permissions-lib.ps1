@@ -1188,6 +1188,52 @@ function Test-M365PScopeRestrictsTo {
     return ("$($Scope.RecipientFilter)" -like "*$MailAddress*")
 }
 
+function Test-M365PScopeCoversMailbox {
+    <#
+        .SYNOPSIS
+        Whether a management scope actually resolves to the one mailbox, rather than merely mentioning
+        its address.
+
+        .DESCRIPTION
+        Naming an address in a filter and covering a mailbox with it are different things, and the
+        difference is exactly how a scoped send permission can audit as granted and then be refused: a
+        filter reading PrimarySmtpAddress -eq 'info@contoso.com' contains that address, satisfies any
+        textual test, and matches nothing whatsoever when the address is an alias.
+
+        RecipientPreviewFilter is what Exchange offers to answer this, and it answers it definitively.
+        A scope that previews to no recipient grants nothing; one that previews to several is not the
+        single mailbox this grant is for and is not adopted.
+
+        Falls back to the textual answer when the preview cannot be run, so a tenant where the scanner
+        may not preview keeps behaving as it did rather than reporting a working scope as broken.
+    #>
+    Param($Context, $Scope, [String]$MailAddress)
+
+    if (!(Test-M365PScopeRestrictsTo -Scope $Scope -MailAddress $MailAddress)) { return $false }
+
+    $covered = $null
+    try {
+        $covered = @(Invoke-M365PExoCommand -Context $Context -Cmdlet "Get-Recipient" -Parameters @{
+                RecipientPreviewFilter = "$($Scope.RecipientFilter)"
+            })
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        Write-M365PLog -Level Verbose -Message "Could not preview the $($Scope.Name) scope, trusting its filter instead: $(Get-M365PErrorDetail -ErrorRecord $_)"
+        return $true
+    }
+
+    if ($covered.Count -eq 0) {
+        Write-M365PLog -Level Verbose -Message "The $($Scope.Name) scope names $MailAddress but covers no mailbox"
+        return $false
+    }
+    if ($covered.Count -gt 1) {
+        Write-M365PLog -Level Verbose -Message "The $($Scope.Name) scope covers $($covered.Count) recipients, which is wider than the one mailbox this grant is for"
+        return $false
+    }
+    return $true
+}
+
 function Get-M365PExoManagementScopes {
     <#
         .SYNOPSIS
@@ -1223,12 +1269,17 @@ function Resolve-M365PExoManagementScope {
         [Parameter(Mandatory = $true)][String]$MailAddress
     )
 
-    $filter = "PrimarySmtpAddress -eq '$MailAddress'"
+    # Both clauses, because a sender address is very often an alias. Exchange keeps every address on a
+    # recipient in EmailAddresses, prefixed SMTP: for the primary and smtp: for the rest, so a filter on
+    # PrimarySmtpAddress alone covers no mailbox at all when the address given is a proxy: the scope
+    # matches nothing, and a scope that matches nothing permits nothing. That is invisible until a send
+    # is refused, because the address is right there in the filter either way.
+    $filter = "PrimarySmtpAddress -eq '$MailAddress' -or EmailAddresses -eq 'smtp:$MailAddress'"
     $scopes = @(Get-M365PExoManagementScopes -Context $Context -Refresh)
 
     $ours = $scopes | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
     if ($ours) {
-        if (Test-M365PScopeRestrictsTo -Scope $ours -MailAddress $MailAddress) { return $ours.Name }
+        if (Test-M365PScopeCoversMailbox -Context $Context -Scope $ours -MailAddress $MailAddress) { return $ours.Name }
 
         Write-M365PLog -Message "Repointing the $Name management scope at $MailAddress..."
         $null = Invoke-M365PExoCommand -Context $Context -Cmdlet "Set-ManagementScope" -Parameters @{
@@ -1239,7 +1290,7 @@ function Resolve-M365PExoManagementScope {
         return $Name
     }
 
-    $equivalent = $scopes | Where-Object { Test-M365PScopeRestrictsTo -Scope $_ -MailAddress $MailAddress } | Select-Object -First 1
+    $equivalent = $scopes | Where-Object { Test-M365PScopeCoversMailbox -Context $Context -Scope $_ -MailAddress $MailAddress } | Select-Object -First 1
     if ($equivalent) {
         Write-M365PLog -Message "Reusing the existing management scope $($equivalent.Name), which already restricts to $MailAddress"
         return $equivalent.Name
@@ -1311,10 +1362,10 @@ function Test-M365PGrant_exoRoleAssignment {
         # the scope in use will not always carry the name from the definition: Exchange refuses to
         # create a duplicate of an equivalent scope, so an existing one gets adopted under its own name
         $acceptable = @(Get-M365PExoManagementScopes -Context $Context |
-            Where-Object { Test-M365PScopeRestrictsTo -Scope $_ -MailAddress $Context.mailAddress } |
+            Where-Object { Test-M365PScopeCoversMailbox -Context $Context -Scope $_ -MailAddress $Context.mailAddress } |
             ForEach-Object { $_.Name })
 
-        if ($acceptable.Count -eq 0) { return @{ state = "missing"; detail = "No management scope restricts to $($Context.mailAddress)" } }
+        if ($acceptable.Count -eq 0) { return @{ state = "missing"; detail = "No management scope resolves to a mailbox at $($Context.mailAddress). If that address is an alias, the scope has to match it as one; re-run the onboarding command to rebuild it." } }
 
         $match = $match | Where-Object { $acceptable -contains $_.CustomResourceScope -or $acceptable -contains $_.CustomRecipientWriteScope }
         if (!$match) { return @{ state = "missing"; detail = "$($Grant.role) is not assigned within a scope restricted to $($Context.mailAddress)" } }
