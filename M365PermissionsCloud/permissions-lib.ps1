@@ -1873,18 +1873,24 @@ function Get-M365PDevOpsMembership {
     # as "A potentially dangerous Request.Path value was detected from the client (:)" on all three
     # probes at once. Refusing it here says which value was wrong instead.
     if (!(Test-M365PDevOpsOrgName -Name $Organization)) {
-        return @{ found = $false; notes = @("'$Organization' is not a usable Azure DevOps organization name, so it was not looked up") }
+        return @{ found = $false; answered = $true; notes = @("'$Organization' is not a usable Azure DevOps organization name, so it was not looked up") }
     }
 
     # the entitlement collections take a page size, the graph one only pages by continuation token,
     # which Invoke-M365PRest follows for us as long as it is not asked for the raw first page
+    # serviceprincipalentitlements is deliberately not probed: it answers 405 to a GET in every
+    # organization, being the endpoint entitlements are created through rather than read from. Asking
+    # anyway produced a failure note on every single check that read like a permission problem.
     $probes = @(
-        @{ label = "serviceprincipalentitlements"; uri = "https://vsaex.dev.azure.com/$Organization/_apis/serviceprincipalentitlements?api-version=7.1-preview.1&`$top=10000"; paginate = $false }
         @{ label = "graph/serviceprincipals"; uri = "https://vssps.dev.azure.com/$Organization/_apis/graph/serviceprincipals?api-version=7.1-preview.1"; paginate = $true }
         @{ label = "userentitlements"; uri = "https://vsaex.dev.azure.com/$Organization/_apis/userentitlements?api-version=7.1-preview.3&`$top=10000"; paginate = $false }
     )
 
     $notes = @()
+    # A probe that returns without the identity in it is an answer. A probe that fails is not, and the
+    # difference decides whether "not a member" is a finding or a guess: in an organization the caller
+    # cannot read, every probe fails and reporting absence would be inventing a verdict.
+    $answered = $false
     foreach ($probe in $probes) {
         try {
             if ($probe.paginate) {
@@ -1902,9 +1908,10 @@ function Get-M365PDevOpsMembership {
                 if ($items.Count -eq 0 -and $response -is [Array]) { $items = @($response) }
             }
 
+            $answered = $true
             foreach ($item in $items) {
                 $originIds = @($item.servicePrincipal.originId, $item.user.originId, $item.originId) | Where-Object { $_ }
-                if ($originIds -contains $Context.scannerSpnObjectId) { return @{ found = $true; notes = @() } }
+                if ($originIds -contains $Context.scannerSpnObjectId) { return @{ found = $true; answered = $true; notes = @() } }
             }
             $notes += "$($probe.label) returned $($items.Count) entries without $($Context.scannerSpnObjectId)"
         }
@@ -1913,7 +1920,7 @@ function Get-M365PDevOpsMembership {
         }
     }
 
-    return @{ found = $false; notes = $notes }
+    return @{ found = $false; answered = $answered; notes = $notes }
 }
 
 function Test-M365PDevOpsHasHiddenProjects {
@@ -1976,12 +1983,13 @@ function Test-M365PGrant_azureDevOpsOrgUser {
 
     $present = @()
     $absent = @()
+    $unreadable = @()
     $invisible = @()
     $notes = @()
     foreach ($org in $orgs) {
         $membership = Get-M365PDevOpsMembership -Context $Context -Organization $org
         if (!$membership.found) {
-            $absent += $org
+            if ($membership.answered) { $absent += $org } else { $unreadable += $org }
             foreach ($note in @($membership.notes)) { $notes += "$($org): $note" }
             continue
         }
@@ -1998,6 +2006,14 @@ function Test-M365PGrant_azureDevOpsOrgUser {
         catch {
             if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
             Write-M365PLog -Level Verbose -Message "Could not check project visibility in $($org): $(Get-M365PErrorDetail -ErrorRecord $_)"
+        }
+    }
+
+    # nothing could be read in these, which is not the same as the scanner being absent from them
+    if ($absent.Count -eq 0 -and $unreadable.Count -gt 0) {
+        return @{
+            state  = "unavailable"
+            detail = "Could not read membership in $($unreadable -join ", ") from this session. $($notes -join " | ")"
         }
     }
 
@@ -2198,6 +2214,45 @@ function Remove-M365PGrant_azureDevOpsOrgUser {
     }
 }
 
+function Test-M365PIsMemberOfAny {
+    <#
+        .SYNOPSIS
+        Whether a directory object belongs to any of these groups, following nesting.
+
+        .DESCRIPTION
+        checkMemberGroups answers transitively, which a comparison against a list of group ids cannot.
+        That difference matters wherever a product evaluates effective membership rather than direct
+        membership, because a direct comparison then reports a working arrangement as absent and
+        invites a change that was never needed.
+
+        Answers in batches of twenty because that is the most the endpoint accepts, and false when it
+        cannot tell, so an unreadable directory never manufactures a membership.
+    #>
+    Param(
+        $Context,
+        [String]$ObjectId,
+        [String[]]$GroupIds
+    )
+
+    $ids = @($GroupIds | Where-Object { $_ } | Select-Object -Unique)
+    if ([String]::IsNullOrWhiteSpace($ObjectId) -or $ids.Count -eq 0) { return $false }
+
+    for ($offset = 0; $offset -lt $ids.Count; $offset += 20) {
+        $batch = @($ids[$offset..([Math]::Min($offset + 19, $ids.Count - 1))])
+        try {
+            $hits = @(Invoke-M365PRest -Context $Context -Method POST -Body @{ groupIds = $batch } `
+                    -Uri "https://graph.microsoft.com/v1.0/directoryObjects/$ObjectId/checkMemberGroups")
+            if ($hits.Count -gt 0) { return $true }
+        }
+        catch {
+            if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+            Write-M365PLog -Level Verbose -Message "Could not check whether $ObjectId is nested in these groups: $(Get-M365PErrorDetail -ErrorRecord $_)"
+        }
+    }
+
+    return $false
+}
+
 function Get-M365PFabricTenantSetting {
     <#
         .SYNOPSIS
@@ -2205,7 +2260,17 @@ function Get-M365PFabricTenantSetting {
     #>
     Param($Grant, $Context)
 
-    $settings = @(Invoke-M365PRest -Context $Context -ResourceKey "fabric" -NoPagination -Raw -Uri "https://api.fabric.microsoft.com/v1/admin/tenantsettings")
+    try {
+        $settings = @(Invoke-M365PRest -Context $Context -ResourceKey "fabric" -NoPagination -Raw -Uri "https://api.fabric.microsoft.com/v1/admin/tenantsettings")
+    }
+    catch {
+        if ($_.Exception.Message -like "M365PUNAVAILABLE*") { Throw $_ }
+        # the same reason the update path unwraps its body: a bare status line names neither the call
+        # nor what Fabric objected to, and this one is read on both the audit and the apply path
+        $status = $null
+        try { $status = [int]$_.Exception.Response.StatusCode } catch { }
+        Throw "Fabric could not return its tenant settings (HTTP $($status)): $(Get-M365PErrorDetail -ErrorRecord $_)"
+    }
     $all = @($settings.tenantSettings)
 
     $match = $all | Where-Object { $_.settingName -eq $Grant.settingName } | Select-Object -First 1
@@ -2231,7 +2296,19 @@ function Test-M365PGrant_fabricTenantSetting {
         if (!$group) { return @{ state = "missing"; detail = "The service group does not exist yet" } }
         $enabled = @($setting.enabledSecurityGroups)
         if ($enabled.Count -gt 0 -and $enabled.graphId -notcontains $group.id) {
-            return @{ state = "missing"; detail = "'$($setting.title)' is on, but not for $($group.displayName)" }
+            # Fabric honours nesting, so a service group inside a delegated group already works and the
+            # setting needs no change. Testing only for our own group in the list reported that as
+            # missing and sent the apply path off to rewrite a tenant setting that was already correct.
+            #
+            # Both are asked because either is sufficient and they can be true at different moments: the
+            # scanner is what Fabric evaluates, but on a first run its membership of the service group
+            # may not have been granted yet, while the service group's own nesting is already in place.
+            foreach ($candidate in @($Context.scannerSpnObjectId, $group.id)) {
+                if (Test-M365PIsMemberOfAny -Context $Context -ObjectId $candidate -GroupIds @($enabled.graphId)) {
+                    return @{ state = "granted"; detail = "$($setting.title), through a group it is nested in" }
+                }
+            }
+            return @{ state = "missing"; detail = "'$($setting.title)' is on, but not for $($group.displayName), directly or through nesting" }
         }
     }
 
@@ -2275,7 +2352,11 @@ function Set-M365PGrant_fabricTenantSetting {
         if ($status -in @(401, 403)) {
             Throw "M365PUNAVAILABLE: changing '$($setting.title)' needs a Fabric administrator, and the account running this is not one. Either re-run this as a Fabric administrator or set it by hand, see the documentation link."
         }
-        Throw $_
+        # Invoke-RestMethod puts only the status line in the exception message, so a rejected update
+        # read as "500 (Internal Server Error)" and nothing else. Fabric does explain itself in the
+        # response body, and that body is the only thing that says which part of the update it objected
+        # to, so it is what gets reported.
+        Throw "Fabric refused the update to '$($setting.title)' with HTTP $($status): $(Get-M365PErrorDetail -ErrorRecord $_)"
     }
 
     # Fabric can take a while to act on a changed tenant setting even though it reads back immediately,
