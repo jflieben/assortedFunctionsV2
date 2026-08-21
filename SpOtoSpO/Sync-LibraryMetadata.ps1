@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
     Mirrors file and folder metadata (Author, Editor, Created, Modified) from a source document library to a target.
-    Author: Jos Lieben (Lieben Consultancy)
-    Copyright/License: https://www.lieben.nu/liebensraum/commercial-use/ (Pure commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+    Author: Jos Lieben (JSolve B.V.)
+    Copyright/License: https://jsolve.nl/commercial-use.html (Pure commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
 
 
 .DESCRIPTION

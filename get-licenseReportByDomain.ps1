@@ -5,10 +5,10 @@ Runs in Azure without a user account, only a managed identity with correct permi
 
 .NOTES
 runbook name:       get-licenseReportbyDomain.ps1
-author:             Jos Lieben (Lieben Consultancy)
+author:             Jos Lieben (JSolve B.V.)
 created:            28/09/2021
 last updated:       28/09/2021
-Copyright/License:  https://www.lieben.nu/liebensraum/commercial-use/ (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+Copyright/License:  https://jsolve.nl/commercial-use.html (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
 
 Before this runbook, make sure you assign the correct rights to the managed identity of your automation account:
 required MS Graph Permissions (application level): (Organization.Read.All AND User.Read.All AND Mail.Send) OR (Directory.Read.All AND Mail.Send)

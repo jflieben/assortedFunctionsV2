@@ -37,7 +37,7 @@
     Author: Jos Lieben / Lieben Consultancy
     Website: https://www.lieben.nu
     Free for non-commercial use. Commercial use requires a license:
-    https://www.lieben.nu/liebensraum/commercial-use/
+    https://jsolve.nl/commercial-use.html
 
     Required Graph application permissions for the Managed Identity:
     - SecurityEvents.Read.All

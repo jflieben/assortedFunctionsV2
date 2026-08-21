@@ -4,7 +4,7 @@
   
     .NOTES
     filename:       import-autoPilotDevice.ps1
-    author:         Jos Lieben (Lieben Consultancy)
+    author:         Jos Lieben (JSolve B.V.)
     created:        16/06/2021
     last updated:   16/06/2021
     copyright:      2021, Jos Lieben, Lieben Consultancy, free to use and modify, not for resale

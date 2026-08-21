@@ -16,7 +16,7 @@ Function get-tenantStorageReport{
       filename: get-tenantStorageReport.ps1
       author: Jos Lieben
       blog: www.lieben.nu
-      Copyright/License: https://www.lieben.nu/liebensraum/commercial-use/ (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+      Copyright/License: https://jsolve.nl/commercial-use.html (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
       created: 28/11/2018
     #>
 

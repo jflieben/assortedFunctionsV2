@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
     Provisions a folder (from local disk or a remote ZIP URL) into OneDrive for Business sites.
-    Author: Jos Lieben (Lieben Consultancy)
-    Copyright/License: https://www.lieben.nu/liebensraum/commercial-use/ (Pure commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+    Author: Jos Lieben (JSolve B.V.)
+    Copyright/License: https://jsolve.nl/commercial-use.html (Pure commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
 
 .DESCRIPTION
     Uploads an entire folder structure into one or more OneDrive for Business document

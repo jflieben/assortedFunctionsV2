@@ -2,7 +2,7 @@
 #Author:                Jos Lieben
 #Author Blog:           http://www.lieben.nu
 #Date:                  29-09-2022
-#Copyright/License:     https://www.lieben.nu/liebensraum/commercial-use/ (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+#Copyright/License:     https://jsolve.nl/commercial-use.html (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
 #Purpose:               Removes Sharepoint Online sync relationships for a given tenant ID and copies all data from after a given date to a given folder in the user's desktop
 
 ###CONFIG

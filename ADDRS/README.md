@@ -412,7 +412,7 @@ Set-ResourceGroupRightSize @params
 
 ## License
 
-[Commercial use policy](https://www.lieben.nu/liebensraum/commercial-use/) — Free to use and modify for non-commercial purposes as long as headers and attribution are kept intact. Commercial use requires prior written consent.
+[Commercial use policy](https://jsolve.nl/commercial-use.html) — Free to use and modify for non-commercial purposes as long as headers and attribution are kept intact. Commercial use requires prior written consent.
 
 ## Contributing
 

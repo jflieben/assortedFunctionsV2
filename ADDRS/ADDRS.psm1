@@ -18,7 +18,7 @@
     .NOTES
     Module:    ADDRS
     Author:    Jos Lieben / jos@lieben.nu
-    Copyright: https://www.lieben.nu/liebensraum/commercial-use/
+    Copyright: https://jsolve.nl/commercial-use.html
     Site:      https://www.lieben.nu/liebensraum/2022/05/automatic-modular-rightsizing-of-azure-vms-with-special-focus-on-azure-virtual-desktop/
     Created:   2022-05-16
     Rewritten: 2026-03-25

@@ -5,7 +5,7 @@
     Requires attestation and key restrictions to be disabled in your Fido (passkey) authentication method settings in Entra ID.
 
 .NOTES
-    Author:       Jos Lieben (Lieben Consultancy)
+    Author:       Jos Lieben (JSolve B.V.)
     Created:      2026-02-06
     GitHub:       https://github.com/jflieben
     Web/Blog:     www.lieben.nu

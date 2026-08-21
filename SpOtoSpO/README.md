@@ -360,4 +360,4 @@ The script accepts full library URLs and automatically parses the site URL and l
 
 ## License
 
-Copyright Jos Lieben / Lieben Consultancy — see [license terms](https://www.lieben.nu/liebensraum/commercial-use/).
+Copyright Jos Lieben / JSolve B.V. — see [license terms](https://jsolve.nl/commercial-use.html).

@@ -9,7 +9,7 @@
 
     .NOTES
     author: Jos Lieben / jos@lieben.nu
-    copyright: https://www.lieben.nu/liebensraum/commercial-use/ (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+    copyright: https://jsolve.nl/commercial-use.html (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
     site: https://www.lieben.nu
     Created: 04/07/2023
 #>

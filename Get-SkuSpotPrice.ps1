@@ -13,7 +13,7 @@ function Get-SkuSpotPrice{
     The cost GUID for the SKU, can be found in https://github.com/jflieben/assortedFunctionsV2/blob/main/azure_spot_vm_cost_guids.json
 
     .NOTES
-    author:             Jos Lieben (Lieben Consultancy)
+    author:             Jos Lieben (JSolve B.V.)
     Copyright/License:  free to use, but keep header intact0
     #>    
     [CmdletBinding()]

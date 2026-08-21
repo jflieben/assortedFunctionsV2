@@ -5,7 +5,7 @@
     GUID                 = 'f7a3c2e1-4b8d-4e6f-9a1c-3d5e7f2b8c4a'
     Author               = 'Jos Lieben (jos@lieben.nu)'
     CompanyName          = 'Lieben Consultancy'
-    Copyright            = 'https://www.lieben.nu/liebensraum/commercial-use/'
+    Copyright            = 'https://jsolve.nl/commercial-use.html'
     Description          = @'
 SPPathFixer - SharePoint Online Long Path Scanner & Fixer
 
@@ -15,7 +15,7 @@ Provides multiple fix strategies: shorten names, move up hierarchy, flatten path
 USAGE:
     Import-Module SPPathFixer   # Opens GUI automatically
 
-Free for non-commercial use. See https://www.lieben.nu/liebensraum/commercial-use/
+Free for non-commercial use. See https://jsolve.nl/commercial-use.html
 Use at own risk
 '@
     PowerShellVersion    = '7.4'
@@ -52,7 +52,7 @@ Use at own risk
     PrivateData          = @{
         PSData = @{
             Tags         = @('SharePoint', 'PathLength', 'LongPath', 'Fix', 'Scanner', 'Office365')
-            LicenseUri   = 'https://www.lieben.nu/liebensraum/commercial-use/'
+            LicenseUri   = 'https://jsolve.nl/commercial-use.html'
             ReleaseNotes = 'Improve performance, visibility of intermediate results and reliability'
         }
     }

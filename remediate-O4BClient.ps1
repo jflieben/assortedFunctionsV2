@@ -3,7 +3,7 @@
 #Author Blog:       https://www.lieben.nu
 #Created:           29-11-2021
 #Updated:           see Git
-#Copyright/License: https://www.lieben.nu/liebensraum/commercial-use/ (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+#Copyright/License: https://jsolve.nl/commercial-use.html (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
 #Purpose:           Used as MEM Proactive Remediation job to detect O4B issues and correct them
 #Requirements:      Windows 10 build 1803, Onedrive preinstalled / configured (see my blog for instructions on fully automating that)
 

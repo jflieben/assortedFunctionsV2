@@ -3,7 +3,7 @@
 #Author Blog:       https://www.lieben.nu
 #Created:           30-11-2021
 #Updated:           see Git
-#Copyright/License: https://www.lieben.nu/liebensraum/commercial-use/ (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+#Copyright/License: https://jsolve.nl/commercial-use.html (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
 #Purpose:           Convert a user profile on a given FSLogix share to a local profile on the device and prevent FSLogix from using the remote profile on that device going forward
 #Requirements:      Run on user's AVD. User should NOT be logged in anywhere (or profile won't be mountable). AVD should be domain joined
 #How to use:        Run as admin on the user's VM, or run using Run Command (make sure the user's computer account has sufficient permissions on the share in this case)

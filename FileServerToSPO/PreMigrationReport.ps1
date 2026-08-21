@@ -2,8 +2,8 @@
     Generates a full HTML migration readiness report for a given fileshare and stores it in $outputFolder\$Title.
     Historical data from previous runs in that folder is loaded and compared against.
     Reduces file/folder paths and file names to comply with SharePoint Online limits.
-    Author: Jos Lieben (Lieben Consultancy)
-    Copyright/License: https://www.lieben.nu/liebensraum/commercial-use/ (Pure commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+    Author: Jos Lieben (JSolve B.V.)
+    Copyright/License: https://jsolve.nl/commercial-use.html (Pure commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
     Git: https://github.com/jflieben/assortedFunctionsV2/blob/main/FileServerToSPO/PreMigrationReport.ps1
 #>
 param(

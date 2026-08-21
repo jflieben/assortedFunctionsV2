@@ -57,4 +57,4 @@ The `EXTRASYNC (n): ...` line lists which SharePoint/Teams libraries that user i
 
 ## License
 
-Copyright Jos Lieben / Lieben Consultancy — see [license terms](https://www.lieben.nu/liebensraum/commercial-use/). Commercial (re)use not allowed without prior written consent; otherwise free to use/modify as long as the headers are kept intact.
+Copyright Jos Lieben / JSolve B.V. — see [license terms](https://jsolve.nl/commercial-use.html). Commercial (re)use not allowed without prior written consent; otherwise free to use/modify as long as the headers are kept intact.

@@ -1,7 +1,7 @@
 <#
     Author               = "Jos Lieben (jos@lieben.nu)"
     CompanyName          = "Lieben Consultancy"
-    Copyright            = "https://www.lieben.nu/liebensraum/commercial-use/"
+    Copyright            = "https://jsolve.nl/commercial-use.html"
 #>    
 function invoke-PublishModule {
     $apiKey = ""

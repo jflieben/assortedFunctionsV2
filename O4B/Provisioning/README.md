@@ -284,4 +284,4 @@ The source folder is placed **by name** inside the target path:
 
 ## License
 
-Copyright Jos Lieben / Lieben Consultancy — see [license terms](https://www.lieben.nu/liebensraum/commercial-use/).
+Copyright Jos Lieben / JSolve B.V. — see [license terms](https://jsolve.nl/commercial-use.html).

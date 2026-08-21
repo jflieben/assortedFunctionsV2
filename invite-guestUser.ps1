@@ -4,10 +4,10 @@ Generates an invitation to a user, and automatically adds this user to a specifi
 
 .NOTES
 runbook name:       invite-guestUser.ps1
-author:             Jos Lieben (Lieben Consultancy)
+author:             Jos Lieben (JSolve B.V.)
 created:            04/10/2021
 last updated:       04/10/2021
-Copyright/License:  https://www.lieben.nu/liebensraum/commercial-use/ (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+Copyright/License:  https://jsolve.nl/commercial-use.html (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
 
 Before this runbook, make sure you assign the correct rights to the managed identity of your automation account:
 required MS Graph Permissions (application level): Directory.Read.All AND User.Invite.All AND GroupMember.ReadWrite.All (the latter is only required if using targetGroupGUID)

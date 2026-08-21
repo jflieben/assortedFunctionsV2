@@ -7,10 +7,10 @@
   
     .NOTES
     filename:               leanLAPS.ps1
-    author:                 Jos Lieben (Lieben Consultancy)
+    author:                 Jos Lieben (JSolve B.V.)
     created:                09/06/2021
     last updated:           see Git
-    #Copyright/License:     https://www.lieben.nu/liebensraum/commercial-use/ (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
+    #Copyright/License:     https://jsolve.nl/commercial-use.html (Commercial (re)use not allowed without prior written consent by the author, otherwise free to use/modify as long as header are kept intact)
     inspired by:            Rudy Ooms; https://call4cloud.nl/2021/05/the-laps-reloaded/
 #>
 
