@@ -2376,12 +2376,18 @@ function Set-M365PGrant_fabricTenantSetting {
     $setting = Get-M365PFabricTenantSetting -Grant $Grant -Context $Context
     if (!$setting) { Throw "M365PUNAVAILABLE: the tenant setting could not be found in this tenant" }
 
-    # carry the rest of the setting forward untouched, an update replaces the whole object
+    # carry the rest of the setting forward untouched, an update replaces the whole object. Skip any
+    # null-valued group entry on the way: the read can hand back excludedSecurityGroups (or
+    # enabledSecurityGroups) as $null, and @($null) has Count 1, so an unguarded copy would forward a
+    # { graphId = $null; name = $null } that Fabric rejects with a 500 (InternalServerError).
     $body = @{ enabled = $true }
-    if ($null -ne $setting.PSObject.Properties["delegateToWorkspace"]) { $body.delegateToWorkspace = $setting.delegateToWorkspace }
-    if (@($setting.excludedSecurityGroups).Count -gt 0) {
-        $body.excludedSecurityGroups = @(foreach ($excluded in @($setting.excludedSecurityGroups)) { @{ graphId = $excluded.graphId; name = $excluded.name } })
+    if ($null -ne $setting.delegateToWorkspace) { $body.delegateToWorkspace = $setting.delegateToWorkspace }
+    $excludedGroups = @()
+    foreach ($excluded in @($setting.excludedSecurityGroups)) {
+        $graphId = if ($excluded.graphId) { $excluded.graphId } else { $excluded.id }
+        if ($graphId) { $excludedGroups += @{ graphId = $graphId; name = $excluded.name } }
     }
+    if ($excludedGroups.Count -gt 0) { $body.excludedSecurityGroups = $excludedGroups }
 
     if ($setting.canSpecifySecurityGroups) {
         $group = Get-M365PGroup -Context $Context -GroupRef $Grant.groupRef -CreateIfMissing
@@ -2389,7 +2395,10 @@ function Set-M365PGrant_fabricTenantSetting {
         # merge rather than overwrite: other groups may already be delegated this setting, and taking
         # somebody else's Power BI automation offline while onboarding ours would be a poor trade
         $groups = @()
-        foreach ($existing in @($setting.enabledSecurityGroups)) { $groups += @{ graphId = $existing.graphId; name = $existing.name } }
+        foreach ($existing in @($setting.enabledSecurityGroups)) {
+            $graphId = if ($existing.graphId) { $existing.graphId } else { $existing.id }
+            if ($graphId) { $groups += @{ graphId = $graphId; name = $existing.name } }
+        }
         if ($groups.graphId -notcontains $group.id) { $groups += @{ graphId = $group.id; name = $group.displayName } }
         $body.enabledSecurityGroups = $groups
     }
