@@ -168,7 +168,7 @@
       "categories": [ "Sharepoint", "Onedrive", "Teams", "O365Group" ],
       "docs": {
         "title": "SharePoint: full control of all site collections",
-        "why": "SharePoint separates reading content from reading who may read it. Listing the permissions on a site, its lists and its items needs the Enumerate Permissions right, which only full control carries: measured against a live tenant, Sites.Read.All and Sites.Manage.All are both refused outright on role assignments, and site collection administrators come back as an empty list rather than an error. Nothing is ever written with it. The tenant administration API, which is a separate and wider surface again, is no longer used at all.",
+        "why": "SharePoint separates reading content from reading who may read it. Listing the permissions on a site, its lists and its items needs the Enumerate Permissions right, which only works with full control. Sites.Read.All and Sites.Manage.All are both refused outright on role assignments, and site collection administrators come back as an empty list rather than an error. Nothing is ever written with it. We've also phased out the tenant administration API",
         "url": "https://m365permissions.com/docs/permissions#spo.sites.fullcontrol"
       }
     },
