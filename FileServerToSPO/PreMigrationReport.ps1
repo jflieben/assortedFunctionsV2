@@ -27,7 +27,6 @@ $reportDir = Join-Path $outputFolder $Title
 $ErrorActionPreference = "Stop"
 
 #load prereqs
-Import-Module ActiveDirectory
 if (-not (Get-Module -ListAvailable -Name ImportExcel)) {
     Write-Host "Installing ImportExcel module..." -ForegroundColor Yellow
     Install-Module -Name ImportExcel -Force -Scope CurrentUser
@@ -41,8 +40,7 @@ Import-Module ImportExcel
 $rootProbe = $null
 try {
     $rootProbe = Get-Item -LiteralPath $RootPath -Force -ErrorAction Stop
-}
-catch {
+}catch {
     Write-Error "Path '$RootPath' does not exist or is not accessible: $_"
     exit 1
 }
@@ -935,19 +933,6 @@ $folderColumnOrder = @(
 )
 Write-Host "Exporting annotated Excel workbook..." -ForegroundColor Cyan
 
-# The XLSX is a convenience copy for annotation; it must never take the whole report down in larger source folders
-# EPPlus holds the entire workbook in memory, so at millions of rows an unbounded export runs
-# for hours or OOMs the worker. Strategy:
-#  - cap the exported rows at $MaxXlsxRows (brondata.csv keeps the full dataset),
-#  - write cells in bulk via EPPlus LoadFromArrays instead of piping into Export-Excel. The
-#    pipeline path inserts every cell individually (~30M try/catch'd assignments at 1M rows) and
-#    is what makes the export take hours; it is also the source of the "Could not insert the
-#    'LastAccessUtc' property at Row N" warnings (EPPlus rejects DateTimes before the 1900 Excel
-#    epoch, e.g. FILETIME-zero timestamps). LoadFromArrays is one managed call and we coerce
-#    pre-1900 dates to text so no row is dropped,
-#  - only AutoFit columns below 50k rows (per-cell measurement is itself O(cells)),
-#  - run the export on a worker thread and abandon it after $XlsxTimeoutMinutes,
-#  - any failure degrades to "no XLSX this run" instead of a failed runbook.
 $xlsxOk = $false
 $exportItems = $fileItems
 $xlsxFullPath = [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $OutputXlsx))
