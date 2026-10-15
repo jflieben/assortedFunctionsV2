@@ -4,11 +4,11 @@ A drop-in replacement for the deprecated Entra ID dynamic group **memberOf** fea
 
 Microsoft is retiring dynamic membership rules of the form `user.memberOf -any (group.objectId -in ['guid','guid'])`. 
 
-`Invoke-Sync.ps1` takes over that job as a scheduled Azure Automation runbook: it keeps a target group's membership equal to the union of one or more source groups.
+`Invoke-Sync.ps1` replaces it as Azure Automation runbook: it keeps a group's membership equal to the union of one or more source groups.
 
-No dependencies and free to use. Uses a Managed Identity, direct Graph calls, and a marker in the description of the group you want managed, so the configuration stays visible in the portal right next to the group it governs.
+No dependencies and free to use. Uses a Managed Identity, direct Graph calls, and a marker in the description of the group you want managed, so the configuration stays visible in the portal.
 
-It also does something the deprecated feature never could: **per group** you decide whether source groups are read as direct members or transitively, so nested source groups can be resolved.
+It also does something extra: **per group** you decide whether source groups are read as direct members or transitively (includes nested groups!)
 
 ## How It Works
 
@@ -29,13 +29,13 @@ flowchart TD
 
     subgraph GUARDS ["🛡️ Per group guards"]
         direction TB
-        G[[For each marked group]] --> H{"Valid marker?"}
+        G[[For each marked group]] --> H{"Marker in\ndescription?"}
         H -- "❌ No" --> SKIP(["⏭️ Skip"])
         H -- "✅ Yes" --> I{"Dynamic\nmembership rule?"}
-        I -- "⚠️ Yes" --> SKIP
+        I -- "⚠️ Yes" --> FLAG(["🚩 Skip, flag issue"])
         I -- "No" --> J{"Synced from\non-prem AD?"}
-        J -- "⚠️ Yes" --> SKIP
-        J -- "No" --> K["Strip self-reference"]
+        J -- "⚠️ Yes" --> FLAG
+        J -- "No" --> K["Flag broken markers,\nstrip self-reference"]
     end
 
     K --> L
@@ -54,10 +54,12 @@ flowchart TD
 
     subgraph DIFF ["⚖️ Diff & guard"]
         direction TB
-        R["Read current members\nof the target"] --> S{"Any source\nfailed to read?"}
+        R["Read current members\nof the target"] --> S{"Source unreadable\nor marker broken?"}
         S -- "⚠️ Yes" --> T["Adds only,\nremovals blocked"]
         S -- "No" --> U{"Desired set empty\nbut group populated?"}
-        U -- "⚠️ Yes" --> T
+        U -- "Yes" --> U2{"Second read\nconfirms empty?"}
+        U2 -- "⚠️ No" --> T
+        U2 -- "Yes" --> V
         U -- "No" --> V["Full sync:\nadds + removals"]
     end
 
@@ -75,15 +77,17 @@ flowchart TD
     X --> G
     Z --> G
     SKIP --> G
+    FLAG --> G
     G -- "All done" --> AA
 
     subgraph DONE ["📊 Finish"]
-        AA([🏁 Summary\n+ fail job on errors])
+        AA([🏁 Summary\n+ fail job if any group had issues])
     end
 
     style A fill:#43a047,stroke:#2e7d32,color:#fff,stroke-width:2px
     style AA fill:#1e88e5,stroke:#1565c0,color:#fff,stroke-width:2px
     style SKIP fill:#78909c,stroke:#546e7a,color:#fff,stroke-width:2px
+    style FLAG fill:#fb8c00,stroke:#ef6c00,color:#fff,stroke-width:2px
     style T fill:#fb8c00,stroke:#ef6c00,color:#fff,stroke-width:2px
     style Y fill:#43a047,stroke:#2e7d32,color:#fff,stroke-width:2px
     style Z fill:#e53935,stroke:#c62828,color:#fff,stroke-width:2px
@@ -99,7 +103,7 @@ Put the marker in the **description of the target group**, the group whose membe
 | `EntraMemberOfSync:direct:<guid>[,<guid>...]` | Identical, spelled out for clarity. |
 | `EntraMemberOfSync:transitive:<guid>[,<guid>...]` | Transitive members, so users inside nested source groups are included too. |
 
-A realistic description:
+Example description:
 
 ```
 Visio license group. Managed by IT, do not edit members by hand.
@@ -120,10 +124,10 @@ Only **user and device** objects are synced by default. A nested group or servic
 ## Setup
 
 1. Create or reuse an Azure Automation account and enable its **system assigned Managed Identity**.
-2. Grant that identity the Graph application permission **`GroupMember.ReadWrite.All`**. The quickest way is https://lieben.nu/tools/SPNRoleMgr. This single permission covers listing groups, reading descriptions, and reading and writing members.
-3. Import `Invoke-Sync.ps1` as a PowerShell runbook and publish it. There are no module dependencies, so nothing needs to be imported into the account.
+2. Grant that identity the Graph application permission **`GroupMember.ReadWrite.All`**. The quickest way is https://lieben.nu/tools/SPNRoleMgr.
+3. Import `Invoke-Sync.ps1` as a PowerShell runbook and publish it. There are no module dependencies.
 4. Run it once with `-readOnly` and read the output carefully before going live.
-5. Link a schedule. Hourly is a sensible default.
+5. Link a schedule (e.g. hourly, monitor how long it takes and adjust as desired)
 
 ### Parameters
 
@@ -147,10 +151,12 @@ Repeat per group. There is nothing to register centrally, the runbook picks up a
 - Groups that still have a dynamic membership rule are skipped, with a message telling you to convert them first.
 - Groups synced from on premises Active Directory are skipped, since AD Connect owns their membership.
 - A group that lists itself as a source has that entry stripped.
-- If **any** source group cannot be read during a run, all removals for that target are cancelled for that run. Additions from the sources that did respond still happen. A transient Graph failure can therefore never empty a production group.
-- If the calculated membership is empty while the target still has members, removals are cancelled as well. Clear the group by hand if that is genuinely what you want.
+- A marker that cannot be fully parsed (a typo in a GUID, GUIDs separated by spaces instead of commas) is reported, and its source groups count as unreadable. Only GUIDs may follow a comma, so end the marker with a period or a new line before any other text.
+- If **any** source group cannot be read during a run, all removals for that target are cancelled for that run. Additions from the sources that did respond still happen. A transient Graph failure or a typo can therefore never empty a production group.
+- A Graph response without a member collection counts as a failed read, never as an empty group.
+- If all source groups are empty while the target still has members, the sources are read a second time. When that confirms they are empty, the target is emptied as well. Otherwise removals are cancelled for that run.
 - Throttling (429) and transient server errors are retried up to five times, honouring `Retry-After`.
-- If any group fails to process, the runbook still finishes the rest and then throws, so the Automation job ends in **Failed** status and your alerting picks it up.
+- Any group with an issue (one of the guards above, an unreadable source, or a failed add or remove) is listed at the end of the output. The runbook still finishes all other groups and then throws, so the Automation job ends in **Failed** status and your alerting picks it up.
 
 ## Limitations
 

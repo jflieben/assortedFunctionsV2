@@ -30,9 +30,14 @@
     - groups with a dynamic membership rule are skipped (convert them to assigned membership first)
     - groups synced from on premises Active Directory are skipped
     - a target that lists itself as a source has that entry stripped
-    - removals are skipped entirely when any source group could not be read this run, so a transient Graph failure
-      can never empty a production group. Additions from the sources that did respond still take place.
-    - removals are also skipped when the calculated membership is empty while the target still has members
+    - removals are skipped when any source group could not be read this run, or when a marker could not be fully parsed,
+      so a transient Graph failure or a typo can never empty a production group. Additions still take place.
+    - a Graph response without a member collection counts as a failed read, never as an empty group
+    - when all sources are empty while the target still has members, the sources are read a second time. The target
+      is only emptied when that second read confirms it
+
+    Any group with an issue (one of the above, or a failed add or remove) is listed at the end and makes the runbook
+    throw after all other groups have been processed, so the job ends in Failed status.
 
     .PARAMETER readOnly
     Dry run. Reports every addition and removal that would be made, without writing anything. Use this on the first run.
@@ -49,7 +54,7 @@
 
     .NOTES
     Author: Jos Lieben / JSolve B.V.
-    Website: https://www.lieben.nu
+    Website: https://www.jsolve.nl
     Free to use and modify, but please keep this header intact. No warranty, use at your own risk.
 
     Required Graph application permissions for the Managed Identity:
@@ -152,6 +157,10 @@ function Get-GraphCollection {
     while ($nextLink) {
         #headers have to travel along to every page, the nextLink does not carry them
         $response = Invoke-GraphRequest -Uri $nextLink -AdditionalHeaders $AdditionalHeaders
+        #a page without a value collection is a failed read, never "no members"
+        if ($Null -eq $response -or $response.PSObject.Properties.Name -notcontains 'value') {
+            Throw "Unexpected Graph response for $nextLink, no value collection returned"
+        }
         if ($response.value) {
             $items += $response.value
         }
@@ -222,13 +231,14 @@ function Get-MarkerSources {
 
 function Add-GroupMembers {
     #adds members in batches of 20 through members@odata.bind, falling back to individual calls if a batch is rejected
-    #returns the number of members added, so all logging in here goes to the warning stream to keep the output stream clean
+    #returns succeeded and failed counts, so all logging in here goes to the warning stream to keep the output stream clean
     param(
         [Parameter(Mandatory = $true)][string]$groupId,
         [Parameter(Mandatory = $true)][string[]]$memberIds
     )
 
     $added = 0
+    $failed = 0
     for ($i = 0; $i -lt $memberIds.Count; $i += $addBatchSize) {
         $chunk = @($memberIds[$i..([Math]::Min($i + $addBatchSize - 1, $memberIds.Count - 1))])
         $body = @{
@@ -246,28 +256,30 @@ function Add-GroupMembers {
                     $Null = Invoke-GraphRequest -Uri "https://graph.microsoft.com/v1.0/groups/$groupId/members/`$ref" -Method POST -Body $refBody
                     $added++
                 } catch {
-                    #400 usually means the member was already added by something else in the meantime, which is fine
-                    if ((Get-GraphStatusCode -ErrorRecord $_) -eq 400) {
+                    #a 400 is only harmless when Graph says the reference already exists, other 400's (e.g. mail enabled groups) are real failures
+                    if ((Get-GraphStatusCode -ErrorRecord $_) -eq 400 -and "$($_.ErrorDetails.Message)" -match 'already exist') {
                         Write-Warning "  $memberId was already a member, skipping"
                     } else {
                         Write-Warning "  failed to add $memberId : $($_.Exception.Message)"
+                        $failed++
                     }
                 }
             }
         }
     }
-    return $added
+    return [PSCustomObject]@{ succeeded = $added; failed = $failed }
 }
 
 function Remove-GroupMembers {
     #removes members one by one, a 404 means someone else already removed them
-    #returns the number of members removed, so all logging in here goes to the warning stream to keep the output stream clean
+    #returns succeeded and failed counts, so all logging in here goes to the warning stream to keep the output stream clean
     param(
         [Parameter(Mandatory = $true)][string]$groupId,
         [Parameter(Mandatory = $true)][string[]]$memberIds
     )
 
     $removed = 0
+    $failed = 0
     foreach ($memberId in $memberIds) {
         try {
             $Null = Invoke-GraphRequest -Uri "https://graph.microsoft.com/v1.0/groups/$groupId/members/$memberId/`$ref" -Method DELETE
@@ -277,18 +289,37 @@ function Remove-GroupMembers {
                 Write-Warning "  $memberId was no longer a member, skipping"
             } else {
                 Write-Warning "  failed to remove $memberId : $($_.Exception.Message)"
+                $failed++
             }
         }
     }
-    return $removed
+    return [PSCustomObject]@{ succeeded = $removed; failed = $failed }
+}
+
+function Add-GroupIssue {
+    #records a problem with a target group, the runbook throws at the end when any were recorded
+    param(
+        [Parameter(Mandatory = $true)]$group,
+        [Parameter(Mandatory = $true)][string]$message
+    )
+
+    Write-Warning "'$($group.displayName)' ($($group.id)): $message"
+    $key = "'$($group.displayName)' ($($group.id))"
+    if (-not $script:groupIssues.Contains($key)) {
+        $script:groupIssues[$key] = [System.Collections.Generic.List[string]]::new()
+    }
+    $script:groupIssues[$key].Add($message)
 }
 
 ########## main ##########
 
 $script:graphToken = Get-GraphToken
 
-$guidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
-$markerRegex = "(?i)$([regex]::Escape($markerKeyword))\s*:\s*(?:(direct|transitive)\s*:\s*)?($guidPattern(?:\s*,\s*$guidPattern)*)"
+$guidPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?![0-9a-fA-F])'
+#the lookahead rejects a list that continues with something unparseable, so "guidA,typo,guidC" is not read as just guidA
+$markerRegex = "(?i)$([regex]::Escape($markerKeyword))\s*:\s*(?:(direct|transitive)\s*:\s*)?($guidPattern(?:\s*,\s*$guidPattern)*)(?!\s*(?:,|$guidPattern))"
+#every keyword followed by a colon is meant as a marker, any of them the marker regex cannot read is broken
+$keywordRegex = "(?i)$([regex]::Escape($markerKeyword))\s*:"
 
 Write-Output "Starting EntraMemberOfSync, looking for groups with '$markerKeyword' in their description ($(if($readOnly){"read only mode, nothing will be modified"}else{"live mode"}))"
 
@@ -303,33 +334,38 @@ $stats = @{
     membersAdded     = 0
     membersRemoved   = 0
 }
-$failedGroups = @()
+$groupIssues = [ordered]@{}
 
 foreach ($group in $candidates) {
     try {
         #the search index only gives us candidates, the regex decides
         $sources = @(Get-MarkerSources -description $group.description -pattern $markerRegex)
-        if ($sources.Count -eq 0) {
+        $brokenMarkers = [regex]::Matches("$($group.description)", $keywordRegex).Count - [regex]::Matches("$($group.description)", $markerRegex).Count
+        if ($sources.Count -eq 0 -and $brokenMarkers -eq 0) {
             $stats.skippedNoMarker++
             continue
         }
 
         if ($group.groupTypes -contains 'DynamicMembership') {
-            Write-Output "Skipping '$($group.displayName)' ($($group.id)): this group still has a dynamic membership rule, convert it to assigned membership first"
+            Add-GroupIssue -group $group -message "skipped, this group still has a dynamic membership rule, convert it to assigned membership first"
             $stats.skippedDynamic++
             continue
         }
 
         if ($group.onPremisesSyncEnabled -eq $true) {
-            Write-Output "Skipping '$($group.displayName)' ($($group.id)): membership of this group is managed by on premises Active Directory"
+            Add-GroupIssue -group $group -message "skipped, membership of this group is managed by on premises Active Directory"
             $stats.skippedOnPremise++
             continue
         }
 
+        #the source groups behind a broken marker are unknown, so removals are blocked further down
+        if ($brokenMarkers -gt 0) {
+            Add-GroupIssue -group $group -message "$brokenMarkers marker(s) in the description could not be parsed, check the syntax and source group id's"
+        }
+
         #a group cannot be its own source
-        $selfReferences = @($sources | Where-Object { $_.id -eq $group.id })
-        if ($selfReferences.Count -gt 0) {
-            Write-Warning "'$($group.displayName)' ($($group.id)) lists itself as a source group, ignoring that entry"
+        if ($sources | Where-Object { $_.id -eq $group.id }) {
+            Add-GroupIssue -group $group -message "lists itself as a source group, ignoring that entry"
             $sources = @($sources | Where-Object { $_.id -ne $group.id })
         }
         if ($sources.Count -eq 0) {
@@ -351,7 +387,7 @@ foreach ($group in $candidates) {
                 $sourcesOk++
             } catch {
                 #do not let one unreachable source group cause a mass removal further down
-                Write-Warning "Could not read source group $($source.id) for '$($group.displayName)': $($_.Exception.Message)"
+                Add-GroupIssue -group $group -message "could not read source group $($source.id): $($_.Exception.Message)"
                 $sourcesFailed++
             }
         }
@@ -364,13 +400,30 @@ foreach ($group in $candidates) {
         $toAdd = @($desired | Where-Object { -not $current.Contains($_) })
         $toRemove = @($current | Where-Object { -not $desired.Contains($_) })
 
-        if ($toRemove.Count -gt 0 -and $sourcesFailed -gt 0) {
-            Write-Warning "Not removing $($toRemove.Count) member(s) from '$($group.displayName)' because $sourcesFailed source group(s) could not be read this run"
+        #removing is only safe when every source group is known and was read
+        if ($toRemove.Count -gt 0 -and ($sourcesFailed -gt 0 -or $brokenMarkers -gt 0)) {
+            Write-Warning "Not removing $($toRemove.Count) member(s) from '$($group.displayName)' this run, not every source group could be read"
             $toRemove = @()
         }
+
+        #emptying a populated group needs a second read confirming every source really is empty
         if ($toRemove.Count -gt 0 -and $desired.Count -eq 0) {
-            Write-Warning "Not removing $($toRemove.Count) member(s) from '$($group.displayName)' because all source groups are empty. Clear the group manually if that is intentional"
-            $toRemove = @()
+            $confirmedEmpty = $true
+            foreach ($source in $sources) {
+                try {
+                    if (@(Get-SyncMemberIds -groupId $source.id -transitive:$source.transitive).Count -gt 0) {
+                        $confirmedEmpty = $false
+                    }
+                } catch {
+                    $confirmedEmpty = $false
+                }
+            }
+            if ($confirmedEmpty) {
+                Write-Warning "All source groups of '$($group.displayName)' are confirmed empty by a second read, all $($toRemove.Count) synced member(s) will be removed"
+            } else {
+                Add-GroupIssue -group $group -message "source groups read as empty but a second read could not confirm that, not removing $($toRemove.Count) member(s) this run"
+                $toRemove = @()
+            }
         }
 
         $mode = if ($sources | Where-Object { $_.transitive }) { if ($sources | Where-Object { -not $_.transitive }) { "mixed" } else { "transitive" } } else { "direct" }
@@ -385,18 +438,25 @@ foreach ($group in $candidates) {
         $added = 0
         $removed = 0
         if ($toAdd.Count -gt 0) {
-            $added = Add-GroupMembers -groupId $group.id -memberIds $toAdd
+            $result = Add-GroupMembers -groupId $group.id -memberIds $toAdd
+            $added = $result.succeeded
             $stats.membersAdded += $added
+            if ($result.failed -gt 0) {
+                Add-GroupIssue -group $group -message "$($result.failed) of $($toAdd.Count) member(s) could not be added"
+            }
         }
         if ($toRemove.Count -gt 0) {
-            $removed = Remove-GroupMembers -groupId $group.id -memberIds $toRemove
+            $result = Remove-GroupMembers -groupId $group.id -memberIds $toRemove
+            $removed = $result.succeeded
             $stats.membersRemoved += $removed
+            if ($result.failed -gt 0) {
+                Add-GroupIssue -group $group -message "$($result.failed) of $($toRemove.Count) member(s) could not be removed"
+            }
         }
 
         Write-Output "Synced '$($group.displayName)' ($($group.id)) [$mode]: +$added added, -$removed removed, sources: $sourcesOk ok / $sourcesFailed failed"
     } catch {
-        Write-Warning "Failed to process group '$($group.displayName)' ($($group.id)): $($_.Exception.Message)"
-        $failedGroups += $group.displayName
+        Add-GroupIssue -group $group -message "failed to process: $($_.Exception.Message)"
     }
 }
 
@@ -404,8 +464,15 @@ Write-Output ""
 Write-Output "Summary: processed $($stats.processed) target group(s), added $($stats.membersAdded) and removed $($stats.membersRemoved) member(s)"
 Write-Output "Skipped: $($stats.skippedNoMarker) without a valid marker, $($stats.skippedDynamic) with a dynamic membership rule, $($stats.skippedOnPremise) synced from on premises AD"
 
-if ($failedGroups.Count -gt 0) {
-    Throw "EntraMemberOfSync completed with $($failedGroups.Count) failed group(s): $($failedGroups -join ', ')"
+if ($groupIssues.Count -gt 0) {
+    Write-Output ""
+    Write-Output "$($groupIssues.Count) group(s) need attention:"
+    foreach ($key in $groupIssues.Keys) {
+        foreach ($message in $groupIssues[$key]) {
+            Write-Output "  $($key): $message"
+        }
+    }
+    Throw "EntraMemberOfSync completed with issues in $($groupIssues.Count) group(s): $(@($groupIssues.Keys) -join ', ')"
 }
 
 Write-Output "Job completed"
