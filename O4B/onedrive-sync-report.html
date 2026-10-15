@@ -1,0 +1,1030 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>OneDrive Sync Health</title>
+<!--
+    Report of what repair-OneDrive.ps1 -ReportSasUrl adds to the onedrivesyncstatus table of a storage account.
+    Open the file in a browser and paste a SAS URL of the table with Read permission (sp=r), or Read and Delete (sp=rd) to also clean up old reports.
+    The storage account needs a CORS rule on the Table service: allowed origin *, methods GET, HEAD and OPTIONS (POST and DELETE to clean up), allowed and exposed headers *.
+    Nothing leaves the browser except the requests to the storage account; the SAS URL is kept for this tab only.
+
+    filename: onedrive-sync-report.html
+    author: Jos Lieben / jos@lieben.nu
+    copyright: JSolve B.V., commercial use: see https://www.jsolve.nl/commercial-use.html
+    site: https://www.jsolve.nl
+-->
+<style>
+:root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --wash: rgba(11, 11, 11, 0.04);
+    --accent: #2a78d6;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+    --series-4: #eda100;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+    --error-ink: #b42323;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --page: #0d0d0d;
+        --surface: #1a1a19;
+        --ink: #f0efec;
+        --ink-2: #c3c2b7;
+        --grid: #2c2c2a;
+        --axis: #383835;
+        --border: rgba(255, 255, 255, 0.10);
+        --wash: rgba(255, 255, 255, 0.05);
+        --accent: #3987e5;
+        --series-1: #3987e5;
+        --series-2: #d95926;
+        --series-3: #199e70;
+        --series-4: #c98500;
+        --error-ink: #f08080;
+    }
+}
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --wash: rgba(255, 255, 255, 0.05);
+    --accent: #3987e5;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --error-ink: #f08080;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1400px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+.sub { color: var(--ink-2); margin: 0 0 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+input[type=text], input[type=search], select {
+    font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 0;
+}
+input[type=text]:focus, input[type=search]:focus, select:focus, button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#sas { flex: 1 1 420px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+button {
+    font: inherit; font-weight: 600; color: #fff; background: var(--accent);
+    border: 0; border-radius: 6px; padding: 7px 14px; cursor: pointer;
+}
+button:disabled { opacity: .6; cursor: default; }
+button.danger { background: var(--critical); }
+.cleanup { margin-top: 4px; color: var(--ink-2); }
+button.ghost { background: transparent; color: var(--ink-2); font-weight: 400; padding: 4px 8px; }
+button.ghost:hover { background: var(--wash); }
+label.check { display: inline-flex; gap: 6px; align-items: center; color: var(--ink-2); }
+#message { margin: 10px 0 0; color: var(--ink-2); min-height: 1.45em; }
+#message.error { color: var(--error-ink); }
+.intro { color: var(--ink-2); margin-top: 16px; }
+.intro ul { margin: 6px 0 0; padding-left: 20px; }
+.intro code { font-size: 12px; }
+#report { margin-top: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; transition: opacity .2s; }
+#report > * { min-width: 0; }
+#report.loading { opacity: .5; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile .label { color: var(--ink-2); font-size: 13px; }
+.tile .value { font-size: 26px; font-weight: 600; margin-top: 2px; }
+.tile .note { color: var(--muted); font-size: 12px; }
+.chart-wrap { position: relative; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 8px; color: var(--ink-2); font-size: 13px; }
+.legend span.key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit:hover, .chart .hit:focus { fill: var(--wash); outline: none; }
+.tooltip {
+    position: absolute; pointer-events: none; z-index: 5; min-width: 170px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .12); padding: 8px 10px; font-size: 12px;
+}
+.tooltip .title { color: var(--ink-2); margin-bottom: 4px; }
+.tooltip .line { display: flex; align-items: center; gap: 8px; }
+.tooltip .line i { display: inline-block; width: 12px; height: 2px; border-radius: 1px; }
+.tooltip .line b { min-width: 2ch; text-align: right; font-variant-numeric: tabular-nums; }
+.tooltip .line span { color: var(--ink-2); }
+details.table-view { margin-top: 8px; color: var(--ink-2); font-size: 13px; }
+details.table-view table { margin-top: 6px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: -4px -16px 12px; padding: 0 12px; overflow-x: auto; }
+.tabs button { background: transparent; color: var(--ink-2); font-weight: 500; border-radius: 0; padding: 8px 10px; border-bottom: 2px solid transparent; white-space: nowrap; }
+.tabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); }
+.filters { margin-bottom: 12px; }
+.filters input[type=search] { flex: 1 1 220px; max-width: 360px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--ink-2); font-weight: 500; font-size: 12px; white-space: nowrap; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--ink); }
+th .arrow { color: var(--muted); margin-left: 3px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.main { cursor: pointer; }
+tr.main:hover > td { background: var(--wash); }
+tr.main.open > td { background: var(--wash); border-bottom-color: transparent; }
+tr.detail > td { background: var(--wash); padding: 4px 12px 16px; }
+.small { color: var(--ink-2); font-size: 12px; }
+.muted { color: var(--muted); }
+.zero { color: var(--muted); }
+.issue { max-width: 360px; }
+.nowrap { white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pill .icon {
+    display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
+    color: #fff; font-size: 11px; font-weight: 700; line-height: 1;
+}
+.pill.warning .icon { color: #0b0b0b; }
+.machines-grid { display: grid; gap: 12px; margin-top: 8px; }
+.machine-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.machine-card header { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-bottom: 8px; }
+.machine-card header strong { font-size: 14px; }
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0 0 10px; font-size: 13px; }
+dl.kv dt { color: var(--ink-2); }
+dl.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+dl.kv ul { margin: 2px 0 0; padding-left: 18px; }
+.sub-table th, .sub-table td { font-size: 12px; padding: 5px 6px; }
+td ul { margin: 2px 0 0; padding-left: 18px; }
+.empty { color: var(--ink-2); padding: 16px 4px; }
+.more { color: var(--ink-2); font-size: 12px; margin-top: 8px; }
+.badge { display: inline-block; font-size: 11px; color: var(--ink-2); border: 1px solid var(--border); border-radius: 10px; padding: 0 7px; margin-left: 6px; white-space: nowrap; }
+@media (max-width: 700px) {
+    dl.kv { grid-template-columns: 1fr; }
+    dl.kv dt { margin-top: 4px; }
+}
+</style>
+</head>
+<body>
+<main>
+    <h1>OneDrive sync health</h1>
+    <p class="sub">What repair-OneDrive.ps1 reports per user and per machine: OneDrive's status, problems it detected and the restarts it did.</p>
+
+    <section class="card">
+        <form id="connect" class="row" autocomplete="off">
+            <input id="sas" type="text" spellcheck="false" placeholder="https://<account>.table.core.windows.net/onedrivesyncstatus?sp=r&amp;tn=onedrivesyncstatus&amp;sig=..." aria-label="SAS URL of the table">
+            <select id="days" aria-label="Period">
+                <option value="1">Last 24 hours</option>
+                <option value="7" selected>Last 7 days</option>
+                <option value="14">Last 14 days</option>
+                <option value="30">Last 30 days</option>
+            </select>
+            <button id="load" type="submit">Load</button>
+            <label class="check"><input id="autoRefresh" type="checkbox"> Refresh every 5 min</label>
+        </form>
+        <p id="message" role="status"></p>
+        <div id="cleanup" class="row cleanup" hidden>
+            <span>Delete reports older than</span>
+            <select id="keepDays" aria-label="Keep reports for">
+                <option value="30">30 days</option>
+                <option value="60">60 days</option>
+                <option value="90" selected>90 days</option>
+                <option value="180">180 days</option>
+                <option value="365">1 year</option>
+            </select>
+            <button id="cleanupButton" type="button" class="danger">Delete</button>
+        </div>
+        <div id="intro" class="intro">
+            Paste a SAS URL of the <code>onedrivesyncstatus</code> table with <b>Read</b> permission (<code>sp=r</code>). With <b>Read</b> and <b>Delete</b> (<code>sp=rd</code>) you can also delete old reports here.
+            <ul>
+                <li>The storage account needs a CORS rule on the Table service: allowed origin <code>*</code>, methods <code>GET, HEAD, OPTIONS</code> (and <code>POST, DELETE</code> to delete old reports), allowed and exposed headers <code>*</code>.</li>
+                <li>The SAS URL stays in this browser tab and is only sent to the storage account.</li>
+                <li>Users and machines that didn't report in the chosen period are left out. Redeployed session hosts show up as a new machine under the same name.</li>
+            </ul>
+        </div>
+    </section>
+
+    <div id="report" hidden>
+        <section class="tiles" id="tiles"></section>
+
+        <section class="card">
+            <h2>Problems and repairs per day</h2>
+            <div class="chart-wrap">
+                <div class="legend" id="legend"></div>
+                <div class="chart" id="chart"></div>
+                <div class="tooltip" id="tooltip" hidden></div>
+            </div>
+            <details class="table-view"><summary>Show as table</summary><div class="scroll" id="chartTable"></div></details>
+        </section>
+
+        <section class="card">
+            <div class="tabs" role="tablist">
+                <button type="button" role="tab" data-tab="users" aria-selected="true">Users</button>
+                <button type="button" role="tab" data-tab="machines" aria-selected="false">Machines</button>
+                <button type="button" role="tab" data-tab="events" aria-selected="false">Events</button>
+            </div>
+            <div class="filters row">
+                <input id="search" type="search" placeholder="Filter on user, machine or text" aria-label="Filter">
+                <select id="healthFilter" aria-label="Health">
+                    <option value="">Any health</option>
+                    <option value="bad">Needs attention</option>
+                    <option value="healthy">Healthy</option>
+                </select>
+                <select id="levelFilter" aria-label="Level" hidden>
+                    <option value="issues" selected>Warnings and errors</option>
+                    <option value="ERROR">Errors only</option>
+                    <option value="">Everything</option>
+                </select>
+                <select id="kindFilter" aria-label="Kind" hidden></select>
+                <label class="check" id="noAccountToggle"><input id="showNoAccount" type="checkbox"> Include users without OneDrive</label>
+            </div>
+            <div id="tabContent"></div>
+        </section>
+    </div>
+</main>
+
+<script>
+'use strict';
+
+const TABLE = 'onedrivesyncstatus';
+const CONCURRENCY = 16;
+const EVENT_ROWS = 500;
+
+const HEALTH = {
+    unhealthy: { order: 0, label: 'Unhealthy', icon: '×', cls: 'critical', bad: true },
+    repairing: { order: 1, label: 'Repairing', icon: '↻', cls: 'serious', bad: true },
+    problem: { order: 2, label: 'Problem', icon: '!', cls: 'serious', bad: true },
+    attention: { order: 3, label: 'OneDrive flags an issue', icon: '!', cls: 'warning', bad: true },
+    healthy: { order: 4, label: 'Healthy', icon: '✓', cls: 'good', bad: false },
+    noAccount: { order: 5, label: 'No OneDrive', icon: '–', cls: 'none', bad: false }
+};
+const LEVEL = {
+    ERROR: { label: 'Error', icon: '×', cls: 'critical' },
+    WARN: { label: 'Warning', icon: '!', cls: 'warning' },
+    OK: { label: 'OK', icon: '✓', cls: 'good' },
+    INFO: { label: 'Info', icon: 'i', cls: 'none' }
+};
+const KIND = {
+    problem: 'Problem detected',
+    unhealthy: 'Check unhealthy',
+    restart: 'Restart',
+    repaired: 'Repaired',
+    repairFailed: 'Repair failed',
+    cleared: 'Cleared by itself',
+    oneDriveState: 'OneDrive status',
+    error: 'Script error',
+    start: 'Watcher started'
+};
+// chart series, stacked bottom to top in this order
+const SERIES = [
+    { key: 'problems', name: 'Problems detected', color: 'var(--series-1)', match: e => e.kind === 'problem' || e.kind === 'unhealthy' },
+    { key: 'restarts', name: 'Restarts', color: 'var(--series-2)', match: e => e.kind === 'restart' },
+    { key: 'flags', name: 'OneDrive flagged an issue', color: 'var(--series-3)', match: e => e.kind === 'oneDriveState' && (e.level === 'WARN' || e.level === 'ERROR') },
+    { key: 'failed', name: 'Repairs failed', color: 'var(--series-4)', match: e => e.kind === 'repairFailed' }
+];
+const STATUS_COLOR = { good: 'var(--good)', warning: 'var(--warning)', serious: 'var(--serious)', critical: 'var(--critical)', none: 'var(--muted)' };
+
+let data = null;
+const view = { tab: 'users', search: '', health: '', level: 'issues', kind: '', showNoAccount: false, open: new Set(), sort: { users: ['health', 1], machines: ['name', 1] } };
+let loading = false;
+let refreshTimer = null;
+
+// ---------- helpers
+
+function el(tag, props, ...children) {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(props || {})) {
+        if (value == null || value === false) continue;
+        if (key === 'class') node.className = value;
+        else if (key === 'text') node.textContent = value;
+        else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+        else node.setAttribute(key, value === true ? '' : value);
+    }
+    for (const child of children.flat(Infinity)) {
+        if (child == null || child === false) continue;
+        node.append(child instanceof Node ? child : String(child));
+    }
+    return node;
+}
+
+function svg(tag, attrs) {
+    const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [key, value] of Object.entries(attrs || {})) node.setAttribute(key, value);
+    return node;
+}
+
+const arr = value => Array.isArray(value) ? value : (value == null ? [] : [value]);
+const pad = n => String(n).padStart(2, '0');
+
+function fmtTime(ms) {
+    if (!ms) return '';
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fmtAgo(ms) {
+    if (!ms) return '';
+    const minutes = Math.round((Date.now() - ms) / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h ago`;
+    return `${Math.round(minutes / 1440)} d ago`;
+}
+
+function time(ms) {
+    return el('span', { class: 'nowrap', title: fmtTime(ms) }, fmtAgo(ms));
+}
+
+function pill(def) {
+    return el('span', { class: `pill ${def.cls}` },
+        el('span', { class: 'icon', style: `background:${STATUS_COLOR[def.cls]}`, 'aria-hidden': 'true' }, def.icon),
+        def.label);
+}
+
+const healthOf = state => HEALTH[state && state.health] || { order: 4, label: (state && state.health) || 'Unknown', icon: '?', cls: 'none', bad: false };
+
+function count(n) {
+    return el('span', { class: n ? '' : 'zero' }, String(n));
+}
+
+function localDay(ms) {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function setMessage(text, isError) {
+    const node = document.getElementById('message');
+    node.textContent = text || '';
+    node.classList.toggle('error', !!isError);
+}
+
+// ---------- storage
+
+function parseSasUrl(text) {
+    let url;
+    try { url = new URL(text); } catch { throw new Error('That is not a URL. Paste the full SAS URL, starting with https://'); }
+    if (!url.search.includes('sig=')) throw new Error('The URL has no SAS signature (sig=...). Paste the full SAS URL.');
+    // accepts the account URL or the table URL, the table is always onedrivesyncstatus
+    const account = url.origin + url.pathname.replace(/\/+$/, '').replace(new RegExp(`/${TABLE}(\\(\\))?$`, 'i'), '');
+    return { account, table: `${account}/${TABLE}`, sas: url.search.slice(1), canDelete: (url.searchParams.get('sp') || '').includes('d') };
+}
+
+const TABLE_HEADERS = { Accept: 'application/json;odata=nometadata', 'x-ms-version': '2019-02-02', DataServiceVersion: '3.0;NetFx', MaxDataServiceVersion: '3.0;NetFx' };
+
+async function request(url, options = {}) {
+    let response;
+    try {
+        response = await fetch(url, { cache: 'no-store', ...options, headers: { ...TABLE_HEADERS, ...(options.headers || {}) } });
+    } catch {
+        throw new Error('Could not reach the storage account. Check the URL and the CORS rule on the Table service (allowed origin *, methods GET, HEAD and OPTIONS, allowed and exposed headers *).');
+    }
+    if (response.ok) return response;
+    const body = await response.text().catch(() => '');
+    let code = '';
+    try { code = JSON.parse(body)['odata.error'].code; } catch { code = (body.match(/<code>([^<]+)<\/code>/i) || [])[1] || ''; }
+    let message = `The storage account answered ${response.status} ${code}`.trim();
+    if (response.status === 404 && code === 'TableNotFound') message = `The table ${TABLE} does not exist yet: nothing has reported to this storage account.`;
+    if (response.status === 403) message = `Access denied (${code || 403}). The SAS needs Read permission on the table (and Delete to clean up) and must not have expired.`;
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
+}
+
+const rowUrl = (target, row) => {
+    const key = value => encodeURIComponent(String(value).replace(/'/g, "''"));
+    return `${target.table}(PartitionKey='${key(row.PartitionKey)}',RowKey='${key(row.RowKey)}')`;
+};
+
+// pages of up to 1000 rows; the CORS rule must expose the x-ms-continuation headers or only the first page arrives
+async function queryRows(target, filter, select, onPage) {
+    const rows = [];
+    let next = '';
+    do {
+        const response = await request(`${target.table}()?$filter=${encodeURIComponent(filter)}${select ? `&$select=${select}` : ''}${next}&${target.sas}`);
+        const page = (await response.json()).value || [];
+        if (onPage) await onPage(page); else rows.push(...page);
+        const partition = response.headers.get('x-ms-continuation-NextPartitionKey');
+        const row = response.headers.get('x-ms-continuation-NextRowKey');
+        next = partition ? `&NextPartitionKey=${encodeURIComponent(partition)}${row ? `&NextRowKey=${encodeURIComponent(row)}` : ''}` : '';
+    } while (next);
+    return rows;
+}
+
+async function pool(items, worker, onDone) {
+    const results = new Array(items.length);
+    let next = 0;
+    async function run() {
+        while (next < items.length) {
+            const index = next++;
+            results[index] = await worker(items[index]);
+            if (onDone) onDone();
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, run));
+    return results;
+}
+
+function utcDays(since) {
+    const days = [];
+    const day = new Date(since);
+    day.setUTCHours(0, 0, 0, 0);
+    while (day.getTime() <= Date.now()) {
+        days.push(day.toISOString().slice(0, 10).replace(/-/g, ''));
+        day.setUTCDate(day.getUTCDate() + 1);
+    }
+    return days;
+}
+
+function parseList(text) {
+    try { return arr(JSON.parse(text)); } catch { return text ? [text] : []; }
+}
+
+let target = null;
+
+async function load() {
+    if (loading) return;
+    const sasText = document.getElementById('sas').value.trim();
+    let next;
+    try {
+        next = parseSasUrl(sasText);
+    } catch (error) {
+        setMessage(error.message, true);
+        return;
+    }
+    try { sessionStorage.setItem('onedrive-sync-report-sas', sasText); } catch { /* storage blocked */ }
+
+    loading = true;
+    document.getElementById('load').disabled = true;
+    document.getElementById('report').classList.add('loading');
+    const days = Number(document.getElementById('days').value);
+    const since = Date.now() - days * 86400000;
+    try {
+        setMessage('Reading reports...');
+        const partitions = utcDays(since);
+        // the keys of the state rows, then only the newest row per user and machine in full
+        const stateKeys = (await Promise.all(partitions.map(day => queryRows(next, `PartitionKey eq 's${day}'`, 'PartitionKey,RowKey')))).flat();
+        const newest = new Map();
+        for (const row of stateKeys) {
+            const [sid, machineId, stamp] = row.RowKey.split('_');
+            if (!stamp) continue;
+            const session = `${sid}_${machineId}`;
+            if (!newest.has(session) || newest.get(session).stamp < stamp) newest.set(session, { ...row, stamp });
+        }
+        const eventRows = (await Promise.all(partitions.map(day => queryRows(next, `PartitionKey eq 'e${day}'`)))).flat();
+
+        const latest = [...newest.values()];
+        let done = 0;
+        const states = (await pool(latest, async row => {
+            try {
+                const response = await request(`${rowUrl(next, row)}?${next.sas}`);
+                return JSON.parse((await response.json()).state);
+            } catch (error) {
+                if (!error.status || error.status === 403) throw error;
+                return null;
+            }
+        }, () => { done++; if (done % 20 === 0 || done === latest.length) setMessage(`Reading ${done} of ${latest.length} states...`); }))
+            .filter(state => state && state.user && state.machine && Date.parse(state.reportedAt) >= since);
+        const events = eventRows.map(row => ({ ...row, reasons: parseList(row.reasons) })).filter(e => e.time && Date.parse(e.time) >= since);
+
+        target = next;
+        data = derive(states, events, since, days);
+        document.getElementById('intro').hidden = true;
+        document.getElementById('report').hidden = false;
+        document.getElementById('cleanup').hidden = !target.canDelete;
+        setMessage(`${states.length} machine reports and ${events.length} events, loaded ${fmtTime(Date.now())}`);
+        render();
+    } catch (error) {
+        setMessage(error.message, true);
+    } finally {
+        loading = false;
+        document.getElementById('load').disabled = false;
+        document.getElementById('report').classList.remove('loading');
+    }
+}
+
+// deletes up to 100 rows of one partition in one request; a batch is all or nothing, so when one row is already gone the rows go one by one
+async function deleteRows(rows) {
+    const batch = `batch_${Math.random().toString(36).slice(2)}`;
+    const changeset = `changeset_${Math.random().toString(36).slice(2)}`;
+    const lines = [`--${batch}`, `Content-Type: multipart/mixed; boundary=${changeset}`, ''];
+    for (const row of rows) {
+        lines.push(`--${changeset}`, 'Content-Type: application/http', 'Content-Transfer-Encoding: binary', '',
+            `DELETE ${rowUrl(target, row)} HTTP/1.1`, 'Accept: application/json;odata=nometadata', 'If-Match: *', 'DataServiceVersion: 3.0;NetFx', '');
+    }
+    lines.push(`--${changeset}--`, `--${batch}--`, '');
+    try {
+        const response = await request(`${target.account}/$batch?${target.sas}`, { method: 'POST', headers: { 'Content-Type': `multipart/mixed; boundary=${batch}` }, body: lines.join('\r\n') });
+        const statuses = [...(await response.text()).matchAll(/HTTP\/1\.1 (\d{3})/g)].map(match => Number(match[1]));
+        if (statuses.length === rows.length && statuses.every(status => status >= 200 && status < 300)) return;
+    } catch (error) {
+        if (!error.status) throw error;
+    }
+    for (const row of rows) {
+        try {
+            await request(`${rowUrl(target, row)}?${target.sas}`, { method: 'DELETE', headers: { 'If-Match': '*' } });
+        } catch (error) {
+            if (error.status !== 404) throw error;
+        }
+    }
+}
+
+async function cleanup() {
+    if (!target || !target.canDelete || loading) return;
+    const keepDays = Number(document.getElementById('keepDays').value);
+    const cutoff = new Date(Date.now() - keepDays * 86400000).toISOString().slice(0, 10);
+    if (!confirm(`Delete all reports from before ${cutoff}? This can't be undone.`)) return;
+    const button = document.getElementById('cleanupButton');
+    button.disabled = true;
+    let deleted = 0;
+    try {
+        for (const prefix of ['e', 's']) {
+            await queryRows(target, `PartitionKey ge '${prefix}' and PartitionKey lt '${prefix}${cutoff.replace(/-/g, '')}'`, 'PartitionKey,RowKey', async page => {
+                const chunks = [];
+                const byPartition = new Map();
+                for (const row of page) {
+                    if (!byPartition.has(row.PartitionKey)) byPartition.set(row.PartitionKey, []);
+                    byPartition.get(row.PartitionKey).push(row);
+                }
+                for (const rows of byPartition.values()) for (let i = 0; i < rows.length; i += 100) chunks.push(rows.slice(i, i + 100));
+                await pool(chunks, async chunk => { await deleteRows(chunk); deleted += chunk.length; setMessage(`Deleted ${deleted} rows...`); });
+            });
+        }
+        setMessage(`Deleted ${deleted} rows from before ${cutoff}.`);
+    } catch (error) {
+        setMessage(`Clean up stopped after ${deleted} rows: ${error.message}`, true);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+// ---------- model
+
+function derive(states, events, since, days) {
+    const now = Date.now();
+    for (const state of states) {
+        state._at = Date.parse(state.reportedAt) || 0;
+        const continuous = state.run && state.run.mode === 'continuous';
+        // a watcher sends at least every reportMinutes; a repair can delay that by about 10 minutes
+        const silentAfter = ((state.run && state.run.reportMinutes) || 15) * 2 + 15;
+        state._active = continuous && now - state._at < silentAfter * 60000;
+        state._continuous = continuous;
+    }
+    for (const e of events) e._at = Date.parse(e.time);
+    events.sort((a, b) => b._at - a._at);
+
+    const users = new Map();
+    const userOf = (sid, upn, name) => {
+        if (!users.has(sid)) users.set(sid, { sid, upn: upn || sid, name: name || '', states: [], events: [] });
+        return users.get(sid);
+    };
+    for (const state of states) userOf(state.user.sid, state.user.upn, state.user.name).states.push(state);
+    for (const e of events) userOf(e.sid, e.upn, '').events.push(e);
+
+    const machines = new Map();
+    const machineOf = (id, name) => {
+        if (!machines.has(id)) machines.set(id, { id, name: name || id, states: [], events: [], azureVmName: null, resourceGroup: null, osBuild: null });
+        return machines.get(id);
+    };
+    for (const state of states) {
+        const machine = machineOf(state.machine.id, state.machine.name);
+        machine.states.push(state);
+        machine.azureVmName = machine.azureVmName || state.machine.azureVmName;
+        machine.resourceGroup = machine.resourceGroup || state.machine.resourceGroup;
+        machine.osBuild = state.machine.osBuild || machine.osBuild;
+    }
+    for (const e of events) if (e.machineId) machineOf(e.machineId, e.machine).events.push(e);
+
+    for (const user of users.values()) {
+        user.states.sort((a, b) => b._at - a._at);
+        user.latest = user.states[0] || null;
+        user.counts = tally(user.events);
+        user.lastIssue = user.events.find(e => e.level === 'WARN' || e.level === 'ERROR') || null;
+        user.machineCount = new Set(user.states.map(s => s.machine.id)).size;
+    }
+    const lastByName = new Map();
+    for (const machine of machines.values()) {
+        machine.states.sort((a, b) => b._at - a._at);
+        machine.lastAt = Math.max(machine.states.length ? machine.states[0]._at : 0, machine.events.length ? machine.events[0]._at : 0);
+        machine.counts = tally(machine.events);
+        machine.users = new Set([...machine.states.map(s => s.user.sid), ...machine.events.map(e => e.sid)]).size;
+        machine.attention = machine.states.filter(s => healthOf(s).bad).length;
+        machine.active = machine.states.filter(s => s._active).length;
+        lastByName.set(machine.name.toLowerCase(), Math.max(lastByName.get(machine.name.toLowerCase()) || 0, machine.lastAt));
+    }
+    // a redeployed AVD host keeps its name but gets a new id: the older id is a previous deployment
+    const idsPerName = new Map();
+    for (const machine of machines.values()) idsPerName.set(machine.name.toLowerCase(), (idsPerName.get(machine.name.toLowerCase()) || 0) + 1);
+    for (const machine of machines.values()) {
+        const key = machine.name.toLowerCase();
+        machine.previous = idsPerName.get(key) > 1 && machine.lastAt < lastByName.get(key);
+        machine.redeployed = idsPerName.get(key) > 1;
+    }
+
+    return { states, events, users: [...users.values()], machines: [...machines.values()], since, days };
+}
+
+function tally(events) {
+    const counts = { problems: 0, restarts: 0, failed: 0, flags: 0 };
+    for (const e of events) for (const series of SERIES) if (series.match(e)) counts[series.key]++;
+    return counts;
+}
+
+// ---------- rendering
+
+function render() {
+    if (!data) return;
+    renderTiles();
+    renderChart();
+    renderTab();
+}
+
+function renderTiles() {
+    const users = data.users.filter(u => u.latest);
+    const withOneDrive = users.filter(u => u.latest.health !== 'noAccount');
+    const active = withOneDrive.filter(u => u.states.some(s => s._active));
+    const attention = withOneDrive.filter(u => healthOf(u.latest).bad);
+    const totals = tally(data.events);
+    const tiles = [
+        ['Users reporting', withOneDrive.length, `${active.length} watched right now`],
+        ['Need attention', attention.length, 'at their latest report'],
+        ['Problems detected', totals.problems, `${totals.flags} flagged by OneDrive itself`],
+        ['Restarts', totals.restarts, `${data.events.filter(e => e.kind === 'repaired').length} repaired`],
+        ['Repairs failed', totals.failed, 'still unhealthy after a restart'],
+        ['Machines', new Set(data.machines.filter(m => !m.previous).map(m => m.name.toLowerCase())).size, `${data.machines.filter(m => m.active).length} with a watcher running`]
+    ];
+    document.getElementById('tiles').replaceChildren(...tiles.map(([label, value, note]) =>
+        el('div', { class: 'card tile' }, el('div', { class: 'label' }, label), el('div', { class: 'value' }, value.toLocaleString()), el('div', { class: 'note' }, note))));
+}
+
+function chartDays() {
+    const days = [];
+    const day = new Date(data.since);
+    day.setHours(0, 0, 0, 0);
+    while (day.getTime() <= Date.now()) {
+        days.push({ key: localDay(day.getTime()), date: new Date(day), values: Object.fromEntries(SERIES.map(s => [s.key, 0])) });
+        day.setDate(day.getDate() + 1);
+    }
+    const byKey = new Map(days.map(d => [d.key, d]));
+    for (const e of data.events) {
+        const bucket = byKey.get(localDay(e._at));
+        if (!bucket) continue;
+        for (const series of SERIES) if (series.match(e)) bucket.values[series.key]++;
+    }
+    return days;
+}
+
+function niceMax(value) {
+    if (value <= 4) return 4;
+    const step = Math.pow(10, Math.floor(Math.log10(value)));
+    for (const m of [1, 2, 2.5, 5, 10]) if (m * step >= value) return m * step;
+    return 10 * step;
+}
+
+function renderChart() {
+    const days = chartDays();
+    const totals = Object.fromEntries(SERIES.map(s => [s.key, days.reduce((sum, d) => sum + d.values[s.key], 0)]));
+    document.getElementById('legend').replaceChildren(...SERIES.map(s =>
+        el('span', {}, el('span', { class: 'key', style: `background:${s.color}` }), `${s.name} (${totals[s.key]})`)));
+
+    const chart = document.getElementById('chart');
+    const tooltip = document.getElementById('tooltip');
+    tooltip.hidden = true;
+    const dayLabel = d => d.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+    const width = Math.max(chart.clientWidth, 280);
+    const height = 200;
+    const m = { top: 8, right: 4, bottom: 22, left: 32 };
+    const plotW = width - m.left - m.right;
+    const plotH = height - m.top - m.bottom;
+    const max = niceMax(Math.max(1, ...days.map(d => SERIES.reduce((sum, s) => sum + d.values[s.key], 0))));
+    const y = v => m.top + plotH - (v / max) * plotH;
+    const band = plotW / days.length;
+    const barW = Math.max(4, Math.min(24, band * 0.6));
+    const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, height, role: 'img', 'aria-label': 'Problems and repairs per day' });
+
+    for (let i = 0; i <= 4; i++) {
+        const v = (max / 4) * i;
+        root.append(svg('line', { x1: m.left, x2: width - m.right, y1: y(v), y2: y(v), stroke: i === 0 ? 'var(--axis)' : 'var(--grid)', 'stroke-width': 1, 'shape-rendering': 'crispEdges' }));
+        const label = svg('text', { x: m.left - 6, y: y(v) + 4, 'text-anchor': 'end' });
+        label.textContent = Number.isInteger(v) ? v : v.toFixed(1);
+        root.append(label);
+    }
+    const labelEvery = Math.ceil(days.length / Math.max(1, Math.floor(plotW / 56)));
+    days.forEach((d, i) => {
+        const cx = m.left + band * i + band / 2;
+        let base = 0;
+        const visible = SERIES.filter(s => d.values[s.key] > 0);
+        visible.forEach((s, index) => {
+            const top = y(base + d.values[s.key]);
+            const bottom = y(base) - (base > 0 ? 2 : 0); // 2px surface gap between stacked segments
+            base += d.values[s.key];
+            const h = Math.max(1, bottom - top);
+            const x = cx - barW / 2;
+            if (index === visible.length - 1) {
+                const r = Math.min(4, h, barW / 2);
+                root.append(svg('path', { fill: s.color, d: `M${x},${top + h}V${top + r}Q${x},${top} ${x + r},${top}H${x + barW - r}Q${x + barW},${top} ${x + barW},${top + r}V${top + h}Z` }));
+            } else {
+                root.append(svg('rect', { fill: s.color, x, y: top, width: barW, height: h }));
+            }
+        });
+        if (i % labelEvery === 0) {
+            const label = svg('text', { x: cx, y: height - 6, 'text-anchor': 'middle' });
+            label.textContent = dayLabel(d);
+            root.append(label);
+        }
+        const total = SERIES.reduce((sum, s) => sum + d.values[s.key], 0);
+        const hit = svg('rect', { class: 'hit', x: m.left + band * i, y: m.top, width: band, height: plotH, tabindex: 0, 'aria-label': `${dayLabel(d)}: ${SERIES.map(s => `${s.name} ${d.values[s.key]}`).join(', ')}` });
+        const show = () => {
+            tooltip.replaceChildren(el('div', { class: 'title' }, `${d.date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}, ${total} total`),
+                ...SERIES.map(s => el('div', { class: 'line' }, el('i', { style: `background:${s.color}` }), el('b', {}, String(d.values[s.key])), el('span', {}, s.name))));
+            tooltip.hidden = false;
+            const left = Math.min(Math.max(0, cx - tooltip.offsetWidth / 2), chart.clientWidth - tooltip.offsetWidth);
+            tooltip.style.left = `${left}px`;
+            tooltip.style.top = `${chart.offsetTop + Math.max(0, y(total) - tooltip.offsetHeight - 10)}px`;
+        };
+        hit.addEventListener('pointerenter', show);
+        hit.addEventListener('focus', show);
+        hit.addEventListener('pointerleave', () => { tooltip.hidden = true; });
+        hit.addEventListener('blur', () => { tooltip.hidden = true; });
+        root.append(hit);
+    });
+    chart.replaceChildren(root);
+
+    document.getElementById('chartTable').replaceChildren(el('table', { class: 'sub-table' },
+        el('thead', {}, el('tr', {}, el('th', {}, 'Day'), SERIES.map(s => el('th', { class: 'num' }, s.name)))),
+        el('tbody', {}, days.slice().reverse().map(d => el('tr', {}, el('td', { class: 'nowrap' }, d.key), SERIES.map(s => el('td', { class: 'num' }, count(d.values[s.key]))))))));
+}
+
+function matchesSearch(...texts) {
+    if (!view.search) return true;
+    return texts.some(text => text && String(text).toLowerCase().includes(view.search));
+}
+
+function stateText(state) {
+    return [state.user.upn, state.user.name, state.machine.name, state.machine.azureVmName, state.problem,
+        ...arr(state.status && state.status.roots).map(r => `${r.account} ${r.state} ${r.label}`)].join(' ');
+}
+
+function statusSummary(state) {
+    const status = state.status;
+    if (!status) return el('span', { class: 'muted' }, 'not read yet');
+    if (!status.answered) return el('span', {}, 'No answer, OneDrive is not responding');
+    if (status.error) return el('span', { class: 'muted' }, status.error);
+    const roots = arr(status.roots);
+    if (!roots.length) return el('span', { class: 'muted' }, 'no OneDrive sync roots');
+    return el('div', {}, roots.map(r => el('div', {},
+        roots.length > 1 ? el('span', { class: 'muted' }, `${r.account}: `) : null,
+        r.error ? el('span', { class: 'muted' }, r.error) : `${r.state}${r.label ? `, ${r.label}` : ''}`)));
+}
+
+function sortHeader(table, key, label, cls) {
+    const [current, direction] = view.sort[table];
+    return el('th', {
+        class: `sortable ${cls || ''}`, tabindex: 0, 'aria-sort': current === key ? (direction > 0 ? 'ascending' : 'descending') : null,
+        onclick: () => { view.sort[table] = [key, current === key ? -direction : 1]; renderTab(); },
+        onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }
+    }, label, current === key ? el('span', { class: 'arrow' }, direction > 0 ? '▲' : '▼') : null);
+}
+
+function sorted(items, table, keys) {
+    const [key, direction] = view.sort[table];
+    const getter = keys[key];
+    return items.slice().sort((a, b) => {
+        const va = getter(a), vb = getter(b);
+        const result = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+        return result * direction || keys.tiebreak(a, b);
+    });
+}
+
+function toggleRow(id) {
+    if (view.open.has(id)) view.open.delete(id); else view.open.add(id);
+    renderTab();
+}
+
+function mainRow(id, colspan, cells, detail) {
+    const open = view.open.has(id);
+    const row = el('tr', {
+        class: `main${open ? ' open' : ''}`, tabindex: 0, 'aria-expanded': String(open),
+        onclick: e => { if (!e.target.closest('a,button,input')) toggleRow(id); },
+        onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRow(id); } }
+    }, cells);
+    return open ? [row, el('tr', { class: 'detail' }, el('td', { colspan }, detail()))] : [row];
+}
+
+function renderUsers() {
+    let users = data.users.filter(u => u.latest);
+    if (!view.showNoAccount) users = users.filter(u => u.latest.health !== 'noAccount');
+    if (view.health === 'bad') users = users.filter(u => healthOf(u.latest).bad);
+    if (view.health === 'healthy') users = users.filter(u => !healthOf(u.latest).bad);
+    users = users.filter(u => matchesSearch(u.upn, u.name, ...u.states.map(stateText), u.lastIssue && u.lastIssue.message));
+    users = sorted(users, 'users', {
+        health: u => healthOf(u.latest).order,
+        user: u => u.upn.toLowerCase(),
+        machine: u => u.latest.machine.name.toLowerCase(),
+        last: u => -u.latest._at,
+        problems: u => -u.counts.problems,
+        restarts: u => -u.counts.restarts,
+        failed: u => -u.counts.failed,
+        tiebreak: (a, b) => a.upn.localeCompare(b.upn)
+    });
+    if (!users.length) return el('p', { class: 'empty' }, 'No users match.');
+    return el('div', { class: 'scroll' }, el('table', {},
+        el('thead', {}, el('tr', {},
+            sortHeader('users', 'health', 'Health'), sortHeader('users', 'user', 'User'), sortHeader('users', 'machine', 'Machine'),
+            el('th', {}, 'OneDrive status'), sortHeader('users', 'last', 'Last report'),
+            sortHeader('users', 'problems', 'Problems', 'num'), sortHeader('users', 'restarts', 'Restarts', 'num'), sortHeader('users', 'failed', 'Failed', 'num'),
+            el('th', {}, 'Last issue'))),
+        el('tbody', {}, users.map(u => mainRow(`user:${u.sid}`, 9, [
+            el('td', {}, pill(healthOf(u.latest))),
+            el('td', {}, el('div', {}, u.upn), u.name ? el('div', { class: 'small' }, u.name) : null),
+            el('td', {}, el('div', {}, u.latest.machine.name), u.machineCount > 1 ? el('div', { class: 'small' }, `and ${u.machineCount - 1} more`) : null),
+            el('td', {}, statusSummary(u.latest)),
+            el('td', {}, time(u.latest._at), el('div', { class: 'small' }, u.states.some(s => s._active) ? 'watching' : (u.latest._continuous ? 'not reporting' : 'single run'))),
+            el('td', { class: 'num' }, count(u.counts.problems)),
+            el('td', { class: 'num' }, count(u.counts.restarts)),
+            el('td', { class: 'num' }, count(u.counts.failed)),
+            el('td', { class: 'issue' }, u.lastIssue ? [el('div', {}, u.lastIssue.message), el('div', { class: 'small' }, time(u.lastIssue._at), ` on ${u.lastIssue.machine}`)] : el('span', { class: 'muted' }, 'none'))
+        ], () => userDetail(u))))));
+}
+
+function userDetail(user) {
+    return el('div', {},
+        el('div', { class: 'machines-grid' }, user.states.map(machineCard)),
+        el('h2', { style: 'margin-top:14px' }, 'Events'),
+        eventTable(user.events, 100, false, false));
+}
+
+function machineCard(state) {
+    const lastCheck = state.lastCheck;
+    const restart = state.lastRestart;
+    const counters = state.counters || {};
+    const vm = [state.machine.azureVmName, state.machine.resourceGroup].filter(Boolean).join(' in ');
+    const items = [
+        ['Machine id', `${state.machine.id}${vm ? ` (Azure VM ${vm})` : ''}`],
+        ['Windows build', state.machine.osBuild],
+        ['OneDrive', state.oneDrive && (state.oneDrive.running ? `${state.oneDrive.version || 'running'}, started ${fmtTime(Date.parse(state.oneDrive.startedAt))}` : 'not running')],
+        ['Script', `${state.run.mode === 'continuous' ? 'watching' : 'single run'}${state.run.diagnoseOnly ? ', diagnose only' : ''}, started ${fmtTime(Date.parse(state.run.startedAt))}, session ${state.run.sessionId}`],
+        state.problem ? ['Problem', `${state.problem} since ${fmtTime(Date.parse(state.problemSince))}`] : null,
+        lastCheck ? ['Last full check', [`${fmtTime(Date.parse(lastCheck.time))}: ${lastCheck.healthy ? 'healthy' : 'unhealthy'}`, reasonList(lastCheck.reasons)]] : null,
+        restart ? ['Last restart', [`${fmtTime(Date.parse(restart.time))}${restart.forced ? ' (forced)' : ''}: ${restart.healthyAfter === true ? 'healthy afterwards' : restart.healthyAfter === false ? 'still unhealthy afterwards' : 'in progress or interrupted'}`,
+            reasonList(arr(restart.healthyAfter === false ? restart.reasonsAfter : restart.reasons))]] : null,
+        ['Since script start', `${counters.checks || 0} checks, ${counters.unhealthyChecks || 0} unhealthy, ${counters.problems || 0} problems (${counters.problemsCleared || 0} cleared by themselves), ${counters.restarts || 0} restarts, ${counters.failedRepairs || 0} failed`]
+    ].filter(item => item && item[1]);
+
+    return el('div', { class: 'machine-card' },
+        el('header', {}, el('strong', {}, state.machine.name, (data.machines.find(m => m.id === state.machine.id) || {}).previous ? el('span', { class: 'badge' }, 'previous deployment') : null), pill(healthOf(state)),
+            el('span', { class: 'small' }, 'reported ', time(state._at), state._active ? ', watching' : '')),
+        el('dl', { class: 'kv' }, items.map(([key, value]) => [el('dt', {}, key), el('dd', {}, value)])),
+        accountTable(state));
+}
+
+function reasonList(reasons) {
+    const list = arr(reasons);
+    return list.length ? el('ul', {}, list.map(r => el('li', {}, r))) : null;
+}
+
+function accountTable(state) {
+    const roots = arr(state.status && state.status.roots);
+    const checked = arr(state.lastCheck && state.lastCheck.accounts);
+    const names = [...new Set([...checked.map(a => a.account), ...roots.map(r => r.account)])];
+    if (!names.length) return null;
+    return el('div', { class: 'scroll' }, el('table', { class: 'sub-table' },
+        el('thead', {}, el('tr', {}, ['Account', 'OneDrive status', 'Quota', 'Sync root', 'Download probe'].map(h => el('th', {}, h)))),
+        el('tbody', {}, names.map(name => {
+            const root = roots.find(r => r.account === name) || {};
+            const account = checked.find(a => a.account === name) || {};
+            return el('tr', {},
+                el('td', {}, el('div', {}, name), account.email ? el('div', { class: 'small' }, account.email) : null),
+                el('td', {}, root.error ? el('span', { class: 'muted' }, root.error) : `${root.state || ''}${root.label ? `, ${root.label}` : ''}`, root.moreInfo ? el('div', { class: 'small' }, root.moreInfo) : null),
+                el('td', {}, root.quota || ''),
+                el('td', {}, account.state ? `${account.state}${account.provider && account.provider !== account.state ? `, ${account.provider}` : ''}` : '', account.reason ? el('div', { class: 'small' }, account.reason) : null),
+                el('td', {}, account.probe || el('span', { class: 'muted' }, account.state ? 'skipped' : '')));
+        }))));
+}
+
+function renderMachines() {
+    let machines = data.machines.filter(m => matchesSearch(m.name, m.id, m.azureVmName, m.resourceGroup, ...m.states.map(stateText)));
+    if (view.health === 'bad') machines = machines.filter(m => m.attention > 0);
+    if (view.health === 'healthy') machines = machines.filter(m => m.attention === 0);
+    machines = sorted(machines, 'machines', {
+        name: m => m.name.toLowerCase(),
+        users: m => -m.users,
+        attention: m => -m.attention,
+        problems: m => -m.counts.problems,
+        restarts: m => -m.counts.restarts,
+        last: m => -m.lastAt,
+        tiebreak: (a, b) => b.lastAt - a.lastAt
+    });
+    if (!machines.length) return el('p', { class: 'empty' }, 'No machines match.');
+    return el('div', { class: 'scroll' }, el('table', {},
+        el('thead', {}, el('tr', {},
+            sortHeader('machines', 'name', 'Machine'), el('th', {}, 'Deployment'), el('th', {}, 'Windows'),
+            sortHeader('machines', 'users', 'Users', 'num'), sortHeader('machines', 'attention', 'Need attention', 'num'),
+            sortHeader('machines', 'problems', 'Problems', 'num'), sortHeader('machines', 'restarts', 'Restarts', 'num'), sortHeader('machines', 'last', 'Last report'))),
+        el('tbody', {}, machines.map(m => mainRow(`machine:${m.id}`, 8, [
+            el('td', {}, el('div', {}, m.name, m.previous ? el('span', { class: 'badge', title: 'This name reported later under another machine id' }, 'previous deployment') : (m.redeployed ? el('span', { class: 'badge', title: 'This name reported earlier under another machine id' }, 'redeployed') : null))),
+            el('td', {}, el('div', { class: 'small', title: m.id }, m.azureVmName ? `${m.azureVmName}${m.resourceGroup ? ` in ${m.resourceGroup}` : ''}` : `id ${m.id.slice(0, 8)}`)),
+            el('td', { class: 'small' }, m.osBuild || ''),
+            el('td', { class: 'num' }, count(m.users)),
+            el('td', { class: 'num' }, count(m.attention)),
+            el('td', { class: 'num' }, count(m.counts.problems)),
+            el('td', { class: 'num' }, count(m.counts.restarts)),
+            el('td', {}, time(m.lastAt), el('div', { class: 'small' }, m.active ? `${m.active} watching` : 'no watcher reporting'))
+        ], () => machineDetail(m))))));
+}
+
+function machineDetail(machine) {
+    return el('div', {},
+        el('p', { class: 'small' }, `Machine id ${machine.id}`),
+        el('div', { class: 'scroll' }, el('table', { class: 'sub-table' },
+            el('thead', {}, el('tr', {}, ['Health', 'User', 'OneDrive status', 'Last report', 'Problem or last check'].map(h => el('th', {}, h)))),
+            el('tbody', {}, machine.states.slice().sort((a, b) => healthOf(a).order - healthOf(b).order || b._at - a._at).map(state => el('tr', {},
+                el('td', {}, pill(healthOf(state))),
+                el('td', {}, state.user.upn),
+                el('td', {}, statusSummary(state)),
+                el('td', {}, time(state._at)),
+                el('td', {}, state.problem || (state.lastCheck && !state.lastCheck.healthy ? arr(state.lastCheck.reasons).join('; ') : el('span', { class: 'muted' }, 'none')))))))),
+        el('h2', { style: 'margin-top:14px' }, 'Events'),
+        eventTable(machine.events, 100, true, false));
+}
+
+function filterEvents(events) {
+    return events.filter(e =>
+        (view.level === '' || (view.level === 'issues' ? e.level === 'WARN' || e.level === 'ERROR' : e.level === view.level)) &&
+        (view.kind === '' || e.kind === view.kind));
+}
+
+function eventTable(events, limit, showUser, filtered) {
+    const shown = filtered ? filterEvents(events) : events;
+    if (!shown.length) return el('p', { class: 'empty' }, 'No events in this period.');
+    return el('div', {}, el('div', { class: 'scroll' }, el('table', { class: 'sub-table' },
+        el('thead', {}, el('tr', {}, el('th', {}, 'Time'), el('th', {}, 'Level'), el('th', {}, 'What'), showUser ? el('th', {}, 'User') : null, el('th', {}, 'Machine'), el('th', {}, 'Details'))),
+        el('tbody', {}, shown.slice(0, limit).map(e => el('tr', {},
+            el('td', { class: 'nowrap' }, fmtTime(e._at)),
+            el('td', {}, pill(LEVEL[e.level] || LEVEL.INFO)),
+            el('td', { class: 'nowrap' }, KIND[e.kind] || e.kind),
+            showUser ? el('td', {}, e.upn) : null,
+            el('td', {}, e.machine),
+            el('td', {}, e.message, reasonList(e.reasons))))))),
+        shown.length > limit ? el('p', { class: 'more' }, `Showing the latest ${limit} of ${shown.length} events. Narrow the filter to see others.`) : null);
+}
+
+function renderEvents() {
+    const events = data.events.filter(e => matchesSearch(e.upn, e.machine, e.message, ...arr(e.reasons)));
+    return eventTable(events, EVENT_ROWS, true, true);
+}
+
+function renderTab() {
+    for (const tab of document.querySelectorAll('.tabs button')) tab.setAttribute('aria-selected', String(tab.dataset.tab === view.tab));
+    document.getElementById('healthFilter').hidden = view.tab === 'events';
+    document.getElementById('noAccountToggle').hidden = view.tab !== 'users';
+    document.getElementById('levelFilter').hidden = view.tab !== 'events';
+    document.getElementById('kindFilter').hidden = view.tab !== 'events';
+    const content = view.tab === 'users' ? renderUsers() : view.tab === 'machines' ? renderMachines() : renderEvents();
+    document.getElementById('tabContent').replaceChildren(content);
+}
+
+// ---------- wiring
+
+document.getElementById('kindFilter').replaceChildren(el('option', { value: '' }, 'Any kind'), ...Object.entries(KIND).map(([key, label]) => el('option', { value: key }, label)));
+document.getElementById('connect').addEventListener('submit', e => { e.preventDefault(); load(); });
+document.getElementById('cleanupButton').addEventListener('click', cleanup);
+document.getElementById('days').addEventListener('change', () => { if (data) load(); });
+document.getElementById('search').addEventListener('input', e => { view.search = e.target.value.trim().toLowerCase(); if (data) renderTab(); });
+document.getElementById('healthFilter').addEventListener('change', e => { view.health = e.target.value; if (data) renderTab(); });
+document.getElementById('levelFilter').addEventListener('change', e => { view.level = e.target.value; if (data) renderTab(); });
+document.getElementById('kindFilter').addEventListener('change', e => { view.kind = e.target.value; if (data) renderTab(); });
+document.getElementById('showNoAccount').addEventListener('change', e => { view.showNoAccount = e.target.checked; if (data) renderTab(); });
+document.getElementById('autoRefresh').addEventListener('change', e => {
+    clearInterval(refreshTimer);
+    refreshTimer = e.target.checked ? setInterval(() => { if (data) load(); }, 5 * 60000) : null;
+});
+for (const tab of document.querySelectorAll('.tabs button')) tab.addEventListener('click', () => { view.tab = tab.dataset.tab; renderTab(); });
+let resizeTimer = null;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (data) renderChart(); }, 150); });
+
+try {
+    const saved = sessionStorage.getItem('onedrive-sync-report-sas');
+    if (saved) document.getElementById('sas').value = saved;
+} catch { /* storage blocked */ }
+</script>
+</body>
+</html>

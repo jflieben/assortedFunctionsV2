@@ -25,6 +25,15 @@
     Don't use a GPO logon script: Windows stops those after 10 minutes by default, and a synchronous one blocks the logon.
     Each watcher is a powershell.exe using about 90 MB of memory. On hosts with many sessions, remediate-OneDriveHydration.ps1 as an hourly Intune Remediation costs nothing in between.
 
+    Reporting (optional, -ReportSasUrl) adds rows to the table onedrivesyncstatus of a storage account, viewed with onedrive-sync-report.html:
+        PartitionKey s<yyyyMMdd>  state: health, OneDrive status, last check and restart, as JSON in 'state'. Sent on every change and at least every 30 minutes
+        PartitionKey e<yyyyMMdd>  events: problems, restarts, OneDrive errors and watcher starts
+        RowKey <user SID>_<machine id>_<UTC time>[_<sequence>]
+    The machine id is the Azure VM id (new for every AVD redeployment, also under the same name), outside Azure the Windows MachineGuid.
+    The script only adds rows, so a table SAS with just Add permission (sp=a, tn=onedrivesyncstatus) is enough. Every user can read it.
+    Create the table first, or use an account SAS that may create it. The page needs its own SAS and CORS rule, see onedrive-sync-report.html.
+    Uploads never hold up repairs: a failed upload is retried with the next report, up to 200 events are queued.
+
     .PARAMETER Force
     Restart OneDrive even when it looks healthy. With -Continuous only on the first check.
 
@@ -36,7 +45,7 @@
 
     .PARAMETER Install
     Copy the script to %ProgramFiles%\repair-OneDrive and start it hidden with -Continuous at every user's logon (HKLM Run). Needs elevation or SYSTEM.
-    -DiagnoseOnly and -MaxLogSizeMB are passed on.
+    -DiagnoseOnly, -MaxLogSizeMB and -ReportSasUrl are passed on.
 
     .PARAMETER Uninstall
     Remove what -Install added. Running watchers stop at logoff.
@@ -46,6 +55,9 @@
 
     .PARAMETER MaxLogSizeMB
     Size at which the log rotates (.log to .1, .1 to .2 and so on); the 3 most recent old logs are kept.
+
+    .PARAMETER ReportSasUrl
+    SAS URL of the storage account, or of its onedrivesyncstatus table, to report to. E.g. https://<account>.table.core.windows.net/onedrivesyncstatus?sp=a&tn=onedrivesyncstatus&sig=...
 
     .NOTES
     filename: repair-OneDrive.ps1
@@ -61,7 +73,8 @@ param(
     [Switch]$Install,
     [Switch]$Uninstall,
     [String]$LogPath = (Join-Path $env:LOCALAPPDATA 'repair-OneDrive\repair-OneDrive.log'),
-    [ValidateRange(1, 1024)][Int]$MaxLogSizeMB = 5
+    [ValidateRange(1, 1024)][Int]$MaxLogSizeMB = 5,
+    [String]$ReportSasUrl
 )
 
 $statusTimeoutSeconds = 10 #OneDrive's status normally answers within a second
@@ -76,6 +89,9 @@ $fullCheckMinutes = 15 #-Continuous: interval of the full check including the do
 $heartbeatMinutes = 10 #-Continuous: log an unchanged status (or a repeating error) at least this often
 $logonWaitMinutes = 5 #-Continuous: how long OneDrive gets to start at logon before it is judged
 $logFilesToKeep = 3
+$reportMinutes = 30 #-ReportSasUrl: send the state at least this often, besides on every change
+$reportTimeoutSeconds = 15
+$maxQueuedEvents = 200
 
 function Write-Log([String]$message, [ValidateSet('INFO','OK','WARN','ERROR')][String]$level = 'INFO'){
     $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $level, $message
@@ -114,6 +130,7 @@ if($Install -or $Uninstall){
             $command = "$env:SystemRoot\System32\conhost.exe --headless $env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$installPath`" -Continuous"
             if($DiagnoseOnly){ $command += ' -DiagnoseOnly' }
             if($PSBoundParameters.ContainsKey('MaxLogSizeMB')){ $command += " -MaxLogSizeMB $MaxLogSizeMB" }
+            if($ReportSasUrl){ $command += " -ReportSasUrl `"$ReportSasUrl`"" }
             $runKey.SetValue('repair-OneDrive', $command)
             Write-Host "Installed, every user starts this at logon: $command"
         }else{
@@ -354,9 +371,10 @@ function Get-Accounts(){
         if($paths.Count -gt 0){
             [PSCustomObject]@{
                 Account = $account.PSChildName
+                Email = $account.GetValue('UserEmail')
                 KeyPath = $account.PSPath
                 Paths = $paths
-                IgnoreReason = $(if($account.PSChildName -eq 'Personal' -and $personalSyncDisabled){ 'personal sync disabled by policy' })
+                IgnoreReason = $(if($account.PSChildName -eq 'Personal' -and $personalSyncDisabled){ 'personal sync disabled by policy' }else{ $null })
             }
         }
     }
@@ -454,6 +472,212 @@ function Test-Hydration($account){
     return [PSCustomObject]@{Healthy = ($result -notin $unhealthyReadResults); Message = "download probe of $target failed after $elapsed ms: $message (0x$($result.ToString('X8')))"}
 }
 
+function Get-UtcStamp([DateTime]$date = (Get-Date)){
+    return $date.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+}
+
+function Initialize-Report(){
+    #what the report state tracks; with -ReportSasUrl also where to send it and who and where this is
+    $script:report = @{
+        table = $null; tables = $null; sas = $null; user = $null; machine = $null; signature = $null; sequence = 0
+        run = [ordered]@{mode = $(if($Continuous){ 'continuous' }else{ 'once' }); diagnoseOnly = [bool]$DiagnoseOnly; startedAt = Get-UtcStamp; sessionId = (Get-Process -Id $PID).SessionId; reportMinutes = $reportMinutes}
+        events = New-Object Collections.Generic.List[Object]
+        sent = [DateTime]::MinValue; failing = $False
+        repairing = $False; problem = $null; problemSince = $null
+        status = $null; lastCheck = $null; lastRestart = $null; accountStates = @{}
+        counters = [ordered]@{checks = 0; unhealthyChecks = 0; problems = 0; problemsCleared = 0; restarts = 0; failedRepairs = 0}
+    }
+    if(-not $ReportSasUrl){ return }
+
+    #accepts the account URL or the table URL, the table is always onedrivesyncstatus
+    $uri = [Uri]$ReportSasUrl
+    $accountUrl = "$($uri.Scheme)://$($uri.Authority)$($uri.AbsolutePath.TrimEnd('/') -replace '/onedrivesyncstatus(\(\))?$', '')"
+    $script:report.table = "$accountUrl/onedrivesyncstatus"
+    $script:report.tables = "$accountUrl/Tables"
+    $script:report.sas = $uri.Query.TrimStart('?')
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    if([Net.WebRequest]::DefaultWebProxy){ [Net.WebRequest]::DefaultWebProxy.Credentials = [Net.CredentialCache]::DefaultNetworkCredentials }
+
+    #the SID keys the rows: stable across session hosts and redeployments, unlike the machine name
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $upn = @(& "$env:SystemRoot\System32\whoami.exe" /upn 2>$null)
+    $upn = if($LASTEXITCODE -eq 0 -and $upn.Count -gt 0){ "$($upn[0])".Trim() }else{ @(Get-Accounts | Where-Object { $_.Email -and $_.Account -ne 'Personal' } | ForEach-Object { $_.Email })[0] }
+    $script:report.user = [ordered]@{sid = $identity.User.Value; upn = $upn; name = $identity.Name}
+
+    #AVD hosts are redeployed under the same names: the Azure VM id is new for every deployment
+    $machine = [ordered]@{id = $null; name = $env:COMPUTERNAME; azureVmName = $null; resourceGroup = $null; osBuild = $null}
+    try{
+        $request = [Net.HttpWebRequest]::Create('http://169.254.169.254/metadata/instance/compute?api-version=2021-02-01')
+        $request.Headers.Add('Metadata', 'true')
+        $request.Proxy = $null
+        $request.Timeout = 2000
+        $response = $request.GetResponse()
+        try{ $compute = (New-Object IO.StreamReader($response.GetResponseStream())).ReadToEnd() | ConvertFrom-Json }finally{ $response.Close() }
+        $machine.id = $compute.vmId
+        $machine.azureVmName = $compute.name
+        $machine.resourceGroup = $compute.resourceGroupName
+    }catch{
+        #not on Azure
+    }
+    $hklm = [Microsoft.Win32.RegistryKey]::OpenBaseKey('LocalMachine', 'Registry64')
+    try{
+        if(-not $machine.id){ $machine.id = $hklm.OpenSubKey('SOFTWARE\Microsoft\Cryptography').GetValue('MachineGuid') }
+        $windows = $hklm.OpenSubKey('SOFTWARE\Microsoft\Windows NT\CurrentVersion')
+        $machine.osBuild = "$($windows.GetValue('CurrentBuild')).$($windows.GetValue('UBR'))"
+    }finally{
+        $hklm.Close()
+    }
+    $machine.id = "$($machine.id)".ToLowerInvariant()
+    $script:report.machine = $machine
+    Write-Log "Reporting to $($script:report.table) as $upn, machine id $($machine.id)"
+    Add-ReportEvent 'start' 'INFO' "repair-OneDrive started$(if($Continuous){' (continuous)'})$(if($DiagnoseOnly){' (diagnose only)'}) in session $($script:report.run.sessionId)"
+}
+
+function Add-ReportEvent([String]$kind, [String]$level, [String]$message, $reasons){
+    #the row key is fixed here, so a retry after a lost answer finds the row already there
+    if(-not $script:report.table){ return }
+    $now = (Get-Date).ToUniversalTime()
+    $script:report.sequence++
+    $script:report.events.Add([ordered]@{
+        PartitionKey = "e$($now.ToString('yyyyMMdd'))"
+        RowKey = "$($script:report.user.sid)_$($script:report.machine.id)_$($now.ToString('yyyyMMddHHmmssfff'))_$($script:report.sequence)"
+        time = Get-UtcStamp $now; kind = $kind; level = $level; message = $message; reasons = (ConvertTo-Json -InputObject @($reasons | Where-Object { $_ } | ForEach-Object { "$_" }) -Compress)
+        upn = $script:report.user.upn; sid = $script:report.user.sid; machine = $script:report.machine.name; machineId = $script:report.machine.id
+    })
+    while($script:report.events.Count -gt $maxQueuedEvents){ $script:report.events.RemoveAt(0) }
+}
+
+function Update-ReportStatus($status){
+    #keeps OneDrive's latest status for the report; queues an event when an account enters or leaves a state OneDrive flags itself (Error, Warning, Paused, Offline)
+    $script:report.status = [ordered]@{
+        time = Get-UtcStamp; answered = $status.Answered; error = $status.Error
+        roots = @($status.Roots | ForEach-Object { [ordered]@{account = $_.Account; state = $_.State; label = $_.Label; quota = $_.Quota; moreInfo = $_.MoreInfo; error = $_.Error} })
+    }
+    if(-not $status.Answered -or $status.Error){ return }
+    foreach($root in $status.Roots){
+        if($root.Error -or -not $root.State){ continue }
+        $previous = $script:report.accountStates[$root.Account]
+        $script:report.accountStates[$root.Account] = $root.State
+        $flagged = $root.State -notin @('InSync', 'Syncing')
+        if($flagged -and $root.State -ne $previous){
+            Add-ReportEvent 'oneDriveState' $(if($root.State -eq 'Error'){ 'ERROR' }else{ 'WARN' }) "$($root.Account): OneDrive reports $($root.State), $($root.Label)$(if($root.MoreInfo){ " | $($root.MoreInfo)" })"
+        }elseif(-not $flagged -and $previous -and $previous -notin @('InSync', 'Syncing')){
+            Add-ReportEvent 'oneDriveState' 'OK' "$($root.Account): OneDrive reports $($root.State) again after $previous"
+        }
+    }
+}
+
+function Get-ReportHealth(){
+    if($script:report.repairing){ return 'repairing' }
+    if($script:report.problem){ return 'problem' }
+    if($script:report.lastCheck -and -not $script:report.lastCheck.healthy){ return 'unhealthy' }
+    if(-not (Test-OneDriveUser)){ return 'noAccount' }
+    if(@($script:report.status.roots | Where-Object { $_.state -and $_.state -notin @('InSync', 'Syncing') }).Count -gt 0){ return 'attention' }
+    return 'healthy'
+}
+
+function Get-ReportState(){
+    $oneDrive = Get-OneDriveProcess
+    return [ordered]@{
+        schema = 1
+        reportedAt = Get-UtcStamp
+        health = Get-ReportHealth
+        problem = $script:report.problem
+        problemSince = $script:report.problemSince
+        user = $script:report.user
+        machine = $script:report.machine
+        run = $script:report.run
+        oneDrive = [ordered]@{running = [bool]$oneDrive; version = $(if($oneDrive){ $oneDrive.FileVersion }else{ $null }); startedAt = $(if($oneDrive){ Get-UtcStamp $oneDrive.StartTime }else{ $null })}
+        status = $script:report.status
+        lastCheck = $script:report.lastCheck
+        lastRestart = $script:report.lastRestart
+        counters = $script:report.counters
+    }
+}
+
+function Send-ReportEntity($entity, [String]$url = $script:report.table){
+    #POSTs a row, or a table to the Tables endpoint. Returns the HTTP status (0 = no answer) and Azure's error code
+    $values = [ordered]@{}
+    foreach($name in $entity.Keys){ if($null -ne $entity[$name]){ $values[$name] = $entity[$name] } }
+    try{
+        $request = [Net.HttpWebRequest]::Create("$($url)?$($script:report.sas)")
+        $request.Method = 'POST'
+        $request.Timeout = $reportTimeoutSeconds * 1000
+        $request.ReadWriteTimeout = $reportTimeoutSeconds * 1000
+        $request.Accept = 'application/json;odata=nometadata'
+        $request.ContentType = 'application/json'
+        $request.Headers.Add('x-ms-version', '2019-02-02')
+        $request.Headers.Add('DataServiceVersion', '3.0;NetFx')
+        $request.Headers.Add('Prefer', 'return-no-content')
+        $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $values -Compress))
+        $request.ContentLength = $bytes.Length
+        $stream = $request.GetRequestStream()
+        try{ $stream.Write($bytes, 0, $bytes.Length) }finally{ $stream.Close() }
+        $response = $request.GetResponse()
+        $response.Close()
+        return [PSCustomObject]@{Status = [int]$response.StatusCode; Code = $null}
+    }catch{
+        $webException = $_.Exception
+        while($webException -and $webException -isnot [Net.WebException]){ $webException = $webException.InnerException }
+        if($webException -and $webException.Response){
+            $response = $webException.Response
+            $code = $response.Headers['x-ms-error-code']
+            try{
+                $body = (New-Object IO.StreamReader($response.GetResponseStream())).ReadToEnd()
+                if(-not $code){ $code = ($body | ConvertFrom-Json).'odata.error'.code }
+            }catch{
+                #no readable error body
+            }
+            $result = [PSCustomObject]@{Status = [int]$response.StatusCode; Code = $code}
+            $response.Close()
+            return $result
+        }
+        return [PSCustomObject]@{Status = 0; Code = $_.Exception.GetBaseException().Message}
+    }
+}
+
+function Add-ReportRow($entity){
+    #inserts a row; 409 means it is already there (a retry after a lost answer). Creates a missing table when the SAS allows it. Throws when it fails
+    for($attempt = 1; $attempt -le 2; $attempt++){
+        $result = Send-ReportEntity $entity
+        if(($result.Status -ge 200 -and $result.Status -lt 300) -or $result.Status -eq 409){ return }
+        if($result.Code -ne 'TableNotFound'){ break }
+        $null = Send-ReportEntity @{TableName = 'onedrivesyncstatus'} $script:report.tables
+    }
+    throw "$(if($result.Status){ "HTTP $($result.Status) " })$($result.Code)"
+}
+
+function Send-Report([Switch]$force){
+    #sends queued events and the state: when forced, when events wait or the state changed (at most once a minute), and every $reportMinutes. Never throws
+    if(-not $script:report.table){ return }
+    $state = Get-ReportState
+    #Syncing and InSync alternate all the time, only other changes count
+    $roots = @($state.status.roots | ForEach-Object { "$($_.account)=$($_.state -replace '^Syncing$', 'InSync')" }) -join ','
+    $signature = "$($state.health)|$($state.problem)|$($state.oneDrive.startedAt)|$($state.lastCheck.healthy)|$($state.lastCheck.reasons -join ';')|$($state.lastRestart.time)|$($state.lastRestart.healthyAfter)|$($state.status.answered)|$roots"
+    $sinceSent = ((Get-Date) - $script:report.sent).TotalSeconds
+    if(-not $force -and $sinceSent -lt $reportMinutes * 60 -and ($sinceSent -lt 60 -or ($script:report.events.Count -eq 0 -and $signature -eq $script:report.signature))){ return }
+    $script:report.sent = Get-Date
+    try{
+        foreach($reportEvent in $script:report.events.ToArray()){
+            Add-ReportRow $reportEvent
+            [void]$script:report.events.Remove($reportEvent)
+        }
+        $now = (Get-Date).ToUniversalTime()
+        Add-ReportRow ([ordered]@{
+            PartitionKey = "s$($now.ToString('yyyyMMdd'))"
+            RowKey = "$($script:report.user.sid)_$($script:report.machine.id)_$($now.ToString('yyyyMMddHHmmssfff'))"
+            reportedAt = $state.reportedAt; health = $state.health; upn = $script:report.user.upn; machine = $script:report.machine.name
+            state = ConvertTo-Json $state -Compress -Depth 8
+        })
+        $script:report.signature = $signature
+        if($script:report.failing){ Write-Log "Reporting works again" 'OK' }
+        $script:report.failing = $False
+    }catch{
+        if(-not $script:report.failing){ Write-Log "Reporting failed, retrying with the next report: $_" 'WARN' }
+        $script:report.failing = $True
+    }
+}
+
 function Invoke-Diagnosis([Int]$connectWait){
     #logs what it finds, returns whether OneDrive is healthy and why not
     $reasons = New-Object Collections.Generic.List[String]
@@ -471,6 +695,7 @@ function Invoke-Diagnosis([Int]$connectWait){
     #1: OneDrive's own status
     $hung = $False
     $status = Get-StatusUI $statusTimeoutSeconds
+    Update-ReportStatus $status
     if(-not $status.Answered){
         Write-Log "Status: no answer within $statusTimeoutSeconds s, OneDrive.exe is not responding" 'ERROR'
         if($oneDrive){
@@ -508,9 +733,11 @@ function Invoke-Diagnosis([Int]$connectWait){
         if(@($states | Where-Object { $_.State -eq 'disconnected' }).Count -eq 0 -or (Get-Date) -gt $deadline){ break }
         Start-Sleep -Seconds 5
     }
+    $details = New-Object Collections.Generic.List[Object]
     for($i = 0; $i -lt $accounts.Count; $i++){
         $account = $accounts[$i].Account
         $state = $states[$i]
+        $probe = $null
         if($state.State -eq 'ignored'){
             Write-Log "$($account): ignored, $($state.Reason)"
         }elseif($state.State -eq 'disconnected'){
@@ -530,6 +757,15 @@ function Invoke-Diagnosis([Int]$connectWait){
                 $reasons.Add("$($account): $($probe.Message)")
             }
         }
+        $details.Add([ordered]@{account = $account; email = $accounts[$i].Email; state = $state.State; provider = $state.Status; reason = $state.Reason; probe = $probe.Message; probeHealthy = $probe.Healthy})
+    }
+
+    $script:report.counters.checks++
+    if($reasons.Count -gt 0){ $script:report.counters.unhealthyChecks++ }
+    $script:report.lastCheck = [ordered]@{
+        time = Get-UtcStamp; healthy = ($reasons.Count -eq 0); reasons = @($reasons)
+        oneDrive = $(if($oneDrive){ [ordered]@{pid = $oneDrive.Id; version = $oneDrive.FileVersion; startedAt = Get-UtcStamp $oneDrive.StartTime} }else{ $null })
+        accounts = $details.ToArray()
     }
     return [PSCustomObject]@{Healthy = ($reasons.Count -eq 0); Reasons = $reasons}
 }
@@ -571,34 +807,50 @@ function Restart-OneDrive(){
 }
 
 function Invoke-Repair([Switch]$force){
-    #full check and, when needed (or forced), a restart. Returns whether OneDrive ends up healthy
-    Write-Log "--- Checking OneDrive"
-    $before = Invoke-Diagnosis -connectWait 60
-    if($before.Healthy -and -not $force){
-        Write-Log "OneDrive is healthy, nothing to repair" 'OK'
-        return $True
-    }
-    if(-not $before.Healthy){
-        Write-Log "Unhealthy: $($before.Reasons -join '; ')" 'ERROR'
-    }
-    if($DiagnoseOnly){
-        Write-Log "Diagnose only, not restarting OneDrive"
-        return $before.Healthy
-    }
+    #full check and, when needed (or forced), a restart. Returns whether OneDrive ends up healthy. Reports the outcome
+    try{
+        Write-Log "--- Checking OneDrive"
+        $before = Invoke-Diagnosis -connectWait 60
+        if($before.Healthy -and -not $force){
+            Write-Log "OneDrive is healthy, nothing to repair" 'OK'
+            return $True
+        }
+        if(-not $before.Healthy){
+            Write-Log "Unhealthy: $($before.Reasons -join '; ')" 'ERROR'
+            Add-ReportEvent 'unhealthy' 'ERROR' "Check found OneDrive unhealthy" $before.Reasons
+        }
+        if($DiagnoseOnly){
+            Write-Log "Diagnose only, not restarting OneDrive"
+            return $before.Healthy
+        }
 
-    Write-Log "--- Restarting OneDrive$(if($before.Healthy){' (forced)'})"
-    Restart-OneDrive
-    Write-Log "--- Following OneDrive's status for up to $settleSeconds s"
-    $null = Watch-Status $settleSeconds -untilSettled
+        Write-Log "--- Restarting OneDrive$(if($before.Healthy){' (forced)'})"
+        $script:report.counters.restarts++
+        $script:report.repairing = $True
+        $script:report.lastRestart = [ordered]@{time = Get-UtcStamp; forced = $before.Healthy; reasons = @($before.Reasons); healthyAfter = $null; reasonsAfter = @()}
+        Add-ReportEvent 'restart' 'WARN' "Restarting OneDrive$(if($before.Healthy){' (forced)'})" $before.Reasons
+        Send-Report -force
+        Restart-OneDrive
+        Write-Log "--- Following OneDrive's status for up to $settleSeconds s"
+        $null = Watch-Status $settleSeconds -untilSettled
 
-    Write-Log "--- Checking OneDrive again"
-    $after = Invoke-Diagnosis -connectWait 180
-    if($after.Healthy){
-        Write-Log "OneDrive is healthy after the restart" 'OK'
-        return $True
+        Write-Log "--- Checking OneDrive again"
+        $after = Invoke-Diagnosis -connectWait 180
+        $script:report.lastRestart.healthyAfter = $after.Healthy
+        $script:report.lastRestart.reasonsAfter = @($after.Reasons)
+        if($after.Healthy){
+            Write-Log "OneDrive is healthy after the restart" 'OK'
+            Add-ReportEvent 'repaired' 'OK' "OneDrive is healthy after the restart"
+            return $True
+        }
+        Write-Log "Still unhealthy after the restart: $($after.Reasons -join '; ')" 'ERROR'
+        $script:report.counters.failedRepairs++
+        Add-ReportEvent 'repairFailed' 'ERROR' "Still unhealthy after the restart" $after.Reasons
+        return $False
+    }finally{
+        $script:report.repairing = $False
+        Send-Report -force
     }
-    Write-Log "Still unhealthy after the restart: $($after.Reasons -join '; ')" 'ERROR'
-    return $False
 }
 
 function Test-OneDriveUser(){
@@ -634,6 +886,7 @@ function Watch-OneDrive(){
     while($True){
         try{
             $status = Get-StatusUI 5
+            Update-ReportStatus $status
             $text = Format-Status $status
             if($text -ne $lastText -or $lastLogged -lt (Get-Date).AddMinutes(-$heartbeatMinutes)){
                 Write-Log "  $(if($text -eq $lastText){ 'unchanged: ' })$text" $(if($status.Answered){ 'INFO' }else{ 'ERROR' })
@@ -643,19 +896,30 @@ function Watch-OneDrive(){
 
             $problem = Get-QuickProblem $status
             if(-not $problem){
-                if($problemSince){ Write-Log "Problem cleared up by itself" 'OK' }
+                if($problemSince){
+                    Write-Log "Problem cleared up by itself" 'OK'
+                    $script:report.counters.problemsCleared++
+                    Add-ReportEvent 'cleared' 'OK' "Cleared up by itself: $($script:report.problem)"
+                }
                 $problemSince = $null
             }elseif(-not $problemSince){
                 $problemSince = Get-Date
                 Write-Log "$problem, repairing if this lasts $problemSeconds s" 'WARN'
+                $script:report.counters.problems++
+                $script:report.problemSince = Get-UtcStamp $problemSince
+                Add-ReportEvent 'problem' 'WARN' $problem
             }
+            $script:report.problem = if($problemSince){ $problem }
+            if(-not $problemSince){ $script:report.problemSince = $null }
 
             $repairNow = $problemSince -and $problemSince -lt (Get-Date).AddSeconds(-$problemSeconds)
             if($repairNow -or (Get-Date) -gt $nextFullCheck){
                 if($repairNow){ Write-Log "$problem for $problemSeconds s" 'ERROR' }
+                $problemSince = $null
+                $script:report.problem = $null
+                $script:report.problemSince = $null
                 $null = Invoke-Repair
                 $nextFullCheck = (Get-Date).AddMinutes($fullCheckMinutes)
-                $problemSince = $null
                 $lastText = $null
                 Write-Log "--- Keeping watch, next full check at $($nextFullCheck.ToString('HH:mm'))"
             }
@@ -663,10 +927,12 @@ function Watch-OneDrive(){
             #an error that repeats every round is logged once per heartbeat
             if("$_" -ne $lastError -or $lastErrorLogged -lt (Get-Date).AddMinutes(-$heartbeatMinutes)){
                 Write-Log "Watch error: $_" 'ERROR'
+                Add-ReportEvent 'error' 'ERROR' "Watch error: $_"
                 $lastError = "$_"
                 $lastErrorLogged = Get-Date
             }
         }
+        Send-Report
         Start-Sleep -Seconds $watchIntervalSeconds
     }
 }
@@ -696,6 +962,12 @@ if($Continuous){
     }
 }
 Write-Log "=== repair-OneDrive on $env:COMPUTERNAME (session $((Get-Process -Id $PID).SessionId)) as $([Security.Principal.WindowsIdentity]::GetCurrent().Name)$(if($Continuous){', continuous'}), log: $LogPath"
+try{
+    Initialize-Report
+}catch{
+    Write-Log "Reporting is off, could not set it up: $_" 'WARN'
+    $script:report.table = $null
+}
 if($Continuous){
     Wait-OneDriveStartup
 }
@@ -703,6 +975,8 @@ try{
     $healthy = Invoke-Repair -force:$Force
 }catch{
     Write-Log "Failed: $_" 'ERROR'
+    Add-ReportEvent 'error' 'ERROR' "Failed: $_"
+    Send-Report -force
     $healthy = $False
 }
 if($Continuous){
