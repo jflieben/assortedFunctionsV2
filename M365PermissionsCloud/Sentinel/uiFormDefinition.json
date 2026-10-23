@@ -12,22 +12,7 @@
                     "elements": [
                         {
                             "name": "resourceScope",
-                            "type": "Microsoft.Common.ResourceScope",
-                            "instanceDetailsLabel": "Deployment record",
-                            "location": {
-                                "label": "Region",
-                                "toolTip": "Only where the deployment itself is recorded. The rule follows the workspace's region, because those two have to match."
-                            }
-                        },
-                        {
-                            "name": "workspace",
-                            "type": "Microsoft.Solutions.ResourceSelector",
-                            "label": "Log Analytics workspace",
-                            "toolTip": "The workspace permission changes are written to. For Microsoft Sentinel, this is the workspace Sentinel runs on.",
-                            "resourceType": "Microsoft.OperationalInsights/workspaces",
-                            "constraints": {
-                                "required": true
-                            }
+                            "type": "Microsoft.Common.ResourceScope"
                         },
                         {
                             "name": "scanNodes",
@@ -44,9 +29,22 @@
                 },
                 {
                     "name": "details",
-                    "label": "Scan nodes and names",
-                    "description": "Your scan nodes are looked up on the previous tab, from the M365PNodeType tag Azure puts on them, so the identities below are normally already filled in. An empty box means the lookup found nothing, which happens when you are signed in to a different tenant than the scanner runs in: the object id is then on the Identity blade of the scan node's virtual machine.",
+                    "label": "Workspace and scan nodes",
+                    "description": "The workspace list is scoped to the subscription chosen on the previous tab. Your scan nodes are looked up there too, from the M365PNodeType tag Azure puts on them, so the identities below are normally already filled in. An empty box means that lookup found nothing, which happens when you are signed in to a different tenant than the scanner runs in: the object id is then on the Identity blade of the scan node's virtual machine.",
                     "elements": [
+                        {
+                            "name": "workspace",
+                            "type": "Microsoft.Solutions.ResourceSelector",
+                            "label": "Log Analytics workspace",
+                            "toolTip": "The workspace permission changes are written to. For Microsoft Sentinel, this is the workspace Sentinel runs on.",
+                            "resourceType": "Microsoft.OperationalInsights/workspaces",
+                            "scope": {
+                                "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]"
+                            },
+                            "constraints": {
+                                "required": true
+                            }
+                        },
                         {
                             "name": "principalIds",
                             "type": "Microsoft.Common.TextBox",
@@ -105,7 +103,7 @@
             "location": "[steps('basics').resourceScope.location.name]",
             "parameters": {
                 "location": "[steps('basics').resourceScope.location.name]",
-                "workspaceResourceId": "[steps('basics').workspace.id]",
+                "workspaceResourceId": "[steps('details').workspace.id]",
                 "scannerPrincipalIds": "[if(empty(steps('details').principalIds), if(empty(steps('basics').scanNodes), '', coalesce(first(steps('basics').scanNodes.data).ids, '')), steps('details').principalIds)]",
                 "dataCollectionRuleName": "[steps('details').ruleName]",
                 "tableName": "[steps('details').tableName]"

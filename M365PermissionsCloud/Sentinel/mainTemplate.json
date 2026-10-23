@@ -12,14 +12,14 @@
         "workspaceResourceId": {
             "type": "string",
             "metadata": {
-                "description": "Resource id of the Log Analytics workspace that permission changes should be written to. The table and the rule are created next to it, in its own resource group."
+                "description": "Resource id of the Log Analytics workspace that permission changes should be written to. Copy it from the workspace's Properties page in the Azure portal. The table and the rule are created next to it, in its own resource group and region."
             }
         },
         "scannerPrincipalIds": {
             "type": "string",
             "minLength": 36,
             "metadata": {
-                "description": "Object ids of the M365Permissions scan nodes' managed identities, comma separated. One per scan node. The minimum length is one object id, so that an empty value fails here rather than halfway through the deployment."
+                "description": "Object ids of the M365Permissions scan nodes' managed identities, comma separated, one per scan node. Each is on the Identity page of that scan node's virtual machine in the Azure portal. The minimum length is one object id, so an empty value fails here rather than halfway through the deployment."
             }
         },
         "dataCollectionRuleName": {
