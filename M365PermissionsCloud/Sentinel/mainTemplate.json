@@ -1,0 +1,357 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "Region of the resource group this deployment is recorded in. It does not affect where data goes: the table and the rule are created next to the workspace, in the workspace's own region, because those two have to match."
+            }
+        },
+        "workspaceResourceId": {
+            "type": "string",
+            "metadata": {
+                "description": "Resource id of the Log Analytics workspace that permission changes should be written to. The table and the rule are created next to it, in its own resource group."
+            }
+        },
+        "scannerPrincipalIds": {
+            "type": "string",
+            "metadata": {
+                "description": "Object ids of the M365Permissions scan nodes' managed identities, comma separated. One per scan node."
+            }
+        },
+        "dataCollectionRuleName": {
+            "type": "string",
+            "defaultValue": "dcr-m365permissions-delta",
+            "metadata": {
+                "description": "Name for the data collection rule this creates. The scanner finds the rule by its tag, so the name is free."
+            }
+        },
+        "tableName": {
+            "type": "string",
+            "defaultValue": "M365PermissionsDelta_CL",
+            "metadata": {
+                "description": "Name for the custom table in the workspace. Azure requires a _CL suffix."
+            }
+        }
+    },
+    "variables": {
+        "workspaceSubscriptionId": "[split(parameters('workspaceResourceId'), '/')[2]]",
+        "workspaceResourceGroup": "[split(parameters('workspaceResourceId'), '/')[4]]",
+        "workspaceName": "[last(split(parameters('workspaceResourceId'), '/'))]",
+        "principalIds": "[split(replace(replace(parameters('scannerPrincipalIds'), ' ', ''), ';', ','), ',')]",
+        "publisherRoleId": "3913510d-42f4-4a8e-9b2a-1d521058ebec",
+        "readerRoleId": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+        "tableColumns": [
+            {
+                "name": "TimeGenerated",
+                "type": "dateTime",
+                "description": "When the change reached the workspace"
+            },
+            {
+                "name": "logType",
+                "type": "string",
+                "description": "permissionAdded, permissionModified or permissionDeleted"
+            },
+            {
+                "name": "targetId",
+                "type": "long",
+                "description": "The scanner's id for the object the permission sits on"
+            },
+            {
+                "name": "targetIdentifier",
+                "type": "string",
+                "description": "The object's own identifier, such as a site url or a subscription id"
+            },
+            {
+                "name": "targetSecondaryIdentifier",
+                "type": "string",
+                "description": "Secondary identifier, where the object has one"
+            },
+            {
+                "name": "targetName",
+                "type": "string",
+                "description": "Display name of the object"
+            },
+            {
+                "name": "targetCategory",
+                "type": "string",
+                "description": "Sharepoint, Onedrive, Entra, Azure, ExoRecipients and so on"
+            },
+            {
+                "name": "targetType",
+                "type": "string",
+                "description": "Type within the category, such as Site or List or Library"
+            },
+            {
+                "name": "permissionId",
+                "type": "string",
+                "description": "Identifies this permission across scans"
+            },
+            {
+                "name": "permissionTargetPath",
+                "type": "string",
+                "description": "Path the permission applies to"
+            },
+            {
+                "name": "permissionPrincipalEntraId",
+                "type": "string",
+                "description": "Object id of who holds it, or Anonymous, AllUsers, AllInternalUsers"
+            },
+            {
+                "name": "permissionprincipalEntraStatus",
+                "type": "string",
+                "description": "Enabled, Disabled, Deleted or N/A"
+            },
+            {
+                "name": "permissionPrincipalName",
+                "type": "string",
+                "description": "Name of who holds it, as the source system knows them"
+            },
+            {
+                "name": "permissionPrincipalType",
+                "type": "string",
+                "description": "Internal User, External User, EntraSecurityGroup, SharingLink and so on"
+            },
+            {
+                "name": "permissionPrincipalRole",
+                "type": "string",
+                "description": "The permission, role or sharing right itself"
+            },
+            {
+                "name": "permissionPrincipalRoleType",
+                "type": "string",
+                "description": "Allow or Deny"
+            },
+            {
+                "name": "permissionPrincipalTenure",
+                "type": "string",
+                "description": "Permanent or Eligible"
+            },
+            {
+                "name": "permissionThrough",
+                "type": "string",
+                "description": "Direct, SharingLink, or the group it comes through"
+            },
+            {
+                "name": "permissionIsUnique",
+                "type": "int",
+                "description": "1 when the permission reaches exactly one person"
+            }
+        ],
+        "streamColumns": [
+            {
+                "name": "logType",
+                "type": "string"
+            },
+            {
+                "name": "targetId",
+                "type": "long"
+            },
+            {
+                "name": "targetIdentifier",
+                "type": "string"
+            },
+            {
+                "name": "targetSecondaryIdentifier",
+                "type": "string"
+            },
+            {
+                "name": "targetName",
+                "type": "string"
+            },
+            {
+                "name": "targetCategory",
+                "type": "string"
+            },
+            {
+                "name": "targetType",
+                "type": "string"
+            },
+            {
+                "name": "permissionId",
+                "type": "string"
+            },
+            {
+                "name": "permissionTargetPath",
+                "type": "string"
+            },
+            {
+                "name": "permissionPrincipalEntraId",
+                "type": "string"
+            },
+            {
+                "name": "permissionprincipalEntraStatus",
+                "type": "string"
+            },
+            {
+                "name": "permissionPrincipalName",
+                "type": "string"
+            },
+            {
+                "name": "permissionPrincipalType",
+                "type": "string"
+            },
+            {
+                "name": "permissionPrincipalRole",
+                "type": "string"
+            },
+            {
+                "name": "permissionPrincipalRoleType",
+                "type": "string"
+            },
+            {
+                "name": "permissionPrincipalTenure",
+                "type": "string"
+            },
+            {
+                "name": "permissionThrough",
+                "type": "string"
+            },
+            {
+                "name": "permissionIsUnique",
+                "type": "int"
+            }
+        ]
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2023-07-01",
+            "name": "m365permissions-sentinel",
+            "subscriptionId": "[variables('workspaceSubscriptionId')]",
+            "resourceGroup": "[variables('workspaceResourceGroup')]",
+            "properties": {
+                "mode": "Incremental",
+                "template": {
+                    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                    "contentVersion": "1.0.0.0",
+                    "resources": [
+                        {
+                            "type": "Microsoft.OperationalInsights/workspaces/tables",
+                            "apiVersion": "2022-10-01",
+                            "name": "[concat(variables('workspaceName'), '/', parameters('tableName'))]",
+                            "properties": {
+                                "schema": {
+                                    "name": "[parameters('tableName')]",
+                                    "columns": "[variables('tableColumns')]"
+                                }
+                            }
+                        },
+                        {
+                            "type": "Microsoft.Insights/dataCollectionRules",
+                            "apiVersion": "2023-03-11",
+                            "name": "[parameters('dataCollectionRuleName')]",
+                            "location": "[reference(parameters('workspaceResourceId'), '2022-10-01', 'Full').location]",
+                            "kind": "Direct",
+                            "tags": {
+                                "M365PermissionsSentinel": "true"
+                            },
+                            "dependsOn": [
+                                "[resourceId('Microsoft.OperationalInsights/workspaces/tables', variables('workspaceName'), parameters('tableName'))]"
+                            ],
+                            "properties": {
+                                "streamDeclarations": {
+                                    "Custom-M365PermissionsDelta": {
+                                        "columns": "[variables('streamColumns')]"
+                                    }
+                                },
+                                "destinations": {
+                                    "logAnalytics": [
+                                        {
+                                            "workspaceResourceId": "[parameters('workspaceResourceId')]",
+                                            "name": "m365permissions"
+                                        }
+                                    ]
+                                },
+                                "dataFlows": [
+                                    {
+                                        "streams": [
+                                            "Custom-M365PermissionsDelta"
+                                        ],
+                                        "destinations": [
+                                            "m365permissions"
+                                        ],
+                                        "transformKql": "source | extend TimeGenerated = now()",
+                                        "outputStream": "[concat('Custom-', parameters('tableName'))]"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "type": "Microsoft.Authorization/roleAssignments",
+                            "apiVersion": "2022-04-01",
+                            "name": "[guid(variables('workspaceSubscriptionId'), variables('workspaceResourceGroup'), parameters('dataCollectionRuleName'), variables('principalIds')[copyIndex()], variables('publisherRoleId'))]",
+                            "scope": "[format('Microsoft.Insights/dataCollectionRules/{0}', parameters('dataCollectionRuleName'))]",
+                            "copy": {
+                                "name": "publisherAssignments",
+                                "count": "[length(variables('principalIds'))]"
+                            },
+                            "dependsOn": [
+                                "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName'))]"
+                            ],
+                            "properties": {
+                                "description": "Lets this M365Permissions scan node post permission changes to the rule.",
+                                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('publisherRoleId'))]",
+                                "principalId": "[variables('principalIds')[copyIndex()]]",
+                                "principalType": "ServicePrincipal"
+                            }
+                        },
+                        {
+                            "type": "Microsoft.Authorization/roleAssignments",
+                            "apiVersion": "2022-04-01",
+                            "name": "[guid(variables('workspaceSubscriptionId'), variables('workspaceResourceGroup'), parameters('dataCollectionRuleName'), variables('principalIds')[copyIndex()], variables('readerRoleId'))]",
+                            "scope": "[format('Microsoft.Insights/dataCollectionRules/{0}', parameters('dataCollectionRuleName'))]",
+                            "copy": {
+                                "name": "readerAssignments",
+                                "count": "[length(variables('principalIds'))]"
+                            },
+                            "dependsOn": [
+                                "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName'))]"
+                            ],
+                            "properties": {
+                                "description": "Lets this M365Permissions scan node read the rule's ingestion endpoint and immutable id, which is how it knows where to post.",
+                                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('readerRoleId'))]",
+                                "principalId": "[variables('principalIds')[copyIndex()]]",
+                                "principalType": "ServicePrincipal"
+                            }
+                        }
+                    ],
+                    "outputs": {
+                        "ingestionEndpoint": {
+                            "type": "string",
+                            "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName')), '2023-03-11').endpoints.logsIngestion]"
+                        },
+                        "immutableId": {
+                            "type": "string",
+                            "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName')), '2023-03-11').immutableId]"
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "ingestionEndpoint": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'm365permissions-sentinel')).outputs.ingestionEndpoint.value]"
+        },
+        "immutableId": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'm365permissions-sentinel')).outputs.immutableId.value]"
+        },
+        "scanNodesGranted": {
+            "type": "int",
+            "value": "[length(variables('principalIds'))]"
+        },
+        "deploymentRegion": {
+            "type": "string",
+            "value": "[parameters('location')]"
+        },
+        "whatHappensNext": {
+            "type": "string",
+            "value": "The M365Permissions scanner finds this rule within ten minutes and starts sending permission changes to it. Nothing needs to be entered in the M365Permissions portal."
+        }
+    }
+}
