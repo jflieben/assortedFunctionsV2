@@ -41,18 +41,25 @@
                             }
                         },
                         {
+                            "name": "found",
+                            "type": "Microsoft.Common.TextBlock",
+                            "options": {
+                                "text": "[if(empty(steps('basics').scanNodes), 'Your scan nodes could not be looked up. Enter their identity below.', if(empty(coalesce(first(steps('basics').scanNodes.data).ids, '')), 'No machine tagged M365PNodeType was found in the subscriptions you can see. Check that you are signed in to the tenant the scanner runs in, or enter the identity below.', concat('Scan node identities found, and used as they are: ', first(steps('basics').scanNodes.data).ids)))]"
+                            }
+                        },
+                        {
                             "name": "principalIds",
                             "type": "Microsoft.Common.TextBox",
                             "label": "Scan node identities",
-                            "defaultValue": "[if(empty(steps('basics').scanNodes), '', coalesce(first(steps('basics').scanNodes.data).ids, ''))]",
-                            "toolTip": "Object ids of the managed identities of your M365Permissions scan nodes, comma separated. Filled in for you from the M365PNodeType tag Azure put on those machines. To look one up by hand, it is on the Identity blade of the scan node's virtual machine.",
+                            "placeholder": "Only needed when none were found above",
+                            "toolTip": "Object ids of the managed identities of your M365Permissions scan nodes, comma separated. Found for you from the M365PNodeType tag Azure put on those machines, and only asked for when that lookup comes back empty. To find one by hand, it is on the Identity blade of the scan node's virtual machine.",
                             "multiLine": false,
                             "constraints": {
-                                "required": true,
+                                "required": "[if(empty(steps('basics').scanNodes), true, empty(coalesce(first(steps('basics').scanNodes.data).ids, '')))]",
                                 "validations": [
                                     {
-                                        "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(\\s*,\\s*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})*$",
-                                        "message": "One or more object ids, comma separated. Empty means no machine tagged M365PNodeType was found in the subscriptions you can see: check that you are signed in to the tenant the scanner runs in, or copy the object id from the scan node virtual machine's Identity blade."
+                                        "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(\\s*,\\s*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})*$",
+                                        "message": "One or more object ids, comma separated."
                                     }
                                 ]
                             }
@@ -107,7 +114,7 @@
             "parameters": {
                 "location": "[steps('basics').resourceScope.location.name]",
                 "workspaceResourceId": "[steps('basics').workspace.id]",
-                "scannerPrincipalIds": "[steps('basics').principalIds]",
+                "scannerPrincipalIds": "[if(empty(steps('basics').principalIds), if(empty(steps('basics').scanNodes), '', coalesce(first(steps('basics').scanNodes.data).ids, '')), steps('basics').principalIds)]",
                 "dataCollectionRuleName": "[steps('names').ruleName]",
                 "tableName": "[steps('names').tableName]"
             }

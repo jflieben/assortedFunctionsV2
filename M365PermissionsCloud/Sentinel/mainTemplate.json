@@ -17,8 +17,9 @@
         },
         "scannerPrincipalIds": {
             "type": "string",
+            "minLength": 36,
             "metadata": {
-                "description": "Object ids of the M365Permissions scan nodes' managed identities, comma separated. One per scan node."
+                "description": "Object ids of the M365Permissions scan nodes' managed identities, comma separated. One per scan node. The minimum length is one object id, so that an empty value fails here rather than halfway through the deployment."
             }
         },
         "dataCollectionRuleName": {
