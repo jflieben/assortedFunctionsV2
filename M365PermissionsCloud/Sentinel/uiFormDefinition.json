@@ -1,0 +1,116 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json#",
+    "view": {
+        "kind": "Form",
+        "properties": {
+            "title": "M365Permissions: send permission changes to Microsoft Sentinel",
+            "steps": [
+                {
+                    "name": "basics",
+                    "label": "Basics",
+                    "description": "M365Permissions sends every permission change it finds to a table in your Log Analytics workspace. This creates that table, a data collection rule that routes into it, and the two role assignments that let the scanner publish to the rule and read it. The table and the rule are created next to the workspace, in the workspace's own resource group and region. Nothing has to be entered in the M365Permissions portal afterwards: the scanner finds the rule by its tag within ten minutes and starts sending.",
+                    "elements": [
+                        {
+                            "name": "resourceScope",
+                            "type": "Microsoft.Common.ResourceScope",
+                            "instanceDetailsLabel": "Deployment record",
+                            "location": {
+                                "label": "Region",
+                                "toolTip": "Only where the deployment itself is recorded. The rule follows the workspace's region, because those two have to match."
+                            }
+                        },
+                        {
+                            "name": "workspace",
+                            "type": "Microsoft.Solutions.ResourceSelector",
+                            "label": "Log Analytics workspace",
+                            "toolTip": "The workspace permission changes are written to. For Microsoft Sentinel, this is the workspace Sentinel runs on.",
+                            "resourceType": "Microsoft.OperationalInsights/workspaces",
+                            "constraints": {
+                                "required": true
+                            }
+                        },
+                        {
+                            "name": "scanNodes",
+                            "type": "Microsoft.Solutions.ArmApiControl",
+                            "request": {
+                                "method": "POST",
+                                "path": "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01",
+                                "body": {
+                                    "query": "resources | where type =~ 'microsoft.compute/virtualmachines' | where tostring(tags) contains 'M365PNodeType' | extend principalId = tostring(identity.principalId) | where isnotempty(principalId) | summarize ids = strcat_array(make_list(principalId), ',')"
+                                }
+                            }
+                        },
+                        {
+                            "name": "principalIds",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Scan node identities",
+                            "defaultValue": "[if(empty(steps('basics').scanNodes), '', coalesce(first(steps('basics').scanNodes.data).ids, ''))]",
+                            "toolTip": "Object ids of the managed identities of your M365Permissions scan nodes, comma separated. Filled in for you from the M365PNodeType tag Azure put on those machines. To look one up by hand, it is on the Identity blade of the scan node's virtual machine.",
+                            "multiLine": false,
+                            "constraints": {
+                                "required": true,
+                                "validations": [
+                                    {
+                                        "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(\\s*,\\s*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})*$",
+                                        "message": "One or more object ids, comma separated. Empty means no machine tagged M365PNodeType was found in the subscriptions you can see: check that you are signed in to the tenant the scanner runs in, or copy the object id from the scan node virtual machine's Identity blade."
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "names",
+                    "label": "Names",
+                    "description": "Only worth changing if you already have a table or a rule under these names.",
+                    "elements": [
+                        {
+                            "name": "ruleName",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Data collection rule name",
+                            "defaultValue": "dcr-m365permissions-delta",
+                            "toolTip": "The scanner finds the rule by its tag, so this name is yours to choose.",
+                            "constraints": {
+                                "required": true,
+                                "validations": [
+                                    {
+                                        "regex": "^[-\\w\\._\\(\\)]{1,64}$",
+                                        "message": "Up to 64 characters: letters, numbers, and - . _ ( )"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "name": "tableName",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Table name",
+                            "defaultValue": "M365PermissionsDelta_CL",
+                            "toolTip": "The custom table permission changes are written to. Azure requires custom table names to end in _CL. Pick a different name if a table under this one was created by the old workspace key route, because changing that table's schema would stop it ingesting.",
+                            "constraints": {
+                                "required": true,
+                                "validations": [
+                                    {
+                                        "regex": "^[A-Za-z][A-Za-z0-9_]{0,40}_CL$",
+                                        "message": "Start with a letter, letters numbers and underscores only, and end in _CL."
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        "outputs": {
+            "kind": "ResourceGroup",
+            "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]",
+            "location": "[steps('basics').resourceScope.location.name]",
+            "parameters": {
+                "location": "[steps('basics').resourceScope.location.name]",
+                "workspaceResourceId": "[steps('basics').workspace.id]",
+                "scannerPrincipalIds": "[steps('basics').principalIds]",
+                "dataCollectionRuleName": "[steps('names').ruleName]",
+                "tableName": "[steps('names').tableName]"
+            }
+        }
+    }
+}

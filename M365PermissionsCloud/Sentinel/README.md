@@ -4,7 +4,7 @@ One click sets up the supported way for M365Permissions to send permission chang
 workspace. Pick your workspace, select Create, done. Nothing has to be entered in the M365Permissions
 portal afterwards.
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjflieben%2FassortedFunctionsV2%2Fmain%2FM365PermissionsCloud%2FSentinel%2FmainTemplate.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fjflieben%2FassortedFunctionsV2%2Fmain%2FM365PermissionsCloud%2FSentinel%2FcreateUiDefinition.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjflieben%2FassortedFunctionsV2%2Fmain%2FM365PermissionsCloud%2FSentinel%2FmainTemplate.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fjflieben%2FassortedFunctionsV2%2Fmain%2FM365PermissionsCloud%2FSentinel%2FuiFormDefinition.json)
 
 The form asks for one thing: which Log Analytics workspace to write to. Your scan nodes are found for
 you, from the `M365PNodeType` tag Azure put on them, so there is nothing to look up or paste.
@@ -176,3 +176,18 @@ az graph query -q "resources | where type =~ 'microsoft.compute/virtualmachines'
 ```
 
 The deployment is idempotent, so running it again is safe and reports no changes when there are none.
+
+## Changing the form
+
+`uiFormDefinition.json` is a portal [Form view](https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/form-view-overview), which is the format the portal reads when a form is attached to a
+template url with `uiFormDefinitionUri`. It is not the `createUiDefinition.json` format Azure Managed
+Applications use: that one is passed in through a marketplace offer, not through a url, and the portal
+answers an attempt to use it with nothing more than "the extension encountered an unexpected error".
+
+Preview and iterate on it in the [Form view sandbox](https://aka.ms/form/sandbox), which takes pasted
+JSON and so needs no commit. The schema is published, so a form can also be checked offline against
+`https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json` with any validator
+that handles `oneOf`. PowerShell's `Test-Json` does not, and reports both branches of every `oneOf` as
+errors.
+
+The template itself is checked with the repository's arm-ttk: `Test-AzTemplate -TemplatePath <this folder>`.
