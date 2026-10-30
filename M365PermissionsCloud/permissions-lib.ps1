@@ -1390,12 +1390,20 @@ function Set-M365PGrant_exoRoleAssignment {
         $scopeName = Resolve-M365PExoManagementScope -Context $Context -Name $Grant.scope.name -MailAddress $Context.mailAddress
 
         $parameters.CustomResourceScope = $scopeName
+        $assignments = @(Get-M365PExoRoleAssignmentsForScanner -Context $Context -ExoSpn $exoSpn -Role $Grant.role) | Where-Object { $_.Role -eq $Grant.role }
+        $inScope = @($assignments | Where-Object { $_.CustomResourceScope -eq $scopeName -or $_.CustomRecipientWriteScope -eq $scopeName })
         # a stale assignment on the same role but the wrong scope would otherwise shadow the new one
-        $existing = @(Get-M365PExoRoleAssignmentsForScanner -Context $Context -ExoSpn $exoSpn -Role $Grant.role) |
-            Where-Object { $_.Role -eq $Grant.role -and $_.CustomResourceScope -ne $scopeName -and $_.CustomRecipientWriteScope -ne $scopeName }
-        foreach ($stale in $existing) {
+        foreach ($stale in @($assignments | Where-Object { $_.CustomResourceScope -ne $scopeName -and $_.CustomRecipientWriteScope -ne $scopeName })) {
             Write-M365PLog -Level Warning -Message "Removing the differently scoped $($Grant.role) assignment $($stale.Name)"
             try { $null = Invoke-M365PExoCommand -Context $Context -Cmdlet "Remove-ManagementRoleAssignment" -Parameters @{ Identity = $stale.Name; Confirm = $false } } catch {}
+        }
+
+        # The audit reports this missing as soon as the sender address changes, while the assignment is
+        # still in place. Repointing the scope above is then the whole fix, and assigning the same role in
+        # the same scope again adds nothing but a chance to fail on the duplicate after the work is done.
+        if ($inScope.Count -gt 0) {
+            Write-M365PLog -Message "$($Grant.role) is already assigned within $scopeName, not assigning it again"
+            return
         }
     }
 
@@ -2792,7 +2800,18 @@ function Test-M365PRequiredGrantsPresent {
     # 'satisfied' counts as present here: this gates whether the product can run, and a grant covered by
     # a broader permission the tenant already holds can run. That it should still be re-authorized onto
     # the narrower permission is reported separately, and is not a reason to refuse to work.
-    $missing = @($candidates | Where-Object { $_.state -notin @("granted", "satisfied", "notApplicable") })
+    #
+    # Only 'missing' blocks, which is the same line Get-BlockingPermissionsForCategory draws and for the
+    # same reason: 'unavailable' and 'error' mean the grant could not be evaluated, which is not the same
+    # as knowing it is absent. The seven frontend scopes come back unavailable on every MSP install, where
+    # the single sign-on application lives in a tenant this identity cannot read, and on any install whose
+    # portal application does not exist yet. Treating that as absent refuses every future update for good,
+    # which is a worse outcome than updating with one answer unknown.
+    $missing = @($candidates | Where-Object { $_.state -eq "missing" })
+    $unknown = @($candidates | Where-Object { $_.state -in @("unavailable", "error") })
+    if ($unknown.Count -gt 0) {
+        Write-M365PLog -Level Warning -Message "Could not evaluate $($unknown.Count) required permission(s), which is not the same as them being absent: $(($unknown.key) -join ", ")"
+    }
     if ($missing.Count -eq 0) { return $true }
     Write-M365PLog -Level Warning -Message "Missing required permissions: $(($missing.key) -join ", ")"
     return $false
