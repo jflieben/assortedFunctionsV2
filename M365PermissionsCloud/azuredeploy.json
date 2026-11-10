@@ -1,0 +1,180 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "plan": {
+      "type": "string",
+      "defaultValue": "standardv2",
+      "allowedValues": [
+        "standardv2",
+        "enterprisev2"
+      ],
+      "metadata": {
+        "description": "Marketplace plan: standardv2 or enterprisev2 (support)."
+      }
+    },
+    "planVersion": {
+      "type": "string",
+      "defaultValue": "2.0.6",
+      "metadata": {
+        "description": "Version of the plan in Partner Center. Keep the default."
+      }
+    },
+    "applicationResourceName": {
+      "type": "string",
+      "defaultValue": "M365Permissions",
+      "metadata": {
+        "description": "Name of the managed application."
+      }
+    },
+    "managedResourceGroupName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the managed resource group. Empty: mrg-m365permissions-<unique>."
+      }
+    },
+    "jitAccessEnabled": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Just-in-time access for support (automatic approval, 8 hours; change it on the application later). Only at install."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region of every resource."
+      }
+    },
+    "welcomeMail": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Marketplace: who gets the welcome mail (link and setup command) once the instance runs. Empty: none."
+      }
+    },
+    "tenantName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Display name of the scanned tenant (the instance reads it from Microsoft Graph when empty)."
+      }
+    },
+    "planSku": {
+      "type": "string",
+      "defaultValue": "B1",
+      "allowedValues": [
+        "B1",
+        "B2",
+        "B3",
+        "P0v3",
+        "P2v3"
+      ],
+      "metadata": {
+        "description": "Plan size, chosen by number of users: the minimum, the plan never moves below it. Only B1 moves up by itself: it starts on B2 until the first scan is done, and goes to B2 while a scan backlog lasts."
+      }
+    },
+    "alertSenderMailbox": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Mailbox the scan identity may send alert mails as (set up in Exchange by the deployment script). Empty: none."
+      }
+    },
+    "allowedIpRanges": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "IP ranges (CIDR or single IPv4, comma separated) that may reach the web app; everything else is refused. Empty on a managed application: peered, public until the peering is up; not peered, nobody gets in. Elsewhere empty: open, protected by sign-in."
+      }
+    },
+    "tagsByResource": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Marketplace: tags per resource type (Microsoft.Common.TagsByResource in the form), on top of tags."
+      }
+    },
+    "networkAddressSpace": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Address space (CIDR, /20 to /25) of the instance's own virtual network. Empty: 10.250.0.0/24."
+      }
+    },
+    "peerVirtualNetworkId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource id of the customer's virtual network. The worker peers with it once the setup command gave the scan identity Network Contributor on it, then closes the web app to the internet (on a managed application only without allowed IP ranges). Empty: no peering."
+      }
+    },
+    "privateEndpoints": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Storage and Key Vault through private endpoints (public access off, extra cost) instead of service endpoints."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Solutions/applications",
+      "apiVersion": "2021-07-01",
+      "name": "[parameters('applicationResourceName')]",
+      "location": "[parameters('location')]",
+      "kind": "MarketPlace",
+      "tags": "[if(contains(parameters('tagsByResource'), 'Microsoft.Solutions/applications'), parameters('tagsByResource')['Microsoft.Solutions/applications'], createObject())]",
+      "plan": {
+        "name": "[parameters('plan')]",
+        "product": "[if(equals(subscription().tenantId, 'ab773612-c917-4af5-8b81-4a5222340706'), 'm365permissions-preview', 'm365permissions')]",
+        "publisher": "liebenconsultancy",
+        "version": "[parameters('planVersion')]"
+      },
+      "properties": {
+        "managedResourceGroupId": "[subscriptionResourceId('Microsoft.Resources/resourceGroups', if(empty(parameters('managedResourceGroupName')), concat('mrg-m365permissions-', uniqueString(resourceGroup().id, parameters('applicationResourceName'))), parameters('managedResourceGroupName')))]",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "welcomeMail": {
+            "value": "[parameters('welcomeMail')]"
+          },
+          "tenantName": {
+            "value": "[parameters('tenantName')]"
+          },
+          "planSku": {
+            "value": "[parameters('planSku')]"
+          },
+          "alertSenderMailbox": {
+            "value": "[parameters('alertSenderMailbox')]"
+          },
+          "allowedIpRanges": {
+            "value": "[parameters('allowedIpRanges')]"
+          },
+          "tagsByResource": {
+            "value": "[parameters('tagsByResource')]"
+          },
+          "networkAddressSpace": {
+            "value": "[parameters('networkAddressSpace')]"
+          },
+          "peerVirtualNetworkId": {
+            "value": "[parameters('peerVirtualNetworkId')]"
+          },
+          "privateEndpoints": {
+            "value": "[parameters('privateEndpoints')]"
+          }
+        },
+        "jitAccessPolicy": "[if(parameters('jitAccessEnabled'), createObject('jitAccessEnabled', true(), 'jitApprovalMode', 'AutoApprove', 'maximumJitAccessDuration', 'PT8H', 'jitApprovers', createArray()), createObject('jitAccessEnabled', false()))]"
+      }
+    }
+  ],
+  "outputs": {
+    "applicationId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Solutions/applications', parameters('applicationResourceName'))]"
+    }
+  }
+}

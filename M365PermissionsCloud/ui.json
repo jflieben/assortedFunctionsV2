@@ -1,0 +1,284 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json#",
+  "view": {
+    "kind": "Form",
+    "properties": {
+      "title": "M365Permissions",
+      "steps": [
+        {
+          "name": "basics",
+          "label": "Basics",
+          "description": "M365Permissions runs in your own Azure subscription and shows who can reach what in Microsoft 365, Entra ID and Azure. A few minutes after the deployment, we mail you a page that follows the installation. The instance then shows the setup command a Global Administrator runs. If a policy requires tags on resource groups, create the resource group with its tags first and choose it here, and tag the managed application on the Tags step: its managed resource group takes those tags.",
+          "elements": [
+            {
+              "name": "resourceScope",
+              "type": "Microsoft.Common.ResourceScope",
+              "location": {
+                "label": "Region",
+                "toolTip": "Where you want to run it and keep its data. If you want to connect it to your virtual network, it has to be in the same region as that network.",
+                "resourceTypes": [
+                  "Microsoft.Web/sites",
+                  "Microsoft.Storage/storageAccounts",
+                  "Microsoft.KeyVault/vaults"
+                ]
+              }
+            },
+            {
+              "name": "plan",
+              "type": "Microsoft.Common.DropDown",
+              "label": "Plan",
+              "defaultValue": "Standard",
+              "toolTip": "Standard and Enterprise scan the same; Enterprise adds support. See m365permissions.com.",
+              "constraints": {
+                "required": true,
+                "allowedValues": [
+                  {
+                    "label": "Standard",
+                    "value": "standardv2"
+                  },
+                  {
+                    "label": "Enterprise",
+                    "value": "enterprisev2"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "welcomeMail",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Your mail address",
+              "toolTip": "The main contact for this instance. JSolve sends the installation page, update information and support messages there. You can change it later in M365Permissions under Settings, Contact.",
+              "defaultValue": "",
+              "constraints": {
+                "required": true,
+                "regex": "^(?=.{5,254}$)[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                "validationMessage": "A mail address."
+              }
+            },
+            {
+              "name": "tenantName",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Organisation name",
+              "toolTip": "Shown in M365Permissions on reports, optional.",
+              "defaultValue": "",
+              "constraints": {
+                "required": false,
+                "regex": "^.{0,100}$",
+                "validationMessage": "At most 100 characters."
+              }
+            },
+            {
+              "name": "planSku",
+              "type": "Microsoft.Common.DropDown",
+              "label": "Size",
+              "toolTip": "Choose by your number of users. This is the minimum size: the plan never moves below it. The smallest size starts one size up until the first scan is done, and moves up again while a large scan backlog lasts.",
+              "defaultValue": "25 - 500 users",
+              "constraints": {
+                "allowedValues": [
+                  {
+                    "label": "0 - 25 users",
+                    "value": "B1"
+                  },
+                  {
+                    "label": "25 - 500 users",
+                    "value": "B2"
+                  },
+                  {
+                    "label": "500 - 50000 users",
+                    "value": "B3"
+                  },
+                  {
+                    "label": "I'm huge! 50000+ users",
+                    "value": "P2v3"
+                  }
+                ],
+                "required": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "alerts",
+          "label": "Alert mails",
+          "elements": [
+            {
+              "name": "about",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Info",
+                "text": "The instance's resources are protected, its managed identity looks after them (updates etc). People sign in to M365Permissions with their Entra ID account; the setup command makes you Admin."
+              }
+            },
+            {
+              "name": "alertSenderMailbox",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Mailbox for alert mails (optional)",
+              "toolTip": "A mailbox in your tenant that M365Permissions may send alerts from (a shared mailbox is enough). The setup command lets M365Permissions send ONLY from that mailbox (vs Mail.Send graph permissions). Empty: no alert mails.",
+              "defaultValue": "",
+              "constraints": {
+                "required": false,
+                "regex": "^$|^(?=.{5,254}$)[^\\s@']+@[^\\s@']+\\.[^\\s@']+$",
+                "validationMessage": "A mail address, or empty."
+              }
+            }
+          ]
+        },
+        {
+          "name": "network",
+          "label": "Network",
+          "elements": [
+            {
+              "name": "about",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Info",
+                "text": "M365Permissions runs in its own virtual network, and its storage and Key Vault accept connections from that network only. Choose a range that does not overlap your networks if you may connect it later."
+              }
+            },
+            {
+              "name": "addressSpace",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Address space for the instance (CIDR, /20 to /25)",
+              "toolTip": "A free range that does not overlap your networks or their peers, for example 10.250.0.0/24. The instance uses two /26 subnets of it.",
+              "defaultValue": "10.250.0.0/24",
+              "visible": true,
+              "constraints": {
+                "required": true,
+                "regex": "^(\\d{1,3}\\.){3}\\d{1,3}/(2[0-5])$",
+                "validationMessage": "An IPv4 range in CIDR form, /20 to /25."
+              }
+            },
+            {
+              "name": "dataAccess",
+              "type": "Microsoft.Common.OptionsGroup",
+              "label": "Storage and Key Vault reached through",
+              "defaultValue": "Service endpoints (no extra cost)",
+              "toolTip": "Service endpoints: storage and Key Vault keep a public address, but their firewall only allows the web app. Private endpoints: they get a private address in the instance's network and no public address at all; three private endpoints cost about USD 0.82 a day.",
+              "constraints": {
+                "allowedValues": [
+                  {
+                    "label": "Service endpoints (no extra cost)",
+                    "value": "service"
+                  },
+                  {
+                    "label": "Private endpoints (about USD 0.82 a day)",
+                    "value": "private"
+                  }
+                ],
+                "required": true
+              },
+              "visible": true
+            },
+            {
+              "name": "enable",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "Connect M365Permissions to my virtual network",
+              "toolTip": "Peers the instance with a virtual network of yours and gives it a private endpoint. M365Permissions then opens from that network, and from the internet only from the allowed IP ranges below."
+            },
+            {
+              "name": "peerAbout",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": "[steps('network').enable]",
+              "options": {
+                "icon": "Info",
+                "text": "The instance gets a private endpoint and peers with your chosen network (has to be in the SAME region!). The setup command gives the instance's scan identity Network Contributor on your network only; the instance then makes both peering links, and links its private DNS zone (privatelink.azurewebsites.net) to your network. Without allowed IP ranges only its setup page is reachable from the internet until then, so the setup command can be fetched: nobody can sign in and nothing is scanned. It then closes itself to the internet, so it opens only from your network. With allowed IP ranges it stays reachable from those ranges and your network, also during setup: run the setup command from inside the ranges. With custom DNS servers, forward azurewebsites.net to Azure DNS (168.63.129.16)."
+              }
+            },
+            {
+              "name": "virtualNetwork",
+              "type": "Microsoft.Solutions.ResourceSelector",
+              "label": "Your virtual network",
+              "toolTip": "The network to peer with, in the subscription and region chosen on the first step.",
+              "resourceType": "Microsoft.Network/virtualNetworks",
+              "visible": "[steps('network').enable]",
+              "options": {
+                "filter": {
+                  "subscription": "onBasics",
+                  "location": "onBasics"
+                }
+              }
+            },
+            {
+              "name": "allowedIpRanges",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Allowed IP ranges (required unless connected to your virtual network)",
+              "toolTip": "Public IPv4 addresses or ranges (CIDR), comma separated, for example 203.0.113.0/24, 198.51.100.7. Only these can open M365Permissions from the internet, until you change them inside M365Permissions under Settings, Access; include the address the Global Administrator runs the setup command from. M365Permissions is never open to everyone: without your virtual network at least one is required, with it an empty list means it opens only from that network.",
+              "defaultValue": "",
+              "constraints": {
+                "required": "[not(steps('network').enable)]",
+                "regex": "^$|^\\s*\\d{1,3}(\\.\\d{1,3}){3}(/([89]|[1-9]\\d))?(\\s*,\\s*\\d{1,3}(\\.\\d{1,3}){3}(/([89]|[1-9]\\d))?)*\\s*$",
+                "validationMessage": "IPv4 addresses or CIDR ranges of /8 or narrower, comma separated. Required unless M365Permissions is connected to your virtual network."
+              }
+            }
+          ]
+        },
+        {
+          "name": "tags",
+          "label": "Tags",
+          "elements": [
+            {
+              "name": "tagsByResource",
+              "type": "Microsoft.Common.TagsByResource",
+              "toolTip": "Tags on the managed application also go on its managed resource group.",
+              "resources": [
+                "Microsoft.Solutions/applications",
+                "Microsoft.Web/sites",
+                "Microsoft.Web/serverfarms",
+                "Microsoft.Storage/storageAccounts",
+                "Microsoft.KeyVault/vaults",
+                "Microsoft.ManagedIdentity/userAssignedIdentities",
+                "Microsoft.Network/virtualNetworks",
+                "Microsoft.Network/privateEndpoints",
+                "Microsoft.Network/privateDnsZones",
+                "Microsoft.Network/networkSecurityGroups"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "jitConfiguration",
+          "label": "Support access",
+          "elements": [
+            {
+              "name": "jitInfo",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": true,
+              "options": {
+                "icon": "Info",
+                "text": "With just-in-time access on, support can modify the application only for a time you approve, for example to repair a broken deployment. It starts with automatic approval for up to 8 hours; change that on the managed application's JIT Configuration page. It can only be switched on now. Without it support always has access. No additional cost."
+              }
+            },
+            {
+              "name": "jitEnabled",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "Just-in-time access",
+              "defaultValue": true,
+              "toolTip": "Support reaches the resources only after a request you approve (automatically at first)."
+            }
+          ]
+        }
+      ]
+    },
+    "outputs": {
+      "kind": "ResourceGroup",
+      "location": "[steps('basics').resourceScope.location.name]",
+      "resourceGroupId": "[steps('basics').resourceScope.resourceGroup.id]",
+      "parameters": {
+        "location": "[steps('basics').resourceScope.location.name]",
+        "welcomeMail": "[steps('basics').welcomeMail]",
+        "tenantName": "[steps('basics').tenantName]",
+        "planSku": "[steps('basics').planSku]",
+        "alertSenderMailbox": "[steps('alerts').alertSenderMailbox]",
+        "allowedIpRanges": "[steps('network').allowedIpRanges]",
+        "tagsByResource": "[steps('tags').tagsByResource]",
+        "networkAddressSpace": "[steps('network').addressSpace]",
+        "peerVirtualNetworkId": "[if(steps('network').enable, steps('network').virtualNetwork.id, '')]",
+        "privateEndpoints": "[equals(steps('network').dataAccess, 'private')]",
+        "plan": "[steps('basics').plan]",
+        "jitAccessEnabled": "[steps('jitConfiguration').jitEnabled]"
+      }
+    }
+  }
+}

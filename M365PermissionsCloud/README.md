@@ -1,42 +1,36 @@
-# M365PermissionsCloud
+# M365Permissions
 
-Hardened Azure Native app that scans and reports Microsoft 365 permissions across SharePoint, OneDrive, Teams, Exchange, Azure, PowerBI, PowerPlatform, and Entra.
+M365Permissions runs in your own Azure subscription and shows who can reach what in Microsoft 365, Entra ID and Azure.
+See [m365permissions.com](https://www.m365permissions.com).
 
-It is deployed via ARM template or the Azure Marketplace and is backed by Azure SQL.
+The usual way to install it is the [Azure Marketplace](https://portal.azure.com/#create/liebenconsultancy.m365permissionsstandardv2).
 
-![PowerShell 7.x](https://img.shields.io/badge/PowerShell-7.x-5391FE?logo=powershell&logoColor=white)
-![Microsoft Azure](https://custom-icon-badges.demolab.com/badge/Microsoft%20Azure-0089D6?logo=msazure&logoColor=white)
-![ARM Templates](https://img.shields.io/badge/Deployment-ARM%20Templates-5C2D91)
+## Install with tags on the resource group
 
-[![Deploy M365Permissions to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#view/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjflieben%2FassortedFunctionsV2%2Frefs%2Fheads%2Fmain%2FM365PermissionsCloud%2Fazuredeploy.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fjflieben%2FassortedFunctionsV2%2Frefs%2Fheads%2Fmain%2FM365PermissionsCloud%2Fui.json)
+The Marketplace form cannot tag the managed application. Its managed resource group takes its tags from the
+application, so a policy that requires tags on resource groups refuses that install. This template creates the same
+Marketplace application, with your tags on it:
 
-## Features
-*   **Comprehensive Inventory**: Retrieves all permissions for all entities in your M365/Azure environment (Users, Groups, Service Principals, Foreign Principals).
-*   **Automated Analysis**: Reports on multiple dimensions including oversharing and inactive sharing.
-*   **Direct Access**: Full SQL access for custom reporting.
-*   **Integration Ready**: Built-in support for SIEM/SOAR integrations.
-*   **Drift Detection**: Automated change tracking and alerting.
-*   **Intuitive Interface**: Responsive GUI for permission delving/analysis.
-*   For more information, visit [M365Permissions.com](https://www.m365permissions.com).
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#view/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fjflieben%2FassortedFunctionsV2%2Frefs%2Fheads%2Fmain%2FM365PermissionsCloud%2Fazuredeploy.json/uiFormDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fjflieben%2FassortedFunctionsV2%2Frefs%2Fheads%2Fmain%2FM365PermissionsCloud%2Fui.json)
 
-## Quick Start
-1.  Click the **Deploy to Azure** button above.
-2.  Follow the deployment wizard.
+1. Create the resource group for the application first, with the tags your policies require, and choose it on Basics.
+2. On the Tags step, choose **Managed application** as the resource and add the required tags. The managed resource
+   group gets them too. Tag the other resources there as well if your policies require that.
+3. The rest is the same as the Marketplace install: a few minutes after the deployment you get a mail with a page that
+   follows the installation, and the instance shows the setup command a Global Administrator runs.
 
-## Requirements
-*   Azure Subscription with **Owner** rights.
-*   **Global Administrator** role (required only temporarily during activation).
+Billing, updates and support are the same as with the Marketplace install.
 
-## 🔐 Manual Authorization
-If you prefer not to use the automated multi-tenant app for setup, follow these steps to authorize M365Permissions manually:
+Requirements: Owner of the subscription; a Global Administrator for the setup command.
 
-1.  Install the marketplace package and wait for the **second** welcome email requesting authorization.
-2.  Open **Azure Cloud Shell** with your Global Administrator account.
-3.  Download or copy the onboarding script: [`authorize.ps1`](https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/refs/heads/main/M365PermissionsCloud/authorize.ps1).
-4.  Edit the script to replace `xxxxx-xxxxxx-xxxxx-xxxxx-xxxxx` with your **Azure Subscription ID** (optional but recommended).
-5.  Paste the modified script into the Azure Cloud Shell.
-6.  Follow the final on-screen instructions.
-7.  Improve your security posture! 🛡️
+## Version 1
 
-## Architecture
-See [Architecture Documentation](ARCHITECTURE.md).
+Version 1 files (`authorize.ps1`, `permissions-lib.ps1`, `permissions.json`) stay here for existing installs.
+
+To authorize version 1 by hand instead of with the multi-tenant app:
+
+1. Install the Marketplace package and wait for the **second** welcome mail, which asks for authorization.
+2. Open Azure Cloud Shell as a Global Administrator.
+3. Download [`authorize.ps1`](https://raw.githubusercontent.com/jflieben/assortedFunctionsV2/refs/heads/main/M365PermissionsCloud/authorize.ps1).
+4. Optionally replace `xxxxx-xxxxxx-xxxxx-xxxxx-xxxxx` in the script with your Azure subscription id.
+5. Paste the script into Cloud Shell and follow the instructions it prints.
