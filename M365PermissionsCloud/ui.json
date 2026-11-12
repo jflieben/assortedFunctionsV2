@@ -15,7 +15,7 @@
               "type": "Microsoft.Common.ResourceScope",
               "location": {
                 "label": "Region",
-                "toolTip": "Where you want to run it and keep its data. If you want to connect it to your virtual network, it has to be in the same region as that network.",
+                "toolTip": "Where you'll run it and keep data. A network you peer with may be in another region (Azure then charges for the traffic between regions).",
                 "resourceTypes": [
                   "Microsoft.Web/sites",
                   "Microsoft.Storage/storageAccounts",
@@ -172,44 +172,148 @@
               "visible": true
             },
             {
-              "name": "enable",
-              "type": "Microsoft.Common.CheckBox",
-              "label": "Connect M365Permissions to my virtual network",
-              "toolTip": "Peers the instance with a virtual network of yours and gives it a private endpoint. M365Permissions then opens from that network, and from the internet only from the allowed IP ranges below."
+              "name": "access",
+              "type": "Microsoft.Common.OptionsGroup",
+              "label": "How to secure M365Permissions",
+              "defaultValue": "Allowed IP ranges only",
+              "toolTip": "Allowed IP ranges only: internet routed, your organisation's addresses. Peering: the instance peers with a virtual network of yours and gets a private endpoint. Your own private endpoint: you create a private endpoint after install, to M365Permissions in a network of yours (hub or spoke, any subscription); no peering.",
+              "constraints": {
+                "allowedValues": [
+                  {
+                    "label": "Allowed IP ranges only",
+                    "value": "ranges"
+                  },
+                  {
+                    "label": "Peering with my virtual network",
+                    "value": "peering"
+                  },
+                  {
+                    "label": "My own private endpoint",
+                    "value": "endpoint"
+                  }
+                ],
+                "required": true
+              },
+              "visible": true
             },
             {
               "name": "peerAbout",
               "type": "Microsoft.Common.InfoBox",
-              "visible": "[steps('network').enable]",
+              "visible": "[equals(steps('network').access, 'peering')]",
               "options": {
                 "icon": "Info",
-                "text": "The instance gets a private endpoint and peers with your chosen network (has to be in the SAME region!). The setup command gives the instance's scan identity Network Contributor on your network only; the instance then makes both peering links, and links its private DNS zone (privatelink.azurewebsites.net) to your network. Without allowed IP ranges only its setup page is reachable from the internet until then, so the setup command can be fetched: nobody can sign in and nothing is scanned. It then closes itself to the internet, so it opens only from your network. With allowed IP ranges it stays reachable from those ranges and your network, also during setup: run the setup command from inside the ranges. With custom DNS servers, forward azurewebsites.net to Azure DNS (168.63.129.16)."
+                "text": "The instance gets a private endpoint and peers with your chosen network, in any subscription you can see and any region (across regions Azure charges for the traffic). The setup command gives the instance's scan identity Network Contributor on your network only; the instance then makes both peering links (its own allows forwarded traffic, so your spokes can come through a firewall in your hub) and links its private DNS zone (privatelink.azurewebsites.net) to your network, or keeps its records in your own zone. Without allowed IP ranges only its setup page is reachable from the internet until then, so the setup command can be fetched: nobody can sign in and nothing is scanned. It then closes itself to the internet, so it opens only from your network. With allowed IP ranges it stays reachable from those ranges and your network, also during setup: run the setup command from inside the ranges. With custom DNS servers, forward azurewebsites.net to Azure DNS (168.63.129.16)."
+              }
+            },
+            {
+              "name": "endpointAbout",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": "[equals(steps('network').access, 'endpoint')]",
+              "options": {
+                "icon": "Info",
+                "text": "No peering and no DNS zone of the instance's: once it runs, create a private endpoint to its web app (sub-resource sites) in a network of yours, with manual approval. Its connection waits until an Admin approves it in M365Permissions under Settings, Access, because anyone could ask for one. M365Permissions then closes itself to the internet, unless allowed IP ranges keep it reachable. Allowed IP ranges are required: they are the way in until the first approval. Your DNS (a central privatelink.azurewebsites.net zone, or a policy) holds the record, or name your zone below and the instance keeps its records there."
               }
             },
             {
               "name": "virtualNetwork",
               "type": "Microsoft.Solutions.ResourceSelector",
               "label": "Your virtual network",
-              "toolTip": "The network to peer with, in the subscription and region chosen on the first step.",
+              "toolTip": "The network to peer with: a hub or a spoke, in any subscription you can see and any region.",
               "resourceType": "Microsoft.Network/virtualNetworks",
-              "visible": "[steps('network').enable]",
+              "visible": "[equals(steps('network').access, 'peering')]",
               "options": {
                 "filter": {
-                  "subscription": "onBasics",
-                  "location": "onBasics"
+                  "subscription": "all",
+                  "location": "all"
                 }
+              }
+            },
+            {
+              "name": "outbound",
+              "type": "Microsoft.Common.OptionsGroup",
+              "label": "Outbound traffic",
+              "defaultValue": "Directly to the internet",
+              "toolTip": "How M365Permissions reaches Microsoft 365, Azure and JSolve. Through your network: a firewall you name, or the default route your hub already advertises. Either way Azure Resource Manager stays direct, so M365Permissions can always switch back. An Admin changes it later under Settings, Access.",
+              "constraints": {
+                "allowedValues": [
+                  {
+                    "label": "Directly to the internet",
+                    "value": "direct"
+                  },
+                  {
+                    "label": "Through a firewall in that network",
+                    "value": "firewall"
+                  },
+                  {
+                    "label": "Through the routes my hub advertises",
+                    "value": "hub"
+                  }
+                ],
+                "required": true
+              },
+              "visible": "[equals(steps('network').access, 'peering')]"
+            },
+            {
+              "name": "firewallIp",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Private IP address of your firewall",
+              "toolTip": "The firewall (or other network virtual appliance) in the network you peer with, for example 10.0.1.4. Peering passes nothing on to other networks, so it must be in that one.",
+              "defaultValue": "",
+              "visible": "[and(equals(steps('network').access, 'peering'), equals(steps('network').outbound, 'firewall'))]",
+              "constraints": {
+                "required": true,
+                "regex": "^(10(\\.\\d{1,3}){3}|172\\.(1[6-9]|2\\d|3[01])(\\.\\d{1,3}){2}|192\\.168(\\.\\d{1,3}){2}|100\\.(6[4-9]|[7-9]\\d|1[01]\\d|12[0-7])(\\.\\d{1,3}){2})$",
+                "validationMessage": "A private IPv4 address, for example 10.0.1.4."
+              }
+            },
+            {
+              "name": "firewallAbout",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": "[and(equals(steps('network').access, 'peering'), equals(steps('network').outbound, 'firewall'))]",
+              "options": {
+                "icon": "Info",
+                "text": "Once the peering is up, M365Permissions sends everything except Azure Resource Manager to this address, tests sign-in and Microsoft Graph through it and goes back to direct traffic by itself when they cannot be reached within 3 minutes. Your firewall has to allow what M365Permissions reaches: Microsoft 365, Azure, Power BI and JSolve."
+              }
+            },
+            {
+              "name": "hubAbout",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": "[and(equals(steps('network').access, 'peering'), equals(steps('network').outbound, 'hub'))]",
+              "options": {
+                "icon": "Info",
+                "text": "For a hub with a VPN or ExpressRoute gateway or Azure Route Server that advertises a default route (0.0.0.0/0). Once the peering is up, the instance's side of the peering uses your hub's gateway and your side allows gateway transit (the instance sets that with the Network Contributor role the setup command gives it). M365Permissions then checks that the default route arrived and that sign-in and Microsoft Graph are reached, and goes back to direct traffic by itself when not, within 3 minutes. Azure Resource Manager stays direct."
+              }
+            },
+            {
+              "name": "useZone",
+              "type": "Microsoft.Common.CheckBox",
+              "label": "Use my existing private DNS zone",
+              "toolTip": "For hub-spoke networks with a central privatelink.azurewebsites.net zone: a network links to only one zone of that name. The instance then makes no zone of its own; the setup command gives its scan identity Private DNS Zone Contributor on that zone only, and the instance keeps its two A records (the web app and its scm name) there, and no others.",
+              "visible": "[not(equals(steps('network').access, 'ranges'))]"
+            },
+            {
+              "name": "privateDnsZone",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Resource id of your privatelink.azurewebsites.net zone",
+              "toolTip": "In the Azure portal: the private DNS zone, Properties (or JSON View), Resource ID. Any subscription of this tenant.",
+              "defaultValue": "",
+              "visible": "[and(not(equals(steps('network').access, 'ranges')), steps('network').useZone)]",
+              "constraints": {
+                "required": true,
+                "regex": "^/subscriptions/[0-9a-fA-F-]{36}/resource[Gg]roups/[^/]{1,90}/providers/[Mm]icrosoft\\.[Nn]etwork/private[Dd]ns[Zz]ones/privatelink\\.azurewebsites\\.net$",
+                "validationMessage": "The resource id of a private DNS zone named privatelink.azurewebsites.net."
               }
             },
             {
               "name": "allowedIpRanges",
               "type": "Microsoft.Common.TextBox",
-              "label": "Allowed IP ranges (required unless connected to your virtual network)",
-              "toolTip": "Public IPv4 addresses or ranges (CIDR), comma separated, for example 203.0.113.0/24, 198.51.100.7. Only these can open M365Permissions from the internet, until you change them inside M365Permissions under Settings, Access; include the address the Global Administrator runs the setup command from. M365Permissions is never open to everyone: without your virtual network at least one is required, with it an empty list means it opens only from that network.",
+              "label": "Allowed IP ranges (required unless peered with your virtual network)",
+              "toolTip": "Public IPv4 addresses or ranges (CIDR), comma separated, for example 203.0.113.0/24, 198.51.100.7. Only these can open M365Permissions from the internet, until you change them inside M365Permissions under Settings, Access; include the address the Global Administrator runs the setup command from. M365Permissions is never open to everyone: without peering at least one is required (with your own private endpoint until its first approval), with peering an empty list means it opens only from your network.",
               "defaultValue": "",
               "constraints": {
-                "required": "[not(steps('network').enable)]",
+                "required": "[not(equals(steps('network').access, 'peering'))]",
                 "regex": "^$|^\\s*\\d{1,3}(\\.\\d{1,3}){3}(/([89]|[1-9]\\d))?(\\s*,\\s*\\d{1,3}(\\.\\d{1,3}){3}(/([89]|[1-9]\\d))?)*\\s*$",
-                "validationMessage": "IPv4 addresses or CIDR ranges of /8 or narrower, comma separated. Required unless M365Permissions is connected to your virtual network."
+                "validationMessage": "IPv4 addresses or CIDR ranges of /8 or narrower, comma separated. Required unless M365Permissions is peered with your virtual network."
               }
             }
           ]
@@ -232,7 +336,8 @@
                 "Microsoft.Network/virtualNetworks",
                 "Microsoft.Network/privateEndpoints",
                 "Microsoft.Network/privateDnsZones",
-                "Microsoft.Network/networkSecurityGroups"
+                "Microsoft.Network/networkSecurityGroups",
+                "Microsoft.Network/routeTables"
               ]
             }
           ]
@@ -274,7 +379,11 @@
         "allowedIpRanges": "[steps('network').allowedIpRanges]",
         "tagsByResource": "[steps('tags').tagsByResource]",
         "networkAddressSpace": "[steps('network').addressSpace]",
-        "peerVirtualNetworkId": "[if(steps('network').enable, steps('network').virtualNetwork.id, '')]",
+        "peerVirtualNetworkId": "[if(equals(steps('network').access, 'peering'), steps('network').virtualNetwork.id, '')]",
+        "ownPrivateEndpoint": "[equals(steps('network').access, 'endpoint')]",
+        "outboundFirewallIp": "[if(and(equals(steps('network').access, 'peering'), equals(steps('network').outbound, 'firewall')), steps('network').firewallIp, '')]",
+        "outboundHubRoutes": "[and(equals(steps('network').access, 'peering'), equals(steps('network').outbound, 'hub'))]",
+        "privateDnsZoneId": "[if(and(not(equals(steps('network').access, 'ranges')), steps('network').useZone), steps('network').privateDnsZone, '')]",
         "privateEndpoints": "[equals(steps('network').dataAccess, 'private')]",
         "plan": "[steps('basics').plan]",
         "jitAccessEnabled": "[steps('jitConfiguration').jitEnabled]"

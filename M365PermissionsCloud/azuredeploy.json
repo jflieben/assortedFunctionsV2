@@ -15,7 +15,7 @@
     },
     "planVersion": {
       "type": "string",
-      "defaultValue": "2.0.6",
+      "defaultValue": "2.0.11",
       "metadata": {
         "description": "Version of the plan in Partner Center. Keep the default."
       }
@@ -108,7 +108,35 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Resource id of the customer's virtual network. The worker peers with it once the setup command gave the scan identity Network Contributor on it, then closes the web app to the internet (on a managed application only without allowed IP ranges). Empty: no peering."
+        "description": "Resource id of the customer's virtual network, in any subscription of the tenant and any region. The worker peers with it once the setup command gave the scan identity Network Contributor on it, then closes the web app to the internet (on a managed application only without allowed IP ranges). Empty: no peering."
+      }
+    },
+    "ownPrivateEndpoint": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "The customer reaches the web app through a private endpoint of their own, in any of their networks and subscriptions; no peering and no zone of the instance's. An Admin approves its connection in Settings, Access; public access then goes off (on a managed application only without allowed IP ranges). Ignored with peerVirtualNetworkId."
+      }
+    },
+    "outboundFirewallIp": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "With peerVirtualNetworkId: the private IPv4 address of a firewall in that network. Once the peering is up the worker routes the apps' outbound traffic through it (Azure Resource Manager stays direct), tests sign-in and Microsoft Graph through it and goes back to direct traffic when they cannot be reached. An Admin changes it in Settings, Access. Empty: direct."
+      }
+    },
+    "outboundHubRoutes": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "With peerVirtualNetworkId, instead of outboundFirewallIp: outbound traffic follows the routes that network advertises (its VPN or ExpressRoute gateway or Azure Route Server, 0.0.0.0/0). Once the peering is up the worker lets our link use that gateway (and the link of the customer allow gateway transit), keeps Azure Resource Manager direct, and goes back to direct traffic when no default route arrives or sign-in and Microsoft Graph cannot be reached. An Admin changes it in Settings, Access."
+      }
+    },
+    "privateDnsZoneId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource id of the customer's own privatelink.azurewebsites.net private DNS zone (any subscription), for peering or ownPrivateEndpoint. The instance then makes no zone of its own; the setup command grants the scan identity Private DNS Zone Contributor on that zone only and the worker keeps the web app's two A records there. Empty: the instance's own zone (peering), or the customer's own DNS (ownPrivateEndpoint)."
       }
     },
     "privateEndpoints": {
@@ -162,6 +190,18 @@
           },
           "peerVirtualNetworkId": {
             "value": "[parameters('peerVirtualNetworkId')]"
+          },
+          "ownPrivateEndpoint": {
+            "value": "[parameters('ownPrivateEndpoint')]"
+          },
+          "outboundFirewallIp": {
+            "value": "[parameters('outboundFirewallIp')]"
+          },
+          "outboundHubRoutes": {
+            "value": "[parameters('outboundHubRoutes')]"
+          },
+          "privateDnsZoneId": {
+            "value": "[parameters('privateDnsZoneId')]"
           },
           "privateEndpoints": {
             "value": "[parameters('privateEndpoints')]"
