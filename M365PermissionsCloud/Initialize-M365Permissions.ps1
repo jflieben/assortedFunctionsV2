@@ -956,6 +956,7 @@ function Format-AzureResource([string]$Id) {
 
 # A role for the scan identity on one resource of the customer's (any subscription of the tenant), and nothing wider.
 function Grant-ResourceRole([string]$Scope, [string]$RoleId, [string]$Label, [string]$ByHand, [string]$Added, [string]$What, [string]$Step) {
+    $reading = $true
     try {
         $roleHeaders = @{ Authorization = "Bearer $(Get-Token 'https://management.azure.com/')" }
         $assignments = "https://management.azure.com$Scope/providers/Microsoft.Authorization/roleAssignments"
@@ -966,6 +967,7 @@ function Grant-ResourceRole([string]$Scope, [string]$RoleId, [string]$Label, [st
         else {
             # The role definition of the resource's own subscription.
             $subscription = ($Scope -split '/')[0..2] -join '/'
+            $reading = $false
             Invoke-RestMethod -Method PUT -Uri "$assignments/$([guid]::NewGuid())?api-version=2022-04-01" -Headers $roleHeaders -ContentType 'application/json' -Body (@{
                 properties = @{ roleDefinitionId = "$subscription/providers/Microsoft.Authorization/roleDefinitions/$RoleId"; principalId = $scan.id; principalType = 'ServicePrincipal' }
             } | ConvertTo-Json -Depth 4 -Compress) | Out-Null
@@ -974,7 +976,18 @@ function Grant-ResourceRole([string]$Scope, [string]$RoleId, [string]$Label, [st
     }
     catch {
         $detail = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
-        Write-Step "$($Label): $(if ($detail -match 'AuthorizationFailed|403') { "this account may not assign roles on $What $(Format-AzureResource $Scope). An Owner or User Access Administrator of it runs: $(Get-StepCommand $Step)" } else { $detail })" 'failed'
+        $status = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
+        # Azure's own code and message (an ARM error body is JSON), the call and the account, so a refusal can be traced.
+        $said = try { $body = $detail | ConvertFrom-Json -ErrorAction Stop; if ($body.error) { "$($body.error.code): $($body.error.message)" } else { $detail } } catch { $detail }
+        $claims = try { Get-TokenClaim (Get-Token 'https://management.azure.com/') } catch { $null }
+        $account = if ($claims) { "$(@($claims.upn, $claims.unique_name, $claims.appid) | Where-Object { $_ } | Select-Object -First 1) (object id $($claims.oid), tenant $($claims.tid))" } else { 'unknown' }
+        $call = if ($reading) { 'reading the role assignments' } else { 'adding the role assignment' }
+        $trace = " Azure said, $call (HTTP $status): $said Signed in as $account."
+        $refused = $status -in 401, 403 -or $detail -match 'AuthorizationFailed|InvalidAuthenticationToken'
+        $text = if (-not $refused) { 'it failed.' }
+        elseif ($reading) { "this account may not read $What $(Format-AzureResource $Scope): check that it exists, is in this tenant and that this account has a role on it." }
+        else { "this account may not assign roles on $What $(Format-AzureResource $Scope). An Owner or User Access Administrator of it runs: $(Get-StepCommand $Step)" }
+        Write-Step "$($Label): $text$trace" 'failed'
         $manual.Add($ByHand)
     }
 }
